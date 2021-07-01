@@ -123,7 +123,7 @@ namespace Thomas.Database
         /// Execute SQL script without result set
         /// </summary>
         /// <param name="script">string script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult Execute(string script, bool isStoreProcedure = true)
         {
             var response = new DataBaseOperationResult() { Success = true };
@@ -147,68 +147,32 @@ namespace Thomas.Database
         }
 
         /// <summary>
-        /// Execute store procedure with transacction
+        /// Execute SQL script without result set
         /// </summary>
-        /// <param name="searchTerm"></param>
-        /// <param name="procedureName"></param>
-        /// <returns></returns>
-        //public async Task<DataBaseOperationResult> ExecuteAsync(ISearchTerm searchTerm, string procedureName)
-        //{
-        //    var response = new DataBaseOperationResult();
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Full name store procedure</param>
+        public DataBaseOperationResult Execute(object inputData, string procedureName)
+        {
+            var response = new DataBaseOperationResult() { Success = true };
+            var (command, _) = PreProcessing(procedureName, true, inputData);
 
-        //    var command = provider.CreateCommand(StringConnection);
-        //    command.CommandText = procedureName;
-        //    command.CommandType = CommandType.StoredProcedure;
+            try
+            {
+                command.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult.ErrorResult(msg);
+            }
+            finally
+            {
+                command.Kill();
+            }
 
-        //    IDataParameter[] parameters = new List<IDataParameter>().ToArray();
+            return response;
+        }
 
-        //    if (searchTerm != null)
-        //    {
-        //        parameters = provider.ExtractValuesFromSearchTerm(searchTerm);
-        //    }
-
-        //    command.Parameters.AddRange(parameters);
-
-        //    DbTransaction transaction = null;
-
-        //    try
-        //    {
-        //        transaction = await command.Connection.BeginTransactionAsync();
-
-        //        await command.ExecuteNonQueryAsync();
-
-        //        var outParameters = parameters.Where(s => s.Direction == ParameterDirection.Output).ToList();
-
-        //        if (outParameters.Any())
-        //        {
-        //            foreach (var outParameter in outParameters)
-        //            {
-        //                response.OutParameters.Add(outParameter.ParameterName, outParameter.Value);
-        //            }
-        //        }
-
-        //        await transaction.CommitAsync();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        var msg = ErrorDetailMessage(procedureName, parameters, ex);
-        //        await transaction.RollbackAsync();
-        //        response = DataBaseOperationResult.ErrorResult(msg);
-        //    }
-        //    finally
-        //    {
-
-        //        if (command.Connection != null && command.Connection.State == ConnectionState.Open)
-        //        {
-        //            await command.Connection.CloseAsync();
-        //            await command.Connection.DisposeAsync();
-        //        }
-
-        //        await command.DisposeAsync();
-        //    }
-
-        //    return response;
-        //}
         #endregion
 
         #region single row result
@@ -218,7 +182,7 @@ namespace Thomas.Database
         /// </summary>
         /// <typeparam name="T">typed class</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<T> ToSingle<T>(string script, bool isStoreProcedure = true) where T : class, new()
         {
             var response = new DataBaseOperationResult<T>() { Success = true };
@@ -250,13 +214,13 @@ namespace Thomas.Database
         /// Return single result row from execute SQL script
         /// </summary>
         /// <typeparam name="T">typed class</typeparam>
-        /// <param name="searchTerm">Match parameters from object field names with store procedure</param>
-        /// <param name="procedureName">full name store procedure</param>
-        public DataBaseOperationResult<T> ToSingle<T>(object searchTerm, string procedureName) where T : class, new()
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Full name store procedure</param>
+        public DataBaseOperationResult<T> ToSingle<T>(object paramValues, string procedureName) where T : class, new()
         {
             var response = new DataBaseOperationResult<T>() { Success = true };
 
-            var (command, parameters) = PreProcessing(procedureName, true, searchTerm);
+            var (command, parameters) = PreProcessing(procedureName, true, paramValues);
 
             IDataReader reader = null;
 
@@ -287,7 +251,7 @@ namespace Thomas.Database
         /// </summary>
         /// <typeparam name="T">typed class</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<IReadOnlyList<T>> ToList<T>(string script, bool isStoreProcedure = true) where T : class, new()
         {
             var response = new DataBaseOperationResult<IReadOnlyList<T>>() { Success = true };
@@ -319,13 +283,13 @@ namespace Thomas.Database
         /// Return typed list from execute SQL script
         /// </summary>
         /// <typeparam name="T">typed class</typeparam>
-        /// <param name="searchTerm">Match parameters from object field names with store procedure</param>
-        /// <param name="procedureName">full name store procedure</param>
-        public DataBaseOperationResult<IReadOnlyList<T>> ToList<T>(object searchTerm, string procedureName) where T : class, new()
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Full name store procedure</param>
+        public DataBaseOperationResult<IReadOnlyList<T>> ToList<T>(object paramValues, string procedureName) where T : class, new()
         {
             var response = new DataBaseOperationResult<IReadOnlyList<T>>() { Success = true };
 
-            var (command, _) = PreProcessing(procedureName, true, searchTerm);
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
 
             IDataReader reader = null;
 
@@ -357,7 +321,7 @@ namespace Thomas.Database
         /// <typeparam name="T1">typed class 1</typeparam>
         /// <typeparam name="T2">typed class 2</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>>> ToTuple<T1, T2>(string script, bool isStoreProcedure = true)
            where T1 : class, new()
            where T2 : class, new()
@@ -399,7 +363,7 @@ namespace Thomas.Database
         /// <typeparam name="T2">typed class 2</typeparam>
         /// <typeparam name="T3">typed class 3</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>>> ToTuple<T1, T2, T3>(string script, bool isStoreProcedure = true)
             where T1 : class, new()
             where T2 : class, new()
@@ -439,7 +403,6 @@ namespace Thomas.Database
             return response;
         }
 
-
         /// <summary>
         /// Return tuple with 4 typed list from execute SQL script
         /// </summary>
@@ -448,7 +411,7 @@ namespace Thomas.Database
         /// <typeparam name="T3">typed class 3</typeparam>
         /// <typeparam name="T4">typed class 4</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>>> ToTuple<T1, T2, T3, T4>(string script, bool isStoreProcedure = true)
             where T1 : class, new()
             where T2 : class, new()
@@ -502,7 +465,7 @@ namespace Thomas.Database
         /// <typeparam name="T4">typed class 4</typeparam>
         /// <typeparam name="T5">typed class 5</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>>> ToTuple<T1, T2, T3, T4, T5>(string script, bool isStoreProcedure = true)
             where T1 : class, new()
             where T2 : class, new()
@@ -562,7 +525,7 @@ namespace Thomas.Database
         /// <typeparam name="T5">typed class 5</typeparam>
         /// <typeparam name="T6">typed class 6</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>>> ToTuple<T1, T2, T3, T4, T5, T6>(string script, bool isStoreProcedure = true)
             where T1 : class, new()
             where T2 : class, new()
@@ -628,7 +591,7 @@ namespace Thomas.Database
         /// <typeparam name="T6">typed class 6</typeparam>
         /// <typeparam name="T7">typed class 7</typeparam>
         /// <param name="script">SQL script</param>
-        /// <param name="isStoreProcedure">flag when script is store procedure. Default : true</param>
+        /// <param name="isStoreProcedure">Flag when script is store procedure. Default : true</param>
         public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(string script, bool isStoreProcedure = true)
             where T1 : class, new()
             where T2 : class, new()
@@ -677,6 +640,342 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(script, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 2 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>>> ToTuple<T1, T2>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 3 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <typeparam name="T3">typed class 3</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>>> ToTuple<T1, T2, T3>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 4 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <typeparam name="T3">typed class 3</typeparam>
+        /// <typeparam name="T4">typed class 4</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>>> ToTuple<T1, T2, T3, T4>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 5 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <typeparam name="T3">typed class 3</typeparam>
+        /// <typeparam name="T4">typed class 4</typeparam>
+        /// <typeparam name="T5">typed class 5</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>>> ToTuple<T1, T2, T3, T4, T5>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 6 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <typeparam name="T3">typed class 3</typeparam>
+        /// <typeparam name="T4">typed class 4</typeparam>
+        /// <typeparam name="T5">typed class 5</typeparam>
+        /// <typeparam name="T6">typed class 6</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>>> ToTuple<T1, T2, T3, T4, T5, T6>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+            where T6 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
+                response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>>>.ErrorResult(msg);
+            }
+            finally
+            {
+                reader.Kill();
+                command.Kill();
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Return tuple with 7 typed list from execute SQL script
+        /// </summary>
+        /// <typeparam name="T1">typed class 1</typeparam>
+        /// <typeparam name="T2">typed class 2</typeparam>
+        /// <typeparam name="T3">typed class 3</typeparam>
+        /// <typeparam name="T4">typed class 4</typeparam>
+        /// <typeparam name="T5">typed class 5</typeparam>
+        /// <typeparam name="T6">typed class 6</typeparam>
+        /// <typeparam name="T7">typed class 7</typeparam>
+        /// <param name="paramValues">Match parameters from object field names against store procedure</param>
+        /// <param name="procedureName">Store procedure name</param>
+        public DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(object paramValues, string procedureName)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+            where T6 : class, new()
+            where T7 : class, new()
+        {
+            var response = new DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>>();
+
+            var (command, _) = PreProcessing(procedureName, true, paramValues);
+
+            IDataReader reader = null;
+
+            try
+            {
+                reader = command.ExecuteReader();
+
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName);
+
+                reader.NextResult();
+
+                IReadOnlyList<T7> t7 = DataReaderToList<T7>(reader, procedureName, true);
+            }
+            catch (Exception ex)
+            {
+                var msg = ErrorDetailMessage(procedureName, ex);
                 response = DataBaseOperationResult<Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>>.ErrorResult(msg);
             }
             finally

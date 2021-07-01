@@ -46,16 +46,12 @@ namespace Thomas.Database
         {
             var count = listReader.FieldCount;
             var cols = new string[count];
+
             for (int i = 0; i < count; i++)
             {
-                switch (Convention)
-                {
-                    case TypeMatchConvention.CapitalLetter: var column = listReader.GetName(i)?.ToLower(); cols[i] = column.Substring(0, 1).ToUpper() + column.Substring(1); break;
-                    case TypeMatchConvention.LowerCase: cols[i] = listReader.GetName(i)?.ToLower(); break;
-                    case TypeMatchConvention.UpperCase: cols[i] = listReader.GetName(i)?.ToUpper(); break;
-                    case TypeMatchConvention.Default: cols[i] = listReader.GetName(i); break;
-                }
+                cols[i] = listReader.GetName(i);
             }
+
             return cols;
         }
 
