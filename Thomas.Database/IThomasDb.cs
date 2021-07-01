@@ -9,7 +9,7 @@ namespace Thomas.Database
         IReadOnlyList<T> DataReaderToList<T>(IDataReader listReader, string script, bool closeConnection = false) where T : new();
 
         DataBaseOperationResult Execute(string script, bool isStoreProcedure = true);
-        DataBaseOperationResult Execute(object inputData, string procedureName) where T : class, new();
+        DataBaseOperationResult Execute(object inputData, string procedureName);
 
         DataBaseOperationResult<T> ToSingle<T>(string script, bool isStoreProcedure = true) where T : class, new();
         DataBaseOperationResult<T> ToSingle<T>(object inputData, string procedureName) where T : class, new();

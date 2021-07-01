@@ -124,5 +124,5 @@ public class MyComponent
 * **SensitiveDataLog**:  Default false, hide Parameters values.
 * **StrictMode**: Default false, all columns returned from database query must be match with fields in the class.
 * **MaxDegreeOfParallelism**: Default 1, useful when you need retrieve high volume of data and maintain original order. Depends on amount of logical processors you have
-* **ConnectionTimeout** : Default 0, time out for request the database.
+* **ConnectionTimeout** : Default 0, time out for database request.
 
