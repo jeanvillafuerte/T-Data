@@ -2,6 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
+    <Authors>Jean Villafuerte</Authors>
+    <Product>ThomasDataAdapter</Product>
+    <Description>Simple library to get data from Database SQL Server specially high load and low memory consum.</Description>
+    <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>dapper, micro-orm, thomasAdapter</PackageTags>
+    <Copyright>2021 © Jean Villafuerte</Copyright>
+    <PackageId>ThomasDataAdapter.SqlServer</PackageId>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

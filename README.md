@@ -5,6 +5,8 @@ It Works matching fields class vs result set returned by database query. There a
 
 Combine with well query design is useful for really fast responses especially when you need treat with high volume of information.
 
+## Nuget : https://www.nuget.org/packages/ThomasDataAdapter.SqlServer/
+#
 ### Basic configuration in startup.cs :
 
 ```c#
