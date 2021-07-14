@@ -131,7 +131,7 @@ public class MyComponent
 The benchmark is in project **Thomas.Tests.Performance**
 
 ```bash
-dotnet run -p .\benchmarks\Dapper.Tests.Performance\ -c Release -f netcoreapp3.1 -- -f * --join
+dotnet run -p .\Thomas.Tests.Performance\ -c Release -f net5.0 -- -f * --join
 ```
 
 ``` ini
