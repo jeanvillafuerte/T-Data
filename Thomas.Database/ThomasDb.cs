@@ -5,6 +5,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using Thomas.Database.Cache;
 
 namespace Thomas.Database
 {
@@ -20,7 +21,6 @@ namespace Thomas.Database
             SensitiveDataLog = options.SensitiveDataLog;
             DetailErrorMessage = options.DetailErrorMessage;
             CultureInfo = options.Culture;
-            Convention = options.TypeMatchConvention;
             MaxDegreeOfParallelism = options.MaxDegreeOfParallelism;
         }
 
@@ -33,78 +33,82 @@ namespace Thomas.Database
         /// <param name="closeReader">flag to close reader after read. Default : false</param>
         public IReadOnlyList<T> DataReaderToList<T>(IDataReader reader, string script, bool closeReader = false) where T : new()
         {
-            var props = typeof(T).GetProperties();
+            var tp = typeof(T);
 
-            var culture = new CultureInfo(CultureInfo);
+            var columns = GetColumns(reader);
 
-            var colsDb = GetColumns(reader);
+            IDictionary<string, PropertyInfo> matchProperties = null;
 
-            string[] columns = new string[colsDb.Length];
+            bool? containNullables = null;
 
-            for (int i = 0; i < colsDb.Length; i++)
+            var info = (matchProperties, containNullables);
+
+            if (!CacheThomas.Instance.TryGet(tp.FullName, out info))
             {
-                columns[i] = SanitizeName(colsDb[i]);
-            }
+                var props = tp.GetProperties();
 
-            if (StrictMode)
-            {
-                string[] propsName = new string[props.Length];
+                var culture = new CultureInfo(CultureInfo);
 
-                for (int i = 0; i < props.Length; i++)
+                containNullables = CheckContainNullables(tp);
+
+                if (StrictMode)
                 {
-                    propsName[i] = props[i].Name;
+                    string[] propsName = new string[props.Length];
+
+                    for (int i = 0; i < props.Length; i++)
+                    {
+                        propsName[i] = props[i].Name.ToUpper();
+                    }
+
+                    var noMatchProperties = columns.Where(x => !propsName.Contains(x)).ToArray();
+
+                    if (noMatchProperties.Length > 0)
+                    {
+                        throw new NoMatchPropertiesException("There are columns doesn't match with entity's fields. " +
+                          "Columns : " + string.Join(", ", noMatchProperties) + Environment.NewLine +
+                          "Entity Name : " + typeof(T).FullName + Environment.NewLine +
+                          "Script : " + script);
+                    }
                 }
 
-                var noMatchProperties = columns.Where(x => !propsName.Contains(x)).ToArray();
+                matchProperties = props.Where(x => columns.Contains(x.Name.ToUpper())).ToDictionary(x => x.Name.ToUpper(), y => y);
 
-                if (noMatchProperties.Length > 0)
-                {
-                    throw new NoMatchPropertiesException("There are columns doesn't match with entity's fields. " +
-                      "Columns : " + string.Join(", ", noMatchProperties) + Environment.NewLine +
-                      "Entity Name : " + typeof(T).FullName + Environment.NewLine +
-                      "Script : " + script);
-                }
+                CacheThomas.Instance.Set(tp.FullName, (matchProperties, containNullables));
             }
-
-            var matchProperties = props.Where(x => columns.Contains(x.Name)).ToArray();
-
-            var safeList = new ConcurrentDictionary<string, PropertyInfo>();
-
-            for (int u = 0; u < matchProperties.Length; u++)
+            else
             {
-                safeList.TryAdd(matchProperties[u].Name, matchProperties[u]);
+                matchProperties = info.matchProperties;
+                containNullables = info.containNullables;
             }
-
-            var containNullables = CheckContainNullables(typeof(T));
 
             T[] result;
 
             if (GetMaxDegreeOfParallelism() > 1)
             {
+                var safeList = new ConcurrentDictionary<string, PropertyInfo>(matchProperties);
+
                 ConcurrentDictionary<int, object[]> data2 = ExtractData2(reader, columns.Length);
 
-                if (containNullables)
+                if (containNullables.Value)
                 {
-                    result = FormatDataWithNullablesParallel<T>(data2, safeList, columns, safeList.Count);
+                    result = FormatDataWithNullablesParallel<T>(data2, safeList, columns, data2.Count);
                 }
                 else
                 {
-                    result = FormatDataWithoutNullablesParallel<T>(data2, safeList, columns, safeList.Count);
+                    result = FormatDataWithoutNullablesParallel<T>(data2, safeList, columns, data2.Count);
                 }
             }
             else
             {
                 object[][] data = ExtractData(reader, columns.Length);
 
-                var dList = safeList.ToDictionary(s => s.Key, x => x.Value);
-
-                if (containNullables)
+                if (containNullables.Value)
                 {
-                    result = FormatDataWithNullables<T>(data, dList, columns, safeList.Count);
+                    result = FormatDataWithNullables<T>(data, matchProperties, columns, data.Length);
                 }
                 else
                 {
-                    result = FormatDataWithoutNullables<T>(data, dList, columns, safeList.Count);
+                    result = FormatDataWithoutNullables<T>(data, matchProperties, columns, data.Length);
                 }
             }
 
@@ -112,8 +116,6 @@ namespace Thomas.Database
             {
                 reader.Kill();
             }
-
-            GC.Collect();
 
             return result.ToList();
         }

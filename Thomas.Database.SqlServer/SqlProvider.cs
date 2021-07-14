@@ -42,6 +42,7 @@ namespace Thomas.Database.SqlServer
             DbTypes.Add("Guid", SqlDbType.UniqueIdentifier);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DbCommand CreateCommand(string connection)
         {
             var cnx = new SqlConnection(connection);
@@ -52,6 +53,7 @@ namespace Thomas.Database.SqlServer
             return cmd;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public DbCommand CreateCommand(string connection, string user, SecureString password)
         {
             var credential = new SqlCredential(user, password);

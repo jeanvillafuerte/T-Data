@@ -8,7 +8,6 @@ namespace Thomas.Database
         public string User { get; set; }
         public SecureString Password { get; set; }
         public string StringConnection { get; set; }
-        public TypeMatchConvention TypeMatchConvention { get; set; }
 
         public bool DetailErrorMessage { get; set; }
         public bool SensitiveDataLog { get; set; }

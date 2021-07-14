@@ -1,0 +1,5 @@
+{
+  "connection": "Data Source=DESKTOP-35G2IH6\\SQLEXPRESS;Initial Catalog=testdb;Integrated Security=True",
+  "rows": 10000,
+  "cleanData": true
+}

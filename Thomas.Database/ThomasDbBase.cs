@@ -4,18 +4,16 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Thomas.Database
 {
-    public abstract class ThomasDbBase
+    public abstract partial class ThomasDbBase
     {
-        #region fields
+        #region Fields
 
         protected IDatabaseProvider Provider;
 
@@ -39,342 +37,7 @@ namespace Thomas.Database
 
         #endregion
 
-        #region Extract and process data
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected string[] GetColumns(IDataReader listReader)
-        {
-            var count = listReader.FieldCount;
-            var cols = new string[count];
-
-            for (int i = 0; i < count; i++)
-            {
-                cols[i] = listReader.GetName(i);
-            }
-
-            return cols;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected string SanitizeName(string name)
-        {
-            switch (Convention)
-            {
-                case TypeMatchConvention.CapitalLetter:
-                    return name.Substring(0).ToUpper() + name.Substring(1).ToLower();
-                case TypeMatchConvention.LowerCase:
-                    return name.ToLower();
-                case TypeMatchConvention.UpperCase:
-                    return name.ToUpper();
-                case TypeMatchConvention.Default:
-                    return name;
-            }
-
-            return name;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected object[][] ExtractData(IDataReader reader, int columnCount)
-        {
-            object[] values = new object[columnCount];
-
-            var list = new List<object[]>(1024);
-
-            foreach (var item in GetValues(reader, values))
-            {
-                list.Add(item);
-            }
-
-            return list.ToArray();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected ConcurrentDictionary<int, object[]> ExtractData2(IDataReader reader, int columnCount)
-        {
-            object[] values = new object[columnCount];
-
-            var dictionaryValues = new ConcurrentDictionary<int, object[]>();
-
-            int index = 0;
-
-            foreach (var item in GetValues(reader, values))
-            {
-                dictionaryValues[index] = item;
-                index++;
-            }
-
-            return dictionaryValues;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IEnumerable<object[]> GetValues(IDataReader reader, object[] values)
-        {
-            while (reader.Read())
-            {
-                reader.GetValues(values);
-                yield return values;
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected T GetItem<T>(T item, int length, PropertyInfo prop,
-                                  Dictionary<string, PropertyInfo> properties,
-                                  string[] columns,
-                                  object[] v)
-        {
-            for (int j = 0; j < length; j++)
-            {
-                if (v[j] is DBNull) { continue; }
-                prop = properties[columns[j]];
-                prop.SetValue(item, v[j]);
-            }
-
-            return item;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected IEnumerable<(T, int)> GetItems<T>(object[][] data,
-                                           int length,
-                                           PropertyInfo prop,
-                                           Dictionary<string, PropertyInfo> properties,
-                                           string[] columns,
-                                           object[] v) where T : new()
-        {
-            for (int i = 0; i < length; i++)
-            {
-                T item = new T();
-                v = data[i];
-                yield return (GetItem<T>(item, length, prop, properties, columns, v), i);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected T GetItemForParallel<T>(T item, int length, PropertyInfo prop,
-                                  ConcurrentDictionary<string, PropertyInfo> properties,
-                                  string[] columns,
-                                  object[] v)
-        {
-            for (int j = 0; j < length; j++)
-            {
-                if (v[j] is DBNull) { continue; }
-                prop = properties[columns[j]];
-                prop.SetValue(item, v[j]);
-            }
-
-            return item;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        protected IEnumerable<(T, int)> GetItemsForParallel<T>(Dictionary<int, object[]> data,
-                                           int length,
-                                           PropertyInfo prop,
-                                           ConcurrentDictionary<string, PropertyInfo> properties,
-                                           string[] columns) where T : new()
-        {
-            foreach (var d in data)
-            {
-                T item = new T();
-                yield return (GetItemForParallel<T>(item, length, prop, properties, columns, d.Value), d.Key);
-            }
-
-        }
-
-        protected int GetMaxDegreeOfParallelism()
-        {
-            if (MaxDegreeOfParallelism == 1 || MaxDegreeOfParallelism == 0)
-            {
-                return 1;
-            }
-            else
-            {
-                return Environment.ProcessorCount <= MaxDegreeOfParallelism ? MaxDegreeOfParallelism : 1;
-            }
-        }
-
-        protected (DbCommand, IDataParameter[]) PreProcessing(string script, bool isStoreProcedure, object searchTerm)
-        {
-            DbCommand command = null;
-
-            if (!string.IsNullOrEmpty(User) && Password != null && Password.Length > 0)
-            {
-                command = Provider.CreateCommand(StringConnection, User, Password);
-            }
-            else
-            {
-                command = Provider.CreateCommand(StringConnection);
-            }
-
-            command.CommandText = script;
-            command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
-            command.UpdatedRowSource = UpdateRowSource.None;
-            command.Prepare();
-
-            IDataParameter[] parameters = null;
-
-            if (searchTerm != null)
-            {
-                parameters = Provider.ExtractValuesFromSearchTerm(searchTerm);
-
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    command.Parameters.Add(parameters[i]);
-                }
-            }
-
-            return (command, parameters);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T[] FormatDataWithoutNullables<T>(object[][] data,
-                                              Dictionary<string, PropertyInfo> properties,
-                                              string[] columns, int length) where T : new()
-        {
-            T[] list = new T[data.Length];
-            object[] v = null;
-            PropertyInfo prop = null;
-
-            foreach (var item in GetItems<T>(data, length, prop, properties, columns, v))
-            {
-                list[item.Item2] = item.Item1;
-            }
-
-            return list;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T[] FormatDataWithoutNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
-                                              ConcurrentDictionary<string, PropertyInfo> properties,
-                                              string[] columns, int length) where T : new()
-        {
-            int processors = GetMaxDegreeOfParallelism();
-
-            int pageSize = data.Count == 1 ? 1 : data.Count / processors;
-
-            if (pageSize == 1 || processors <= 1)
-            {
-                var dataArray = data.Select(s => s.Value).ToArray();
-                var props = properties.ToDictionary(x => x.Key, y => y.Value);
-
-                return FormatDataWithoutNullables<T>(dataArray, props, columns, length);
-            }
-
-            int page = 1;
-            int localLen = length;
-
-            ConcurrentDictionary<int, Dictionary<int, object[]>> masterList = new ConcurrentDictionary<int, Dictionary<int, object[]>>();
-
-            int mod = 0;
-
-            for (int i = 0; i < processors; i++)
-            {
-                if (i + 1 == processors)
-                {
-                    mod = data.Count % processors;
-                }
-
-                var insideList = data.Skip((page - 1) * pageSize).Take(pageSize + mod);
-
-                masterList[page - 1] = new Dictionary<int, object[]>(insideList);
-                page++;
-            }
-
-            ConcurrentDictionary<int, T> listResult = new ConcurrentDictionary<int, T>(processors, data.Count);
-
-            Parallel.For(0, processors, (i) =>
-            {
-                var splitData = masterList[i];
-
-                PropertyInfo prop = null;
-
-                foreach (var item in GetItemsForParallel<T>(splitData, length, prop, properties, columns))
-                {
-                    listResult[item.Item2] = item.Item1;
-                }
-            });
-
-            return listResult.Select(x => x.Value).ToArray();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T[] FormatDataWithNullables<T>(object[][] data,
-                                              Dictionary<string, PropertyInfo> properties,
-                                              string[] columns, int length) where T : new()
-        {
-            T[] list = new T[data.Length];
-            object[] v = null;
-            PropertyInfo prop = null;
-
-            foreach (var item in GetItems<T>(data, length, prop, properties, columns, v))
-            {
-                list[item.Item2] = item.Item1;
-            }
-
-            return list;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T[] FormatDataWithNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
-                                              ConcurrentDictionary<string, PropertyInfo> properties,
-                                              string[] columns, int length) where T : new()
-        {
-            var localLen = length;
-
-            var processors = GetMaxDegreeOfParallelism();
-
-            var list = new ConcurrentDictionary<int, T>(processors, data.Count);
-
-            var culture = new CultureInfo(CultureInfo);
-
-            Parallel.For(0, data.Count, (i) =>
-            {
-                T item = new T();
-
-                object[] v = data[i];
-
-                PropertyInfo prop;
-                Type propType;
-                //Diccionario Property Type para asignacion directa
-                for (int j = 0; j < localLen; j++)
-                {
-                    if (v[j] is DBNull) { continue; }
-                    prop = properties[columns[j]];
-                    propType = prop.PropertyType.IsGenericType ? Nullable.GetUnderlyingType(prop.PropertyType) : prop.PropertyType;
-                    prop.SetValue(item, Convert.ChangeType(v[j], propType, culture));
-                }
-
-                list[i] = item;
-
-                v = null;
-                prop = null;
-
-            });
-
-            return list.Select(s => s.Value).ToArray();
-        }
-
-        #endregion
-
-        protected void SetConvention(TypeMatchConvention convention)
-        {
-            Convention = convention;
-        }
-
-        protected bool MatchColumnConvention(string propertyName, string columnName)
-        {
-            switch (Convention)
-            {
-                case TypeMatchConvention.CapitalLetter:
-                    return propertyName.ToUpper() + propertyName.Substring(1) == columnName;
-                case TypeMatchConvention.LowerCase:
-                    return propertyName.ToLower() == columnName;
-                case TypeMatchConvention.UpperCase:
-                    return propertyName.ToUpper() == columnName;
-                case TypeMatchConvention.Default:
-                    return propertyName == columnName;
-                default:
-                    return false;
-            }
-        }
+        #region Error Handling
 
         protected string ErrorDetailMessage(string procedureName, IDataParameter[] parameters, Exception excepcion)
         {
@@ -434,6 +97,32 @@ namespace Thomas.Database
             return stringBuilder.ToString();
         }
 
+        #endregion
+
+        #region Util
+
+        protected void SetConvention(TypeMatchConvention convention)
+        {
+            Convention = convention;
+        }
+
+        protected bool MatchColumnConvention(string propertyName, string columnName)
+        {
+            switch (Convention)
+            {
+                case TypeMatchConvention.CapitalLetter:
+                    return propertyName.ToUpper() + propertyName.Substring(1) == columnName;
+                case TypeMatchConvention.LowerCase:
+                    return propertyName.ToLower() == columnName;
+                case TypeMatchConvention.UpperCase:
+                    return propertyName.ToUpper() == columnName;
+                case TypeMatchConvention.Default:
+                    return propertyName == columnName;
+                default:
+                    return false;
+            }
+        }
+
         protected bool CheckContainNullables(Type type)
         {
             PropertyInfo[] properties = type.GetProperties();
@@ -448,6 +137,244 @@ namespace Thomas.Database
 
             return false;
         }
+
+        protected int GetMaxDegreeOfParallelism()
+        {
+            if (MaxDegreeOfParallelism == 1 || MaxDegreeOfParallelism == 0)
+            {
+                return 1;
+            }
+            else
+            {
+                return Environment.ProcessorCount <= MaxDegreeOfParallelism ? MaxDegreeOfParallelism : 1;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected (DbCommand, IDataParameter[]) PreProcessing(string script, bool isStoreProcedure, object searchTerm)
+        {
+            DbCommand command = null;
+
+            if (!string.IsNullOrEmpty(User) && Password != null && Password.Length > 0)
+            {
+                command = Provider.CreateCommand(StringConnection, User, Password);
+            }
+            else
+            {
+                command = Provider.CreateCommand(StringConnection);
+            }
+
+            command.CommandText = script;
+            command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
+            command.UpdatedRowSource = UpdateRowSource.None;
+            command.Prepare();
+
+            IDataParameter[] parameters = null;
+
+            if (searchTerm != null)
+            {
+                parameters = Provider.ExtractValuesFromSearchTerm(searchTerm);
+
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    command.Parameters.Add(parameters[i]);
+                }
+            }
+
+            return (command, parameters);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected string[] GetColumns(IDataReader listReader)
+        {
+            var count = listReader.FieldCount;
+            var cols = new string[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                cols[i] = listReader.GetName(i).ToUpper();
+            }
+
+            return cols;
+        }
+
+        #endregion
+
+        #region Transformation 1
+
+        protected T[] FormatDataWithNullables<T>(object[][] data,
+                                              IDictionary<string, PropertyInfo> properties,
+                                              string[] columns,
+                                              int length) where T : new()
+        {
+
+            T[] list = new T[data.Length];
+            CultureInfo culture = new CultureInfo(CultureInfo);
+
+            foreach (var item in GetItemsWithNullables(data, length, properties, columns, culture))
+            {
+                list[item.Item2] = item.Item1;
+            }
+
+            return list;
+
+            IEnumerable<(T, int)> GetItemsWithNullables(object[][] data,
+                               int length,
+                               IDictionary<string, PropertyInfo> properties,
+                               string[] columns,
+                               CultureInfo culture) 
+            {
+                object[] v = null;
+
+                for (int i = 0; i < length; i++)
+                {
+                    T item = new();
+                    v = data[i];
+                    yield return (GetItemWithNullables(item, length, properties, columns, v, culture), i);
+                }
+            }
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private T GetItemWithNullables<T>(T item, int length,
+                                  IDictionary<string, PropertyInfo> properties,
+                                  string[] columns,
+                                  object[] v,
+                                  CultureInfo culture)
+        {
+
+            Type propType;
+            PropertyInfo prop = null;
+
+
+            for (int j = 0; j < length; j++)
+            {
+                if (v[j] is DBNull) { continue; }
+
+                prop = properties[columns[j]];
+
+                if (prop.PropertyType.IsGenericType)
+                {
+                    propType = Nullable.GetUnderlyingType(prop.PropertyType);
+                }
+                else
+                {
+                    propType = prop.PropertyType;
+                }
+
+                prop.SetValue(item, Convert.ChangeType(v[j], propType), BindingFlags.Default, null, null, culture);
+            }
+
+            return item;
+        }
+
+
+
+        #endregion
+
+        #region Transformation 2
+
+        protected T[] FormatDataWithoutNullables<T>(object[][] data,
+                                      IDictionary<string, PropertyInfo> properties,
+                                      string[] columns, int length) where T : new()
+        {
+            T[] list = new T[data.Length];
+
+            CultureInfo culture = new CultureInfo(CultureInfo);
+
+            foreach (var item in GetWithoutNullablesItems<T>(data, length, properties, columns, culture))
+            {
+                list[item.Item2] = item.Item1;
+            }
+
+            return list;
+
+        }
+
+        IEnumerable<(T, int)> GetWithoutNullablesItems<T>(object[][] data,
+                                          int length,
+                                          IDictionary<string, PropertyInfo> properties,
+                                          string[] columns,
+                                          CultureInfo culture) where T : new()
+        {
+            object[] v = null;
+
+            for (int i = 0; i < length; i++)
+            {
+                T item = new();
+                v = data[i];
+                yield return (GetItemWithoutNullables(item, length, properties, columns, v, culture), i);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private T GetItemWithoutNullables<T>(T item, int length,
+                  IDictionary<string, PropertyInfo> properties,
+                  string[] columns,
+                  object[] v,
+                  CultureInfo culture)
+        {
+            PropertyInfo prop;
+
+            for (int j = 0; j < length; j++)
+            {
+                if (v[j] is DBNull) { continue; }
+                prop = properties[columns[j]];
+                prop.SetValue(item, v[j], BindingFlags.Default, null, null, culture);
+            }
+
+            return item;
+        }
+
+        #endregion
+
+        #region Extract data
+        protected object[][] ExtractData(IDataReader reader, int columnCount)
+        {
+            object[] values = new object[columnCount];
+
+            var list = new List<object[]>();
+
+            foreach (var item in GetValues(reader, values))
+            {
+                list.Add(item);
+            }
+
+            return list.ToArray();
+        }
+
+        protected ConcurrentDictionary<int, object[]> ExtractData2(IDataReader reader, int columnCount)
+        {
+            object[] values = new object[columnCount];
+
+            int concurrencyLevel = GetMaxDegreeOfParallelism();
+
+            var dictionaryValues = new ConcurrentDictionary<int, object[]>(concurrencyLevel, 1024);
+
+            int index = 0;
+
+            foreach (var item in GetValues(reader, values))
+            {
+                dictionaryValues[index] = item;
+                index++;
+            }
+
+            return dictionaryValues;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected IEnumerable<object[]> GetValues(IDataReader reader, object[] values)
+        {
+            while (reader.Read())
+            {
+                reader.GetValues(values);
+                yield return values;
+            }
+        }
+
+        #endregion
 
     }
 }
