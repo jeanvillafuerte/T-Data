@@ -23,7 +23,5 @@ namespace Thomas.Database
         {
         }
 
-
-
     }
 }

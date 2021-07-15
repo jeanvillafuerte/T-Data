@@ -1,7 +1,4 @@
 ﻿using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Reflection;
-
 
 namespace Thomas.Database.Cache
 {
@@ -9,9 +6,9 @@ namespace Thomas.Database.Cache
     {
         private static CacheThomas instance;
 
-        private static ConcurrentDictionary<string, (IDictionary<string, PropertyInfo>, bool?)> Data = new ConcurrentDictionary<string, (IDictionary<string, PropertyInfo>, bool?)>();
+        private static ConcurrentDictionary<string, InfoCache> Data = new ConcurrentDictionary<string, InfoCache>();
 
-        public static CacheThomas Instance
+        internal static CacheThomas Instance
         {
             get
             {
@@ -28,12 +25,12 @@ namespace Thomas.Database.Cache
 
         }
 
-        public void Set(string key, (IDictionary<string, PropertyInfo>, bool?) value)
+        internal void Set(string key, InfoCache value)
         {
             Data[key] = value;
         }
 
-        public bool TryGet(string key, out (IDictionary<string, PropertyInfo>, bool?) types)
+        internal bool TryGet(string key, out InfoCache types)
         {
             return Data.TryGetValue(key, out types);
         }

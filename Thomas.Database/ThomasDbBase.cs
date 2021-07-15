@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security;
 using System.Text;
+using Thomas.Database.Cache;
 
 namespace Thomas.Database
 {
@@ -18,8 +19,6 @@ namespace Thomas.Database
         protected IDatabaseProvider Provider;
 
         protected int MaxDegreeOfParallelism { get; set; } = 1;
-
-        protected TypeMatchConvention Convention { get; set; }
 
         protected string User { get; set; }
 
@@ -101,32 +100,8 @@ namespace Thomas.Database
 
         #region Util
 
-        protected void SetConvention(TypeMatchConvention convention)
+        protected bool CheckContainNullables(PropertyInfo[] properties)
         {
-            Convention = convention;
-        }
-
-        protected bool MatchColumnConvention(string propertyName, string columnName)
-        {
-            switch (Convention)
-            {
-                case TypeMatchConvention.CapitalLetter:
-                    return propertyName.ToUpper() + propertyName.Substring(1) == columnName;
-                case TypeMatchConvention.LowerCase:
-                    return propertyName.ToLower() == columnName;
-                case TypeMatchConvention.UpperCase:
-                    return propertyName.ToUpper() == columnName;
-                case TypeMatchConvention.Default:
-                    return propertyName == columnName;
-                default:
-                    return false;
-            }
-        }
-
-        protected bool CheckContainNullables(Type type)
-        {
-            PropertyInfo[] properties = type.GetProperties();
-
             for (int i = 0; i < properties.Length; i++)
             {
                 if (Nullable.GetUnderlyingType(properties[i].PropertyType) != null)
@@ -150,7 +125,6 @@ namespace Thomas.Database
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected (DbCommand, IDataParameter[]) PreProcessing(string script, bool isStoreProcedure, object searchTerm)
         {
             DbCommand command = null;
@@ -184,7 +158,6 @@ namespace Thomas.Database
             return (command, parameters);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected string[] GetColumns(IDataReader listReader)
         {
             var count = listReader.FieldCount;
@@ -202,8 +175,8 @@ namespace Thomas.Database
 
         #region Transformation 1
 
-        protected T[] FormatDataWithNullables<T>(object[][] data,
-                                              IDictionary<string, PropertyInfo> properties,
+        internal T[] FormatDataWithNullables<T>(object[][] data,
+                                              IDictionary<string, InfoProperty> properties,
                                               string[] columns,
                                               int length) where T : new()
         {
@@ -220,9 +193,9 @@ namespace Thomas.Database
 
             IEnumerable<(T, int)> GetItemsWithNullables(object[][] data,
                                int length,
-                               IDictionary<string, PropertyInfo> properties,
+                               IDictionary<string, InfoProperty> properties,
                                string[] columns,
-                               CultureInfo culture) 
+                               CultureInfo culture)
             {
                 object[] v = null;
 
@@ -236,35 +209,20 @@ namespace Thomas.Database
         }
 
 
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private T GetItemWithNullables<T>(T item, int length,
-                                  IDictionary<string, PropertyInfo> properties,
+                                  IDictionary<string, InfoProperty> properties,
                                   string[] columns,
                                   object[] v,
                                   CultureInfo culture)
         {
-
-            Type propType;
-            PropertyInfo prop = null;
-
-
             for (int j = 0; j < length; j++)
             {
-                if (v[j] is DBNull) { continue; }
-
-                prop = properties[columns[j]];
-
-                if (prop.PropertyType.IsGenericType)
-                {
-                    propType = Nullable.GetUnderlyingType(prop.PropertyType);
+                if (v[j] is DBNull) 
+                { 
+                    continue; 
                 }
-                else
-                {
-                    propType = prop.PropertyType;
-                }
-
-                prop.SetValue(item, Convert.ChangeType(v[j], propType), BindingFlags.Default, null, null, culture);
+                properties[columns[j]].Info.SetValue(item, Convert.ChangeType(v[j], properties[columns[j]].Type), BindingFlags.Default, null, null, culture);
             }
 
             return item;
@@ -276,8 +234,8 @@ namespace Thomas.Database
 
         #region Transformation 2
 
-        protected T[] FormatDataWithoutNullables<T>(object[][] data,
-                                      IDictionary<string, PropertyInfo> properties,
+        internal T[] FormatDataWithoutNullables<T>(object[][] data,
+                                      IDictionary<string, InfoProperty> properties,
                                       string[] columns, int length) where T : new()
         {
             T[] list = new T[data.Length];
@@ -295,7 +253,7 @@ namespace Thomas.Database
 
         IEnumerable<(T, int)> GetWithoutNullablesItems<T>(object[][] data,
                                           int length,
-                                          IDictionary<string, PropertyInfo> properties,
+                                          IDictionary<string, InfoProperty> properties,
                                           string[] columns,
                                           CultureInfo culture) where T : new()
         {
@@ -311,18 +269,20 @@ namespace Thomas.Database
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private T GetItemWithoutNullables<T>(T item, int length,
-                  IDictionary<string, PropertyInfo> properties,
+                  IDictionary<string, InfoProperty> properties,
                   string[] columns,
                   object[] v,
                   CultureInfo culture)
         {
-            PropertyInfo prop;
 
             for (int j = 0; j < length; j++)
             {
-                if (v[j] is DBNull) { continue; }
-                prop = properties[columns[j]];
-                prop.SetValue(item, v[j], BindingFlags.Default, null, null, culture);
+                if (v[j] is DBNull)
+                {
+                    continue;
+                }
+
+                properties[columns[j]].Info.SetValue(item, v[j], BindingFlags.Default, null, null, culture);
             }
 
             return item;
@@ -345,13 +305,11 @@ namespace Thomas.Database
             return list.ToArray();
         }
 
-        protected ConcurrentDictionary<int, object[]> ExtractData2(IDataReader reader, int columnCount)
+        protected ConcurrentDictionary<int, object[]> ExtractData2(IDataReader reader, int columnCount, int processorCount)
         {
             object[] values = new object[columnCount];
 
-            int concurrencyLevel = GetMaxDegreeOfParallelism();
-
-            var dictionaryValues = new ConcurrentDictionary<int, object[]>(concurrencyLevel, 1024);
+            var dictionaryValues = new ConcurrentDictionary<int, object[]>(processorCount, 1024);
 
             int index = 0;
 
@@ -364,7 +322,6 @@ namespace Thomas.Database
             return dictionaryValues;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected IEnumerable<object[]> GetValues(IDataReader reader, object[] values)
         {
             while (reader.Read())

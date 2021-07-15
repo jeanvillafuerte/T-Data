@@ -1,56 +1,54 @@
-﻿using System;
+﻿using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using BenchmarkDotNet.Attributes;
+using System;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
 
 
 namespace Thomas.Tests.Performance.Benchmark
 {
-	[BenchmarkCategory("ORM")]
-	public class Setup
+    [BenchmarkCategory("ORM")]
+    public class Setup
     {
         protected IThomasDb service;
 
-		protected string TableName;
+        protected string TableName;
 
-		protected bool CleanData;
+        protected bool CleanData;
 
-		public void Start()
-		{
+        public void Start()
+        {
 
-			var builder = new ConfigurationBuilder();
+            var builder = new ConfigurationBuilder();
 
-			builder.AddInMemoryCollection().AddJsonFile("dbsettings.json", true);
+            builder.AddInMemoryCollection().AddJsonFile("dbsettings.json", true);
 
-			var configuration = builder.Build();
+            var configuration = builder.Build();
 
-			var str = configuration["connection"];
-			var len = configuration["rows"];
+            var str = configuration["connection"];
+            var len = configuration["rows"];
 
-			CleanData = bool.Parse(configuration["cleanData"]);
+            CleanData = bool.Parse(configuration["cleanData"]);
 
-            Console.WriteLine($"Cleaning data after run tests :{ configuration["cleanData"]}");
+            IServiceCollection serviceCollection = new ServiceCollection();
+            serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
+            {
+                StringConnection = str
+            });
 
-			IServiceCollection serviceCollection = new ServiceCollection();
-			serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
-			{
-				StringConnection = str
-			});
-			
-			var serviceProvider = serviceCollection.BuildServiceProvider();
+            var serviceProvider = serviceCollection.BuildServiceProvider();
 
-			service = serviceProvider.GetService<IThomasDb>();
+            service = serviceProvider.GetService<IThomasDb>();
 
-			SetDataBase(service, int.Parse(len));
-		}
+            SetDataBase(service, int.Parse(len));
+        }
 
-		void SetDataBase(IThomasDb service, int length)
-		{
-			TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
+        void SetDataBase(IThomasDb service, int length)
+        {
+            TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
 
-			string tableScriptDefinition = @$"IF (OBJECT_ID('{TableName}') IS NULL)
+            string tableScriptDefinition = @$"IF (OBJECT_ID('{TableName}') IS NULL)
                                                 BEGIN
 																	
 	                                                CREATE TABLE {TableName}
@@ -71,14 +69,14 @@ namespace Thomas.Tests.Performance.Benchmark
 
                                                 END";
 
-			var result = service.Execute(tableScriptDefinition, false);
+            var result = service.Execute(tableScriptDefinition, false);
 
-			if(!result.Success)
+            if (!result.Success)
             {
-				throw new Exception(result.ErrorMessage);
+                throw new Exception(result.ErrorMessage);
             }
 
-			string data = @$"SET NOCOUNT ON
+            string data = @$"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX <= {length}
 							BEGIN
@@ -87,20 +85,20 @@ namespace Thomas.Tests.Performance.Benchmark
 								SET @IDX = @IDX + 1;
 							END";
 
-			var dataResult = service.Execute(data, false);
+            var dataResult = service.Execute(data, false);
 
-			if (!dataResult.Success)
-			{
-				throw new Exception(dataResult.ErrorMessage);
-			}
-		}
-
-		protected void Clean()
-        {
-			if(CleanData)
+            if (!dataResult.Success)
             {
-				service.Execute($"DROP TABLE {TableName}");
-			}
-		}
-	}
+                throw new Exception(dataResult.ErrorMessage);
+            }
+        }
+
+        protected void Clean()
+        {
+            if (CleanData)
+            {
+                service.Execute($"DROP TABLE {TableName}");
+            }
+        }
+    }
 }

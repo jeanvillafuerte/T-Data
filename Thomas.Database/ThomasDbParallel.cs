@@ -2,27 +2,23 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
+using Thomas.Database.Cache;
 
 namespace Thomas.Database
 {
     public abstract partial class ThomasDbBase
     {
-        protected T[] FormatDataWithoutNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
-                                           ConcurrentDictionary<string, PropertyInfo> properties,
-                                           string[] columns, int length) where T : new()
+        internal T[] FormatDataWithoutNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
+                                           ConcurrentDictionary<string, InfoProperty> properties,
+                                           string[] columns, int length, int processors) where T : new()
         {
-            int processors = GetMaxDegreeOfParallelism();
-
             int pageSize = data.Count == 1 ? 1 : data.Count / processors;
 
             if (pageSize == 1 || processors <= 1)
             {
                 var dataArray = data.Select(s => s.Value).ToArray();
-                var props = properties.ToDictionary(x => x.Key, y => y.Value);
-
-                return FormatDataWithoutNullables<T>(dataArray, props, columns, length);
+                return FormatDataWithoutNullables<T>(dataArray, properties, columns, length);
             }
 
             int page = 1;
@@ -63,7 +59,7 @@ namespace Thomas.Database
 
             IEnumerable<(T, int)> GetItemsForParallel(Dictionary<int, object[]> data,
                                            int length,
-                                           IDictionary<string, PropertyInfo> properties,
+                                           IDictionary<string, InfoProperty> properties,
                                            string[] columns,
                                            CultureInfo culture)
             {
@@ -76,20 +72,17 @@ namespace Thomas.Database
             }
         }
 
-        protected T[] FormatDataWithNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
-                                      ConcurrentDictionary<string, PropertyInfo> properties,
-                                      string[] columns, int length) where T : new()
+        internal T[] FormatDataWithNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
+                                      ConcurrentDictionary<string, InfoProperty> properties,
+                                      string[] columns, int length, int processors) where T : new()
         {
-            int processors = GetMaxDegreeOfParallelism();
 
             int pageSize = data.Count == 1 ? 1 : data.Count / processors;
 
             if (pageSize == 1 || processors <= 1)
             {
                 var dataArray = data.Select(s => s.Value).ToArray();
-                var props = properties.ToDictionary(x => x.Key, y => y.Value);
-
-                return FormatDataWithNullables<T>(dataArray, props, columns, length);
+                return FormatDataWithNullables<T>(dataArray, properties, columns, length);
             }
 
             int page = 1;
@@ -111,7 +104,7 @@ namespace Thomas.Database
                 page++;
             }
 
-            IDictionary<int, T> listResult = new ConcurrentDictionary<int, T>(processors, data.Count);
+            ConcurrentDictionary<int, T> listResult = new ConcurrentDictionary<int, T>(processors, data.Count);
 
             Parallel.For(0, processors, (i) =>
             {
@@ -129,7 +122,7 @@ namespace Thomas.Database
 
             IEnumerable<(T, int)> GetItemsWithNullablesForParallel(IDictionary<int, object[]> data,
                                   int length,
-                                  IDictionary<string, PropertyInfo> properties,
+                                  IDictionary<string, InfoProperty> properties,
                                   string[] columns,
                                   CultureInfo culture)
             {

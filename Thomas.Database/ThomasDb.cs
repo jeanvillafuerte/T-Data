@@ -2,9 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
-using System.Globalization;
 using System.Linq;
-using System.Reflection;
 using Thomas.Database.Cache;
 
 namespace Thomas.Database
@@ -37,19 +35,11 @@ namespace Thomas.Database
 
             var columns = GetColumns(reader);
 
-            IDictionary<string, PropertyInfo> matchProperties = null;
+            InfoCache infoCache = null;
 
-            bool? containNullables = null;
-
-            var info = (matchProperties, containNullables);
-
-            if (!CacheThomas.Instance.TryGet(tp.FullName, out info))
+            if (!CacheThomas.Instance.TryGet(tp.FullName, out infoCache))
             {
                 var props = tp.GetProperties();
-
-                var culture = new CultureInfo(CultureInfo);
-
-                containNullables = CheckContainNullables(tp);
 
                 if (StrictMode)
                 {
@@ -71,44 +61,45 @@ namespace Thomas.Database
                     }
                 }
 
-                matchProperties = props.Where(x => columns.Contains(x.Name.ToUpper())).ToDictionary(x => x.Name.ToUpper(), y => y);
+                var infoProperties = props.Where(x => columns.Contains(x.Name.ToUpper())).ToDictionary(x => x.Name.ToUpper(), y =>
+                                    y.PropertyType.IsGenericType ? new InfoProperty(y, Nullable.GetUnderlyingType(y.PropertyType)) : new InfoProperty(y, y.PropertyType));
 
-                CacheThomas.Instance.Set(tp.FullName, (matchProperties, containNullables));
+                infoCache = new InfoCache(CheckContainNullables(props), infoProperties);
+
+                CacheThomas.Instance.Set(tp.FullName, infoCache);
             }
-            else
-            {
-                matchProperties = info.matchProperties;
-                containNullables = info.containNullables;
-            }
+
 
             T[] result;
 
-            if (GetMaxDegreeOfParallelism() > 1)
+            int processors = GetMaxDegreeOfParallelism();
+
+            if (processors > 1)
             {
-                var safeList = new ConcurrentDictionary<string, PropertyInfo>(matchProperties);
+                var safeList = new ConcurrentDictionary<string, InfoProperty>(infoCache.InfoProperties);
 
-                ConcurrentDictionary<int, object[]> data2 = ExtractData2(reader, columns.Length);
+                ConcurrentDictionary<int, object[]> data2 = ExtractData2(reader, columns.Length, processors);
 
-                if (containNullables.Value)
+                if (infoCache.ContainNullables)
                 {
-                    result = FormatDataWithNullablesParallel<T>(data2, safeList, columns, data2.Count);
+                    result = FormatDataWithNullablesParallel<T>(data2, safeList, columns, data2.Count, processors);
                 }
                 else
                 {
-                    result = FormatDataWithoutNullablesParallel<T>(data2, safeList, columns, data2.Count);
+                    result = FormatDataWithoutNullablesParallel<T>(data2, safeList, columns, data2.Count, processors);
                 }
             }
             else
             {
                 object[][] data = ExtractData(reader, columns.Length);
 
-                if (containNullables.Value)
+                if (infoCache.ContainNullables)
                 {
-                    result = FormatDataWithNullables<T>(data, matchProperties, columns, data.Length);
+                    result = FormatDataWithNullables<T>(data, infoCache.InfoProperties, columns, data.Length);
                 }
                 else
                 {
-                    result = FormatDataWithoutNullables<T>(data, matchProperties, columns, data.Length);
+                    result = FormatDataWithoutNullables<T>(data, infoCache.InfoProperties, columns, data.Length);
                 }
             }
 
@@ -990,6 +981,5 @@ namespace Thomas.Database
         }
 
         #endregion
-
     }
 }

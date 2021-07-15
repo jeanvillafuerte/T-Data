@@ -12,6 +12,7 @@
     <PackageId>ThomasDataAdapter.SqlServer</PackageId>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Platforms>AnyCPU;x64</Platforms>
+    <PackageIcon>ThomasIco.png</PackageIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -33,6 +34,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="D:\DownloadBrowsers\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>

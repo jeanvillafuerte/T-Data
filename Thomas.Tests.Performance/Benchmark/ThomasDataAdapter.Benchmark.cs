@@ -1,5 +1,5 @@
-﻿using System.ComponentModel;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
+using System.ComponentModel;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark
@@ -17,7 +17,7 @@ namespace Thomas.Tests.Performance.Benchmark
         [Benchmark(Description = "ToList<>")]
         public void ToList()
         {
-          service.ToList<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1", false);
+            service.ToList<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1", false);
         }
 
         [Benchmark(Description = "Single<>")]
@@ -30,6 +30,25 @@ namespace Thomas.Tests.Performance.Benchmark
         public void ToTuple()
         {
             service.ToTuple<Person, Person>($@" SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;
+                                                SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", false);
+        }
+
+        [Benchmark(Description = "ToList<> T with nullables")]
+        public void ToList2()
+        {
+            service.ToList<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1", false);
+        }
+
+        [Benchmark(Description = "Single<> T with nullables")]
+        public void Single2()
+        {
+            service.ToSingle<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1", false);
+        }
+
+        [Benchmark(Description = "ToTuple<> T with nullables")]
+        public void ToTuple2()
+        {
+            service.ToTuple<PersonWithNullables, PersonWithNullables>($@" SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;
                                                 SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", false);
         }
 

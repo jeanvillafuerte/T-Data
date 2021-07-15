@@ -1,7 +1,7 @@
-# ThomasDataAdapter
+# ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 ## Simple library to get data from Database SQL Server specially high load and low memory consum.
 #
-It Works matching class fields vs result set returned by database query. There are simples configurations for general purpose as high load work.
+>It Works matching class fields vs result set returned by database query. There are simples configurations for general purpose as high load work.
 
 
 ## Nuget : https://www.nuget.org/packages/ThomasDataAdapter.SqlServer/
@@ -144,8 +144,13 @@ Intel Core i7-8550U CPU 1.80GHz (Kaby Lake R), 1 CPU, 8 logical and 4 physical c
 
 
 ```
-|    Method |     Mean |  StdDev |    Error |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
-|---------- |---------:|--------:|---------:|-------:|-------:|------:|----------:|
-|  Single&lt;&gt; | 136.8 μs | 0.39 μs |  0.65 μs | 2.5000 |      - |     - |     10 KB |
-|  ToList&lt;&gt; | 146.6 μs | 9.12 μs | 13.79 μs | 2.5000 |      - |     - |     10 KB |
-| ToTuple&lt;&gt; | 158.4 μs | 0.74 μs |  1.12 μs | 4.5000 | 0.2500 |     - |     19 KB |
+|                       Method |     Mean |   StdDev |    Error |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|----------------------------- |---------:|---------:|---------:|-------:|-------:|------:|----------:|
+|                     Single&lt;&gt; | 140.8 μs |  3.00 μs |  4.53 μs | 2.5000 |      - |     - |     10 KB |
+|                     ToList&lt;&gt; | 167.0 μs | 36.73 μs | 55.53 μs | 2.5000 |      - |     - |     10 KB |
+|                    ToTuple&lt;&gt; | 163.0 μs |  4.03 μs |  6.78 μs | 4.5000 | 0.2500 |     - |     19 KB |
+|  &#39;Single&lt;&gt; T with nullables&#39; | 144.6 μs | 11.03 μs | 18.54 μs | 2.5000 |      - |     - |     10 KB |
+|  &#39;ToList&lt;&gt; T with nullables&#39; | 146.8 μs |  8.63 μs | 14.51 μs | 2.5000 |      - |     - |     10 KB |
+| &#39;ToTuple&lt;&gt; T with nullables&#39; | 166.6 μs |  6.05 μs |  9.15 μs | 4.5000 | 0.2500 |     - |     19 KB |
+
+
