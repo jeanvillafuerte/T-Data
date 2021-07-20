@@ -201,7 +201,7 @@ namespace Thomas.Database
 
                 for (int i = 0; i < length; i++)
                 {
-                    T item = new();
+                    T item = new T();
                     v = data[i];
                     yield return (GetItemWithNullables(item, length, properties, columns, v, culture), i);
                 }
@@ -261,7 +261,7 @@ namespace Thomas.Database
 
             for (int i = 0; i < length; i++)
             {
-                T item = new();
+                T item = new T();
                 v = data[i];
                 yield return (GetItemWithoutNullables(item, length, properties, columns, v, culture), i);
             }
@@ -281,7 +281,6 @@ namespace Thomas.Database
                 {
                     continue;
                 }
-
                 properties[columns[j]].Info.SetValue(item, v[j], BindingFlags.Default, null, null, culture);
             }
 

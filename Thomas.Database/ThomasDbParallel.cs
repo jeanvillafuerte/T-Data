@@ -65,7 +65,7 @@ namespace Thomas.Database
             {
                 foreach (var d in data)
                 {
-                    T item = new();
+                    T item = new T();
                     yield return (GetItemWithoutNullables<T>(item, length, properties, columns, d.Value, culture), d.Key);
                 }
 
@@ -128,7 +128,7 @@ namespace Thomas.Database
             {
                 foreach (var d in data)
                 {
-                    T item = new();
+                    T item = new T();
                     yield return (GetItemWithNullables<T>(item, length, properties, columns, d.Value, culture), d.Key);
                 }
 

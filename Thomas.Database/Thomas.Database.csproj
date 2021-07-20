@@ -1,21 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
     <Authors>Jean Villafuerte</Authors>
     <Product>ThomasDataAdapter</Product>
     <Description>ThomasDataAdapter base.</Description>
     <Copyright>2021 © Jean Villafuerte</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
-    <PackageTags>dapper, micro-orm, thomasAdapter</PackageTags>
+    <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <Platforms>AnyCPU;x64</Platforms>
+    <AssemblyVersion>1.0.0.2</AssemblyVersion>
+    <FileVersion>1.0.0.2</FileVersion>
+    <Version>1.0.2</Version>
+    <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageIcon>ThomasIco.png</PackageIcon>
-    <AssemblyVersion>1.0.0.1</AssemblyVersion>
-    <FileVersion>1.0.0.1</FileVersion>
-    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -43,7 +45,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="D:\DownloadBrowsers\ThomasIco.png">
+    <None Include="..\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+    <None Include="..\ThomasIco.png">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>

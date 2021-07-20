@@ -1,22 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
     <Authors>Jean Villafuerte</Authors>
     <Product>ThomasDataAdapter</Product>
     <Description>Simple library to get data from Database SQL Server specially high load and low memory consum.</Description>
     <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>dapper, micro-orm, thomasAdapter</PackageTags>
+    <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
     <Copyright>2021 © Jean Villafuerte</Copyright>
     <PackageId>ThomasDataAdapter.SqlServer</PackageId>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Platforms>AnyCPU;x64</Platforms>
-    <PackageIcon>ThomasIco.png</PackageIcon>
-    <Version>1.0.1</Version>
-    <AssemblyVersion>1.0.0.1</AssemblyVersion>
-    <FileVersion>1.0.0.1</FileVersion>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.0.2</AssemblyVersion>
+    <FileVersion>1.0.0.2</FileVersion>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
+    <PackageIcon>ThomasIco.png</PackageIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -41,7 +43,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="D:\DownloadBrowsers\ThomasIco.png">
+    <None Include="..\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+    <None Include="..\ThomasIco.png">
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
