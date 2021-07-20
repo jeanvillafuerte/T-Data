@@ -7,7 +7,7 @@ using Thomas.Database.Cache;
 
 namespace Thomas.Database
 {
-    public class ThomasDb : ThomasDbBase, IThomasDb
+    public sealed class ThomasDb : ThomasDbBase, IThomasDb
     {
         public ThomasDb(IDatabaseProvider provider, ThomasDbStrategyOptions options)
         {
@@ -47,10 +47,10 @@ namespace Thomas.Database
 
                     for (int i = 0; i < props.Length; i++)
                     {
-                        propsName[i] = props[i].Name.ToUpper();
+                        propsName[i] = props[i].Name;
                     }
 
-                    var noMatchProperties = columns.Where(x => !propsName.Contains(x)).ToArray();
+                    var noMatchProperties = columns.Where(x => !propsName.Contains(x, StringComparer.OrdinalIgnoreCase)).ToArray();
 
                     if (noMatchProperties.Length > 0)
                     {
@@ -61,10 +61,10 @@ namespace Thomas.Database
                     }
                 }
 
-                var infoProperties = props.Where(x => columns.Contains(x.Name.ToUpper())).ToDictionary(x => x.Name.ToUpper(), y =>
+                var infoProperties = props.Where(x => columns.Contains(x.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(x => x.Name, y =>
                                     y.PropertyType.IsGenericType ? new InfoProperty(y, Nullable.GetUnderlyingType(y.PropertyType)) : new InfoProperty(y, y.PropertyType));
 
-                infoCache = new InfoCache(CheckContainNullables(props), infoProperties);
+                infoCache = new InfoCache(infoProperties);
 
                 CacheThomas.Instance.Set(tp.FullName, infoCache);
             }
@@ -80,27 +80,14 @@ namespace Thomas.Database
 
                 ConcurrentDictionary<int, object[]> data2 = ExtractData2(reader, columns.Length, processors);
 
-                if (infoCache.ContainNullables)
-                {
-                    result = FormatDataWithNullablesParallel<T>(data2, safeList, columns, data2.Count, processors);
-                }
-                else
-                {
-                    result = FormatDataWithoutNullablesParallel<T>(data2, safeList, columns, data2.Count, processors);
-                }
+                result = FormatDataAsParallel<T>(data2, safeList, columns, data2.Count, processors);
+
             }
             else
             {
                 object[][] data = ExtractData(reader, columns.Length);
 
-                if (infoCache.ContainNullables)
-                {
-                    result = FormatDataWithNullables<T>(data, infoCache.InfoProperties, columns, data.Length);
-                }
-                else
-                {
-                    result = FormatDataWithoutNullables<T>(data, infoCache.InfoProperties, columns, data.Length);
-                }
+                result = FormatData<T>(data, infoCache.InfoProperties, columns, data.Length);
             }
 
             if (closeReader)

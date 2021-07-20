@@ -4,13 +4,11 @@ namespace Thomas.Database.Cache
 {
     internal sealed class InfoCache
     {
-        public InfoCache(bool containNullables, IDictionary<string, InfoProperty> infoProperties)
+        public InfoCache( Dictionary<string, InfoProperty> infoProperties)
         {
-            ContainNullables = containNullables;
             InfoProperties = infoProperties;
         }
 
-        internal bool ContainNullables { get; set; }
-        internal IDictionary<string, InfoProperty> InfoProperties { get; set; }
+        internal Dictionary<string, InfoProperty> InfoProperties { get; set; }
     }
 }

@@ -165,7 +165,7 @@ namespace Thomas.Database
 
             for (int i = 0; i < count; i++)
             {
-                cols[i] = listReader.GetName(i).ToUpper();
+                cols[i] = listReader.GetName(i);
             }
 
             return cols;
@@ -173,10 +173,10 @@ namespace Thomas.Database
 
         #endregion
 
-        #region Transformation 1
+        #region Transformation
 
-        internal T[] FormatDataWithNullables<T>(object[][] data,
-                                              IDictionary<string, InfoProperty> properties,
+        internal T[] FormatData<T>(object[][] data,
+                                              Dictionary<string, InfoProperty> properties,
                                               string[] columns,
                                               int length) where T : new()
         {
@@ -184,16 +184,16 @@ namespace Thomas.Database
             T[] list = new T[data.Length];
             CultureInfo culture = new CultureInfo(CultureInfo);
 
-            foreach (var item in GetItemsWithNullables(data, length, properties, columns, culture))
+            foreach (var item in GetItems(data, length, properties, columns, culture))
             {
                 list[item.Item2] = item.Item1;
             }
 
             return list;
 
-            IEnumerable<(T, int)> GetItemsWithNullables(object[][] data,
+            IEnumerable<(T, int)> GetItems(object[][] data,
                                int length,
-                               IDictionary<string, InfoProperty> properties,
+                               Dictionary<string, InfoProperty> properties,
                                string[] columns,
                                CultureInfo culture)
             {
@@ -203,25 +203,21 @@ namespace Thomas.Database
                 {
                     T item = new T();
                     v = data[i];
-                    yield return (GetItemWithNullables(item, length, properties, columns, v, culture), i);
+                    yield return (GetItem(item, length, properties, columns, v, culture), i);
                 }
             }
         }
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private T GetItemWithNullables<T>(T item, int length,
-                                  IDictionary<string, InfoProperty> properties,
+        private T GetItem<T>(T item, int length,
+                                  Dictionary<string, InfoProperty> properties,
                                   string[] columns,
                                   object[] v,
                                   CultureInfo culture)
         {
             for (int j = 0; j < length; j++)
             {
-                if (v[j] is DBNull) 
-                { 
-                    continue; 
-                }
                 properties[columns[j]].Info.SetValue(item, Convert.ChangeType(v[j], properties[columns[j]].Type), BindingFlags.Default, null, null, culture);
             }
 
@@ -229,63 +225,6 @@ namespace Thomas.Database
         }
 
 
-
-        #endregion
-
-        #region Transformation 2
-
-        internal T[] FormatDataWithoutNullables<T>(object[][] data,
-                                      IDictionary<string, InfoProperty> properties,
-                                      string[] columns, int length) where T : new()
-        {
-            T[] list = new T[data.Length];
-
-            CultureInfo culture = new CultureInfo(CultureInfo);
-
-            foreach (var item in GetWithoutNullablesItems<T>(data, length, properties, columns, culture))
-            {
-                list[item.Item2] = item.Item1;
-            }
-
-            return list;
-
-        }
-
-        IEnumerable<(T, int)> GetWithoutNullablesItems<T>(object[][] data,
-                                          int length,
-                                          IDictionary<string, InfoProperty> properties,
-                                          string[] columns,
-                                          CultureInfo culture) where T : new()
-        {
-            object[] v = null;
-
-            for (int i = 0; i < length; i++)
-            {
-                T item = new T();
-                v = data[i];
-                yield return (GetItemWithoutNullables(item, length, properties, columns, v, culture), i);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private T GetItemWithoutNullables<T>(T item, int length,
-                  IDictionary<string, InfoProperty> properties,
-                  string[] columns,
-                  object[] v,
-                  CultureInfo culture)
-        {
-
-            for (int j = 0; j < length; j++)
-            {
-                if (v[j] is DBNull)
-                {
-                    continue;
-                }
-                properties[columns[j]].Info.SetValue(item, v[j], BindingFlags.Default, null, null, culture);
-            }
-
-            return item;
-        }
 
         #endregion
 

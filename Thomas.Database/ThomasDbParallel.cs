@@ -1,7 +1,10 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Thomas.Database.Cache;
 
@@ -18,7 +21,7 @@ namespace Thomas.Database
             if (pageSize == 1 || processors <= 1)
             {
                 var dataArray = data.Select(s => s.Value).ToArray();
-                return FormatDataWithoutNullables<T>(dataArray, properties, columns, length);
+                return FormatData<T>(dataArray, new Dictionary<string, InfoProperty>(properties), columns, length);
             }
 
             int page = 1;
@@ -59,20 +62,20 @@ namespace Thomas.Database
 
             IEnumerable<(T, int)> GetItemsForParallel(Dictionary<int, object[]> data,
                                            int length,
-                                           IDictionary<string, InfoProperty> properties,
+                                           ConcurrentDictionary<string, InfoProperty> properties,
                                            string[] columns,
                                            CultureInfo culture)
             {
                 foreach (var d in data)
                 {
                     T item = new T();
-                    yield return (GetItemWithoutNullables<T>(item, length, properties, columns, d.Value, culture), d.Key);
+                    yield return (GetItemAsParallel<T>(item, length, properties, columns, d.Value, culture), d.Key);
                 }
 
             }
         }
 
-        internal T[] FormatDataWithNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
+        internal T[] FormatDataAsParallel<T>(ConcurrentDictionary<int, object[]> data,
                                       ConcurrentDictionary<string, InfoProperty> properties,
                                       string[] columns, int length, int processors) where T : new()
         {
@@ -82,7 +85,7 @@ namespace Thomas.Database
             if (pageSize == 1 || processors <= 1)
             {
                 var dataArray = data.Select(s => s.Value).ToArray();
-                return FormatDataWithNullables<T>(dataArray, properties, columns, length);
+                return FormatData<T>(dataArray, new Dictionary<string, InfoProperty>(properties), columns, length);
             }
 
             int page = 1;
@@ -112,7 +115,7 @@ namespace Thomas.Database
 
                 CultureInfo culture = new CultureInfo(CultureInfo);
 
-                foreach (var item in GetItemsWithNullablesForParallel(splitData, length, properties, columns, culture))
+                foreach (var item in GetItemsAsParallel(splitData, length, properties, columns, culture))
                 {
                     listResult[item.Item2] = item.Item1;
                 }
@@ -120,20 +123,34 @@ namespace Thomas.Database
 
             return listResult.Select(x => x.Value).ToArray();
 
-            IEnumerable<(T, int)> GetItemsWithNullablesForParallel(IDictionary<int, object[]> data,
+            IEnumerable<(T, int)> GetItemsAsParallel(IDictionary<int, object[]> data,
                                   int length,
-                                  IDictionary<string, InfoProperty> properties,
+                                  ConcurrentDictionary<string, InfoProperty> properties,
                                   string[] columns,
                                   CultureInfo culture)
             {
                 foreach (var d in data)
                 {
                     T item = new T();
-                    yield return (GetItemWithNullables<T>(item, length, properties, columns, d.Value, culture), d.Key);
+                    yield return (GetItemAsParallel<T>(item, length, properties, columns, d.Value, culture), d.Key);
                 }
 
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private T GetItemAsParallel<T>(T item, int length,
+                                  ConcurrentDictionary<string, InfoProperty> properties,
+                                  string[] columns,
+                                  object[] v,
+                                  CultureInfo culture)
+        {
+            for (int j = 0; j < length; j++)
+            {
+                properties[columns[j]].Info.SetValue(item, Convert.ChangeType(v[j], properties[columns[j]].Type), BindingFlags.Default, null, null, culture);
+            }
+
+            return item;
+        }
     }
 }
