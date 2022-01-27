@@ -1,5 +1,5 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
-## Simple library to get data from Database SQL Server specially high load and low memory consum.
+## Simple strong typed library to get data from Database SQL Server specially high load and low memory consum.
 #
 >It Works matching class fields vs result set returned by database query. There are simples configurations for general purpose as high load work.
 
@@ -49,7 +49,7 @@ public class MyComponent
 
     public IList<Person> GetPeople()
     {
-        var response = _db.ToList<Person>("dbo.GetPeople");
+        var response = _db.ToListOp<Person>("dbo.GetPeople");
 
         if(response.Success)
         {
@@ -63,7 +63,7 @@ public class MyComponent
 
     public void SavePeople(Person person)
     {
-        var response = _db.Execute(person, "dbo.SavePerson");
+        var response = _db.ExecuteOp(person, "dbo.SavePerson");
 
         if(response.Success)
         {
@@ -79,7 +79,7 @@ public class MyComponent
 
     public void UpdateAge()
     {
-        var response = _db.Execute("dbo.UpdateAge");
+        var response = _db.ExecuteOp("dbo.UpdateAge");
 
         if(response.Success)
         {
@@ -95,7 +95,7 @@ public class MyComponent
 
     public void ProcessData()
     {
-        var response = _db.ToTuple<Person, Office>("dbo.GetDataForProcess");
+        var response = _db.ToTupleOp<Person, Office>("dbo.GetDataForProcess");
 
         if(response.Success)
         {
@@ -111,6 +111,14 @@ public class MyComponent
         }
     }
 
+    public void ManyFormsToGetData()
+    {
+        Person person = _db.ToSingle<Person>("SELECT * FROM Person WHERE Id = 43");
+
+        IReadOnlyList<Person> people = _db.ToList<Person>("SELECT * FROM Person WHERE name like '%jhon%'");
+
+        Tuple<IReadOnlyList<Person>, IReadOnlyList<Office>> peopleOffice = _db.Tuple<Person, Office>("SELECT * FROM Person WHERE name like '%jhon%'; SELECT * FROM Office WHERE name like '%US_%");
+    }
 }
 ```
 
@@ -136,21 +144,40 @@ dotnet run -p .\Thomas.Tests.Performance\ -c Release -f net5.0 -- -f * --join
 
 ``` ini
 
-BenchmarkDotNet=v0.13.0, OS=Windows 10.0.19042.1083 (20H2/October2020Update)
+BenchmarkDotNet=v0.13.0, OS=Windows 10.0.19042.1466 (20H2/October2020Update)
 Intel Core i7-8550U CPU 1.80GHz (Kaby Lake R), 1 CPU, 8 logical and 4 physical cores
-.NET SDK=5.0.202
-  [Host]   : .NET 5.0.5 (5.0.521.16609), X64 RyuJIT
-  ShortRun : .NET 5.0.5 (5.0.521.16609), X64 RyuJIT
+.NET SDK=5.0.404
+  [Host]     : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
+  ShortRun   : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
+  Job-QAXZEQ : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
+
+Namespace=Thomas.Tests.Performance.Benchmark  Type=ThomasDataAdapterBenckmark
 
 
 ```
-|                       Method |     Mean |   StdDev |    Error |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
-|----------------------------- |---------:|---------:|---------:|-------:|-------:|------:|----------:|
-|                     Single&lt;&gt; | 140.8 μs |  3.00 μs |  4.53 μs | 2.5000 |      - |     - |     10 KB |
-|                     ToList&lt;&gt; | 167.0 μs | 36.73 μs | 55.53 μs | 2.5000 |      - |     - |     10 KB |
-|                    ToTuple&lt;&gt; | 163.0 μs |  4.03 μs |  6.78 μs | 4.5000 | 0.2500 |     - |     19 KB |
-|  &#39;Single&lt;&gt; T with nullables&#39; | 144.6 μs | 11.03 μs | 18.54 μs | 2.5000 |      - |     - |     10 KB |
-|  &#39;ToList&lt;&gt; T with nullables&#39; | 146.8 μs |  8.63 μs | 14.51 μs | 2.5000 |      - |     - |     10 KB |
-| &#39;ToTuple&lt;&gt; T with nullables&#39; | 166.6 μs |  6.05 μs |  9.15 μs | 4.5000 | 0.2500 |     - |     19 KB |
-
-
+|                         Method |     Mean |   StdDev |    Error |    Op/s |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|------------------------------- |---------:|---------:|---------:|--------:|-------:|------:|------:|----------:|
+|                       Single<> | 123.5 us |  0.37 us |  0.71 us | 8,095.1 | 1.8750 |     - |     - |      8 KB |
+|                     SingleOp<> | 124.3 us |  0.93 us |  1.12 us | 8,046.2 | 1.9531 |     - |     - |      8 KB |
+|  'SingleOp<> T with nullables' | 124.4 us |  0.46 us |  0.55 us | 8,038.0 | 1.9531 |     - |     - |      8 KB |
+|  'ToListOp<> T with nullables' | 125.8 us |  2.95 us |  4.96 us | 7,946.5 | 2.0313 |     - |     - |      8 KB |
+|  'ToListOp<> T with nullables' | 126.0 us |  0.62 us |  0.74 us | 7,935.7 | 1.9531 |     - |     - |      8 KB |
+|                     ToListOp<> | 126.0 us |  1.37 us |  2.62 us | 7,933.5 | 2.0313 |     - |     - |      8 KB |
+|    'ToList<> T with nullables' | 127.1 us |  0.69 us |  1.32 us | 7,868.4 | 1.8750 |     - |     - |      8 KB |
+|    'Single<> T with nullables' | 127.5 us |  4.29 us |  6.48 us | 7,840.7 | 1.8750 |     - |     - |      8 KB |
+|  'SingleOp<> T with nullables' | 128.0 us |  0.39 us |  0.74 us | 7,815.2 | 2.0313 |     - |     - |      8 KB |
+|                       Single<> | 128.1 us |  3.38 us |  2.47 us | 7,807.5 | 1.9531 |     - |     - |      8 KB |
+|                       ToList<> | 128.1 us |  3.38 us |  5.11 us | 7,806.2 | 1.8750 |     - |     - |      8 KB |
+|    'ToList<> T with nullables' | 128.2 us |  2.33 us |  2.37 us | 7,800.7 | 1.9531 |     - |     - |      8 KB |
+|                       ToList<> | 128.8 us |  2.81 us |  2.53 us | 7,762.4 | 1.9531 |     - |     - |      8 KB |
+|                     SingleOp<> | 129.7 us |  0.56 us |  0.85 us | 7,711.0 | 1.8750 |     - |     - |      8 KB |
+|    'Single<> T with nullables' | 130.0 us |  0.73 us |  0.82 us | 7,691.1 | 1.9531 |     - |     - |      8 KB |
+|                     ToListOp<> | 139.3 us |  2.23 us |  2.38 us | 7,177.7 | 1.9531 |     - |     - |      8 KB |
+|                    ToTupleOp<> | 140.1 us |  0.50 us |  0.59 us | 7,137.9 | 3.9063 |     - |     - |     17 KB |
+| 'ToTupleOp<> T with nullables' | 141.0 us |  0.37 us |  0.40 us | 7,092.4 | 3.9063 |     - |     - |     17 KB |
+|   'ToTuple<> T with nullables' | 144.0 us |  1.63 us |  1.95 us | 6,946.8 | 3.9063 |     - |     - |     17 KB |
+|   'ToTuple<> T with nullables' | 144.7 us |  6.08 us |  9.19 us | 6,909.9 | 3.9063 |     - |     - |     17 KB |
+|                      ToTuple<> | 147.9 us |  1.90 us |  2.14 us | 6,760.0 | 3.9063 |     - |     - |     17 KB |
+|                    ToTupleOp<> | 149.3 us |  0.75 us |  1.27 us | 6,699.1 | 3.9063 |     - |     - |     17 KB |
+| 'ToTupleOp<> T with nullables' | 161.8 us |  7.99 us | 12.08 us | 6,181.6 | 3.9063 |     - |     - |     17 KB |
+|                      ToTuple<> | 173.3 us | 32.93 us | 49.79 us | 5,769.8 | 3.9063 |     - |     - |     17 KB |
