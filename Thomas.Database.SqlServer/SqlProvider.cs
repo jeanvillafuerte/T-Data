@@ -3,11 +3,16 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
+#if NETCOREAPP3_1_OR_GREATER
+using System.Runtime.CompilerServices;
+#endif
 using System.Security;
 using Microsoft.Data.SqlClient;
 
 namespace Thomas.Database.SqlServer
 {
+    using Cache;
+
     public class SqlProvider : IDatabaseProvider
     {
         private Dictionary<string, SqlDbType> DbTypes;
@@ -16,7 +21,9 @@ namespace Thomas.Database.SqlServer
 
         static SqlProvider()
         {
+#if NETCOREAPP3_1_OR_GREATER
             DbProviderFactories.RegisterFactory("System.Data.SqlClient", SqlClientFactory.Instance);
+#endif
         }
 
         public SqlProvider(ThomasDbStrategyOptions options)
@@ -47,18 +54,56 @@ namespace Thomas.Database.SqlServer
             var cmd = new SqlCommand();
             cmd.Connection = cnx;
             cmd.CommandTimeout = Options.ConnectionTimeout;
-            cnx.Open();
             return cmd;
+        }
+
+#if NETCOREAPP3_1_OR_GREATER
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+#endif
+        public DbCommand CreateCommand(string script, bool isStoreProcedure)
+        {
+            if (!DbConnectionCache.Instance.TryGet(Options.StringConnection, out SqlConnection sqlConnection))
+            {
+                if (!string.IsNullOrEmpty(Options.User) && Options.Password != null && Options.Password.Length > 0)
+                {
+                    sqlConnection = CreateConnection(Options.StringConnection, Options.User, Options.Password) as SqlConnection;
+                }
+                else
+                {
+                    sqlConnection = CreateConnection(Options.StringConnection) as SqlConnection;
+                }
+
+                DbConnectionCache.Instance.Set(Options.StringConnection, sqlConnection);
+            }
+
+            sqlConnection.ConnectionString = Options.StringConnection;
+
+            if (!DbCommandCache.Instance.TryGet(script, out SqlCommand command))
+            {
+                command = sqlConnection.CreateCommand();
+                command.CommandText = script;
+                command.CommandTimeout = Options.ConnectionTimeout;
+                command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
+                command.UpdatedRowSource = UpdateRowSource.None;
+
+                DbCommandCache.Instance.Set(script, command);
+            }
+
+            command.Prepare();
+
+            return command;
         }
 
         public DbCommand CreateCommand(string connection, string user, SecureString password)
         {
+            var cnxBuilder = new SqlConnectionStringBuilder();
+            cnxBuilder.ToString();
             var credential = new SqlCredential(user, password);
             var cnx = new SqlConnection(connection, credential);
             var cmd = new SqlCommand();
             cmd.Connection = cnx;
             cmd.CommandTimeout = Options.ConnectionTimeout;
-            cnx.Open();
+            //cnx.Open();
             return cmd;
         }
 

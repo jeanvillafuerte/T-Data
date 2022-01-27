@@ -1,25 +1,77 @@
 ﻿using System;
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using BenchmarkDotNet.Attributes;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
+using Thomas.Tests.Performance.Entities;
 
-
-namespace Thomas.Tests.Performance.Benchmark
+namespace Thomas.Tests.Performance.Legacy
 {
-    [BenchmarkCategory("ORM")]
-    public class Setup
+    class Program
     {
-        protected IThomasDb service;
+        public static string TableName { get; set; }
+        public static bool CleanData { get; set; }
+        public static IThomasDb Service { get; set; }
 
-        protected string TableName;
-
-        protected bool CleanData;
-
-        public void Start()
+        static void Main(string[] args)
         {
+            Console.WriteLine("Start Setup...");
 
+            Setup();
+
+            Console.WriteLine("End Setup...");
+
+            var stopWatch = new Stopwatch();
+
+            Console.WriteLine("");
+            Console.WriteLine("Secuencial calls.");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("");
+            Console.WriteLine("Method ToList<>");
+            Console.ForegroundColor = ConsoleColor.White;
+
+            for (int i = 0; i < 10; i++)
+            {
+                stopWatch.Start();
+
+                var data = Service.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
+
+                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Count}");
+                Console.WriteLine(stopWatch.ElapsedMilliseconds);
+
+                stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Method ToListOp<>");
+            Console.ForegroundColor = ConsoleColor.White;
+
+            for (int i = 0; i < 10; i++)
+            {
+                stopWatch.Start();
+
+                var data = Service.ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
+
+                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Result.Count}");
+                Console.WriteLine(stopWatch.ElapsedMilliseconds);
+
+                stopWatch.Reset();
+            }
+
+            Console.WriteLine("Start Cleaning...");
+
+            Clean();
+
+            Console.WriteLine("End Cleaning...");
+
+            Console.ReadKey();
+        }
+
+        static void Setup()
+        {
             var builder = new ConfigurationBuilder();
 
             builder.AddInMemoryCollection().AddJsonFile("dbsettings.json", true);
@@ -35,17 +87,18 @@ namespace Thomas.Tests.Performance.Benchmark
             serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
             {
                 StringConnection = str,
-                MaxDegreeOfParallelism = 1
+                MaxDegreeOfParallelism = 4,
+                ConnectionTimeout = 0
             });
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
 
-            service = serviceProvider.GetService<IThomasDb>();
+            Service = serviceProvider.GetService<IThomasDb>();
 
-            SetDataBase(service, int.Parse(len));
+            SetDataBase(Service, int.Parse(len));
         }
 
-        void SetDataBase(IThomasDb service, int length)
+        static void SetDataBase(IThomasDb service, int length)
         {
             TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
 
@@ -79,7 +132,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
-							WHILE @IDX <= {length}
+							WHILE @IDX < {length}
 							BEGIN
 								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
 								VALUES ( REPLICATE('A',25), REPLICATE('A',500), REPLICATE('A',500), '1988-01-01', 33, REPLICATE('A',300), REPLICATE('A',240), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
@@ -94,11 +147,11 @@ namespace Thomas.Tests.Performance.Benchmark
             }
         }
 
-        protected void Clean()
+        static void Clean()
         {
             if (CleanData)
             {
-                service.Execute($"DROP TABLE {TableName}", false);
+                Service.Execute($"DROP TABLE {TableName}", false);
             }
         }
     }

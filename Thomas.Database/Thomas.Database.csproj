@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1;net5.0</TargetFrameworks>
-    <Authors>Jean Villafuerte</Authors>
+    <TargetFrameworks>netstandard2.0;netcoreapp3.1;net5.0</TargetFrameworks>
+    <Authors>Jean Villafuerte</Authors>    
     <Product>ThomasDataAdapter</Product>
     <Description>ThomasDataAdapter base.</Description>
     <Copyright>2021 © Jean Villafuerte</Copyright>
@@ -18,6 +18,8 @@
     <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>ThomasIco.png</PackageIcon>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -37,6 +39,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="ParallelHelper.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="5.0.0" />

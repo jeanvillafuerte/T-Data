@@ -6,13 +6,14 @@ using BenchmarkDotNet.Exporters.Csv;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Order;
-
+using BenchmarkDotNet.Toolchains.CsProj;
+using BenchmarkDotNet.Toolchains.DotNetCli;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
     public class BenchmarkConfig : ManualConfig
     {
-        public const int Iterations = 500;
+        public const int Iterations = 100;
 
         public BenchmarkConfig()
         {
@@ -24,21 +25,28 @@ namespace Thomas.Tests.Performance.Benchmark
 
             var md = MemoryDiagnoser.Default;
             AddDiagnoser(md);
+            AddColumn(TargetMethodColumn.Namespace);
+            AddColumn(TargetMethodColumn.Type);
             AddColumn(TargetMethodColumn.Method);
             AddColumn(StatisticColumn.Mean);
             AddColumn(StatisticColumn.StdDev);
             AddColumn(StatisticColumn.Error);
             AddColumn(BaselineRatioColumn.RatioMean);
+            AddColumn(StatisticColumn.OperationsPerSecond);
             AddColumnProvider(DefaultColumnProviders.Metrics);
-
+            
             AddJob(Job.ShortRun
                    .WithLaunchCount(1)
-                   .WithWarmupCount(2)
+                   .WithWarmupCount(1)
                    .WithUnrollFactor(Iterations)
                    .WithIterationCount(10)
             );
             Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);
             Options |= ConfigOptions.JoinSummary;
+
+            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp31)));
+            //AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp50)));
+
         }
 
     }

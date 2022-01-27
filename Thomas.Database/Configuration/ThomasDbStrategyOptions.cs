@@ -14,5 +14,6 @@ namespace Thomas.Database
         public bool StrictMode { get; set; }
         public int MaxDegreeOfParallelism { get; set; } = 1;
         public int ConnectionTimeout { get; set; } = 0;
+        public string ApplicationName { get; set; }
     }
 }

@@ -1,5 +1,5 @@
 {
   "connection": "Data Source=.;Initial Catalog=SampleDb;Persist Security Info=True;",
-  "rows": 10000,
+  "rows": 1000000,
   "cleanData": true
 }

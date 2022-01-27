@@ -2,13 +2,14 @@
 
 namespace Thomas.Database.Cache
 {
-    internal sealed class InfoCache
+    internal sealed class MetadataProperties
     {
-        public InfoCache( Dictionary<string, InfoProperty> infoProperties)
+        public MetadataProperties(Dictionary<string, InfoProperty> infoProperties)
         {
             InfoProperties = infoProperties;
         }
 
         internal Dictionary<string, InfoProperty> InfoProperties { get; set; }
     }
+
 }

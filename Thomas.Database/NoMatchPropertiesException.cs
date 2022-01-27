@@ -6,7 +6,7 @@ namespace Thomas.Database
     {
         public string[] DbColumnsNoMatch { get; set; }
 
-        public NoMatchPropertiesException() : base()
+        public NoMatchPropertiesException()
         {
         }
 

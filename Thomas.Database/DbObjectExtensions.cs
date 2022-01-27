@@ -7,21 +7,21 @@ namespace Thomas.Database
     {
         public static void Kill(this DbCommand command)
         {
-            command?.Connection?.Close();
-            command?.Connection?.Dispose();
-            command?.Dispose();
+            command.Connection.Close();
+            command.Connection.Dispose();
+            command.Dispose();
         }
 
         public static void Kill(this IDataReader reader)
         {
-            reader?.Close();
-            reader?.Dispose();
+            reader.Close();
+            reader.Dispose();
         }
 
         public static void Kill(this DbConnection connection)
         {
-            connection?.Close();
-            connection?.Dispose();
+            connection.Close();
+            connection.Dispose();
         }
     }
 }

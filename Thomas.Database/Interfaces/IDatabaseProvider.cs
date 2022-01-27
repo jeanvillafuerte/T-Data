@@ -10,6 +10,7 @@ namespace Thomas.Database
         DbConnection CreateConnection(string connection, string user, SecureString password);
         DbCommand CreateCommand(string connection);
         DbCommand CreateCommand(string connection, string user, SecureString password);
+        DbCommand CreateCommand(string script, bool isStoreProcedure);
         DbTransaction CreateTransacion(string stringConnection);
         DbTransaction CreateTransacion(DbConnection connection);
         DbParameter CreateParameter(string parameterName, object value, DbType type);

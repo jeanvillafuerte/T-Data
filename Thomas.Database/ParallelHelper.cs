@@ -10,7 +10,7 @@ using Thomas.Database.Cache;
 
 namespace Thomas.Database
 {
-    public abstract partial class ThomasDbBase
+    public abstract partial class DbBase
     {
         internal T[] FormatDataWithoutNullablesParallel<T>(ConcurrentDictionary<int, object[]> data,
                                            ConcurrentDictionary<string, InfoProperty> properties,
@@ -38,7 +38,7 @@ namespace Thomas.Database
                     mod = data.Count % processors;
                 }
 
-                var insideList = data.Skip((page - 1) * pageSize).Take(pageSize + mod);
+                var insideList = data.Skip((page - 1) * pageSize).Take(pageSize + mod).ToDictionary(s => s.Key, v => v.Value);
 
                 masterList[page - 1] = new Dictionary<int, object[]>(insideList);
                 page++;
@@ -101,7 +101,7 @@ namespace Thomas.Database
                     mod = data.Count % processors;
                 }
 
-                var insideList = data.Skip((page - 1) * pageSize).Take(pageSize + mod);
+                var insideList = data.Skip((page - 1) * pageSize).Take(pageSize + mod).ToDictionary(s => s.Key, v => v.Value);
 
                 masterList[page - 1] = new Dictionary<int, object[]>(insideList);
                 page++;

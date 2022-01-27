@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Thomas.Database", "Thomas.D
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Thomas.Tests.Performance", "Thomas.Tests.Performance\Thomas.Tests.Performance.csproj", "{907605AF-6D6F-424A-B1C4-9D0D8DABDE83}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Thomas.Tests.Performance.Legacy", "Thomas.Tests.Performance.Legacy\Thomas.Tests.Performance.Legacy.csproj", "{10674989-2DAB-47FA-8B97-FCE0E95188BC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,14 @@ Global
 		{907605AF-6D6F-424A-B1C4-9D0D8DABDE83}.Release|Any CPU.Build.0 = Release|Any CPU
 		{907605AF-6D6F-424A-B1C4-9D0D8DABDE83}.Release|x64.ActiveCfg = Release|x64
 		{907605AF-6D6F-424A-B1C4-9D0D8DABDE83}.Release|x64.Build.0 = Release|x64
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Debug|x64.Build.0 = Debug|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Release|x64.ActiveCfg = Release|Any CPU
+		{10674989-2DAB-47FA-8B97-FCE0E95188BC}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
