@@ -1,5 +1,5 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
-## Simple strong typed library to get data from Database SQL Server specially high load and low memory consum.
+## Simple strong typed library to get data from Database SQL Server especially high load and low memory consum.
 #
 >It Works matching class fields vs result set returned by database query. There are simples configurations for general purpose as high load work.
 
