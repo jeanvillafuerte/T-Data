@@ -34,10 +34,8 @@ namespace Thomas.Database
         /// <param name="reader">DataReader to transform</param>
         /// <param name="script">script or store procedure name</param>
         /// <param name="closeReader">flag to close reader after read. Default : false</param>
-        private IReadOnlyList<T> DataReaderToList<T>(IDataReader reader, string script) where T : class, new()
+        private IReadOnlyList<T> DataReaderToList<T>(IDataReader reader, string script, bool isStoreProcedure = false) where T : class, new()
         {
-            Type tp = typeof(T);
-
             var columns = GetColumns(reader);
 
             if(columns.Length == 0)
@@ -45,9 +43,18 @@ namespace Thomas.Database
                 return new List<T>();
             }
 
-            if (!MetadataCache.Instance.TryGet(tp.FullName, out MetadataProperties infoCache))
+            Type tp = typeof(T);
+
+            if (!MetadataCache.Instance.TryGet(tp.FullName + (isStoreProcedure ? script : ""), out MetadataProperties infoCache))
             {
                 var props = tp.GetProperties();
+
+                var infoProperties = props.Where(x => columns.Contains(x.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(x => x.Name, y =>
+                                     y.PropertyType.IsGenericType ? new InfoProperty(y, Nullable.GetUnderlyingType(y.PropertyType)) : new InfoProperty(y, y.PropertyType));
+
+                infoCache = new MetadataProperties(infoProperties);
+
+                MetadataCache.Instance.Set(tp.FullName, infoCache);
 
                 if (StrictMode)
                 {
@@ -68,18 +75,23 @@ namespace Thomas.Database
                           "Script : " + script);
                     }
                 }
-
-                var infoProperties = props.Where(x => columns.Contains(x.Name, StringComparer.OrdinalIgnoreCase)).ToDictionary(x => x.Name, y =>
-                                     y.PropertyType.IsGenericType ? new InfoProperty(y, Nullable.GetUnderlyingType(y.PropertyType)) : new InfoProperty(y, y.PropertyType));
-
-                infoCache = new MetadataProperties(infoProperties);
-
-                MetadataCache.Instance.Set(tp.FullName, infoCache);
             }
 
-            object[][] data = JobStrategy.ExtractData(reader, columns.Length);
+            object[] values = new object[columns.Length];
+
+            var list = new List<object[]>();
+
+            while (reader.Read())
+            {
+                reader.GetValues(values);
+                list.Add(values);
+            }
+
+            object[][] data = list.ToArray();
 
             T[] result = JobStrategy.FormatData<T>(infoCache.InfoProperties, data, columns, data.Length);
+
+            GC.Collect(2, GCCollectionMode.Optimized);
 
             return result.ToList();
         }
@@ -226,7 +238,7 @@ namespace Thomas.Database
             try
             {
                 reader = command.ExecuteReader(CommandBehavior.SingleRow);
-                var list = DataReaderToList<T>(reader, procedureName);
+                var list = DataReaderToList<T>(reader, procedureName ,true);
 
                 if (list?.Count > 0)
                 {
@@ -286,7 +298,7 @@ namespace Thomas.Database
 
             IDataReader reader = command.ExecuteReader(CommandBehavior.SingleRow);
 
-            var list = DataReaderToList<T>(reader, procedureName);
+            var list = DataReaderToList<T>(reader, procedureName, true);
 
             reader.Kill();
             command.Kill();
@@ -353,7 +365,7 @@ namespace Thomas.Database
             try
             {
                 reader = command.ExecuteReader(CommandBehavior.SingleResult);
-                response.Result = DataReaderToList<T>(reader, procedureName);
+                response.Result = DataReaderToList<T>(reader, procedureName, true);
             }
             catch (Exception ex)
             {
@@ -403,7 +415,7 @@ namespace Thomas.Database
             var (command, _) = PreProcessing(procedureName, true, inputData);
 
             IDataReader reader = command.ExecuteReader(CommandBehavior.SingleResult);
-            var data = DataReaderToList<T>(reader, procedureName);
+            var data = DataReaderToList<T>(reader, procedureName, true);
 
             reader.Kill();
             command.Kill();
@@ -1012,11 +1024,11 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>>(t1, t2);
             }
@@ -1057,15 +1069,15 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>>(t1, t2, t3);
             }
@@ -1108,19 +1120,19 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>>(t1, t2, t3, t4);
             }
@@ -1165,23 +1177,23 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName);
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>>(t1, t2, t3, t4, t5);
             }
@@ -1228,27 +1240,27 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName);
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName);
+                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>>(t1, t2, t3, t4, t5, t6);
             }
@@ -1297,31 +1309,31 @@ namespace Thomas.Database
             {
                 reader = command.ExecuteReader();
 
-                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName);
+                IReadOnlyList<T1> t1 = DataReaderToList<T1>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName);
+                IReadOnlyList<T2> t2 = DataReaderToList<T2>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName);
+                IReadOnlyList<T3> t3 = DataReaderToList<T3>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName);
+                IReadOnlyList<T4> t4 = DataReaderToList<T4>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName);
+                IReadOnlyList<T5> t5 = DataReaderToList<T5>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName);
+                IReadOnlyList<T6> t6 = DataReaderToList<T6>(reader, procedureName, true);
 
                 reader.NextResult();
 
-                IReadOnlyList<T7> t7 = DataReaderToList<T7>(reader, procedureName);
+                IReadOnlyList<T7> t7 = DataReaderToList<T7>(reader, procedureName, true);
 
                 response.Result = new Tuple<IReadOnlyList<T1>, IReadOnlyList<T2>, IReadOnlyList<T3>, IReadOnlyList<T4>, IReadOnlyList<T5>, IReadOnlyList<T6>, IReadOnlyList<T7>>(t1, t2, t3, t4, t5, t6, t7);
             }

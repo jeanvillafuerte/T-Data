@@ -13,7 +13,7 @@ namespace Thomas.Tests.Performance.Benchmark
 {
     public class BenchmarkConfig : ManualConfig
     {
-        public const int Iterations = 100;
+        public const int Iterations = 25;
 
         public BenchmarkConfig()
         {
@@ -34,18 +34,18 @@ namespace Thomas.Tests.Performance.Benchmark
             AddColumn(BaselineRatioColumn.RatioMean);
             AddColumn(StatisticColumn.OperationsPerSecond);
             AddColumnProvider(DefaultColumnProviders.Metrics);
-            
+
             AddJob(Job.ShortRun
                    .WithLaunchCount(1)
                    .WithWarmupCount(1)
                    .WithUnrollFactor(Iterations)
-                   .WithIterationCount(10)
+                   .WithIterationCount(3)
             );
             Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);
             Options |= ConfigOptions.JoinSummary;
 
             AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp31)));
-            //AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp50)));
+            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp50)));
 
         }
 

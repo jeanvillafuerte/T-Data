@@ -51,7 +51,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
                                                 BEGIN
-																	
+
 	                                                CREATE TABLE {TableName}
 													(
 		                                                Id			INT PRIMARY KEY IDENTITY(1,1),
@@ -77,6 +77,24 @@ namespace Thomas.Tests.Performance.Benchmark
                 throw new Exception(result.ErrorMessage);
             }
 
+            var checkSp = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
+
+            result = service.ExecuteOp(checkSp, false);
+
+            if (!result.Success)
+            {
+                throw new Exception(result.ErrorMessage);
+            }
+
+            var createSp = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
+
+            result = service.ExecuteOp(createSp, false);
+
+            if (!result.Success)
+            {
+                throw new Exception(result.ErrorMessage);
+            }
+
             string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX <= {length}
@@ -91,6 +109,15 @@ namespace Thomas.Tests.Performance.Benchmark
             if (!dataResult.Success)
             {
                 throw new Exception(dataResult.ErrorMessage);
+            }
+
+            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
+
+            result = service.ExecuteOp(createIndexByAge, false);
+
+            if (!result.Success)
+            {
+                throw new Exception(result.ErrorMessage);
             }
         }
 

@@ -82,6 +82,18 @@ namespace Thomas.Tests.Performance.Benchmark
             service.ToListOp<PersonWithNullables>(Query, false);
         }
 
+        [Benchmark(Description = "ToListOp<> T from store procedure")]
+        public void ToList3op()
+        {
+            service.ToListOp<Person>(new { age = 5 } , "get_persons");
+        }
+
+        [Benchmark(Description = "ToListOp<> T with nullables from store procedure")]
+        public void ToList4op()
+        {
+            service.ToListOp<PersonWithNullables>(new { age = 5 }, "get_persons");
+        }
+
         [Benchmark(Description = "SingleOp<> T with nullables")]
         public void Single2Op()
         {

@@ -39,7 +39,7 @@ namespace Thomas.Tests.Performance.Legacy
                 var data = Service.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
 
                 Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Count}");
-                Console.WriteLine(stopWatch.ElapsedMilliseconds);
+                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
 
                 stopWatch.Reset();
             }
@@ -56,7 +56,42 @@ namespace Thomas.Tests.Performance.Legacy
                 var data = Service.ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
 
                 Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Result.Count}");
-                Console.WriteLine(stopWatch.ElapsedMilliseconds);
+                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
+
+                stopWatch.Reset();
+            }
+
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("");
+            Console.WriteLine("Method ToList<> from store procedure");
+            Console.ForegroundColor = ConsoleColor.White;
+
+            for (int i = 0; i < 10; i++)
+            {
+                stopWatch.Start();
+
+                var data = Service.ToList<Person>(new { age = 5 }, $@"get_{TableName}");
+
+                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Count}");
+                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
+
+                stopWatch.Reset();
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("");
+            Console.WriteLine("Method ToListOp<> from store procedure");
+            Console.ForegroundColor = ConsoleColor.White;
+
+            for (int i = 0; i < 10; i++)
+            {
+                stopWatch.Start();
+
+                var data = Service.ToListOp<Person>(new { age = 5 }, $@"get_{TableName}");
+
+                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Result?.Count}");
+                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
 
                 stopWatch.Reset();
             }
@@ -87,7 +122,7 @@ namespace Thomas.Tests.Performance.Legacy
             serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
             {
                 StringConnection = str,
-                MaxDegreeOfParallelism = 4,
+                MaxDegreeOfParallelism = 1,
                 ConnectionTimeout = 0
             });
 
@@ -130,12 +165,21 @@ namespace Thomas.Tests.Performance.Legacy
                 throw new Exception(result.ErrorMessage);
             }
 
+            var createSp = $"CREATE PROCEDURE get_{TableName} (@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
+
+            result = service.ExecuteOp(createSp, false);
+
+            if (!result.Success)
+            {
+                throw new Exception(result.ErrorMessage);
+            }
+
             string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX < {length}
 							BEGIN
 								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
-								VALUES ( REPLICATE('A',25), REPLICATE('A',500), REPLICATE('A',500), '1988-01-01', 33, REPLICATE('A',300), REPLICATE('A',240), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
+								VALUES ( REPLICATE('A',25), REPLICATE('A',500), REPLICATE('A',500), '1988-01-01', ROUND(RAND() * 100, 0), REPLICATE('A',300), REPLICATE('A',240), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
 								SET @IDX = @IDX + 1;
 							END";
 
@@ -145,6 +189,17 @@ namespace Thomas.Tests.Performance.Legacy
             {
                 throw new Exception(dataResult.ErrorMessage);
             }
+
+
+            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
+
+            result = service.ExecuteOp(createIndexByAge, false);
+
+            if (!result.Success)
+            {
+                throw new Exception(result.ErrorMessage);
+            }
+
         }
 
         static void Clean()

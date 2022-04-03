@@ -66,7 +66,7 @@ namespace Thomas.Database.Strategy
 
                     listResult[element.Key] = item;
                 }
-                
+
             });
 
             return listResult.Select(x => x.Value).ToArray();

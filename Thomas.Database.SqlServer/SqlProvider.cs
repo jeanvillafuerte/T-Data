@@ -85,7 +85,6 @@ namespace Thomas.Database.SqlServer
                 command.CommandTimeout = Options.ConnectionTimeout;
                 command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
                 command.UpdatedRowSource = UpdateRowSource.None;
-
                 DbCommandCache.Instance.Set(script, command);
             }
 

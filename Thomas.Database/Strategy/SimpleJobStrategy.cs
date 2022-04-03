@@ -25,7 +25,7 @@ namespace Thomas.Database.Strategy
             {
                 T item = new T();
 
-                for (int j = 0; j < length; j++)
+                for (int j = 0; j < columns.Length; j++)
                 {
                     props[columns[j]].Info.SetValue(item, Convert.ChangeType(data[i][j], props[columns[j]].Type), BindingFlags.Default, null, null, culture);
                 }

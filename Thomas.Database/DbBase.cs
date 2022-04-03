@@ -113,6 +113,7 @@ namespace Thomas.Database
 
             if (searchTerm != null)
             {
+                command.Parameters.Clear();
                 parameters = Provider.ExtractValuesFromSearchTerm(searchTerm);
 
                 for (int i = 0; i < parameters.Length; i++)
