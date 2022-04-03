@@ -77,9 +77,9 @@ public class MyComponent
         }
     }
 
-    public void UpdateAge()
+    public void UpdateAge(string name, int age)
     {
-        var response = _db.ExecuteOp("dbo.UpdateAge");
+        var response = _db.ExecuteOp(new { vcName = name, nbAge = age}, "dbo.UpdateAge");
 
         if(response.Success)
         {
