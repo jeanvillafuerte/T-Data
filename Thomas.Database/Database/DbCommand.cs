@@ -333,10 +333,9 @@ namespace Thomas.Database.Database
 
         public void Dispose()
         {
-            if (_reader != null)
-                _reader.Dispose();
-            _connection.Dispose();
-            _command.Dispose();
+            _reader?.Dispose();
+            _command?.Dispose();
+            _connection?.Dispose();
         }
     }
 

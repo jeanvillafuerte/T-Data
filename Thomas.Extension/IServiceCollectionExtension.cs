@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Thomas.Cache.Factory;
-using Thomas.Cache.Manager;
 
 namespace Thomas.Cache
 {

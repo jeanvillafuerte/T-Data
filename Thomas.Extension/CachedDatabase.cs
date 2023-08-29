@@ -4,9 +4,9 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Thomas.Cache.Helpers;
 using Thomas.Cache.Manager;
 using Thomas.Database;
 using Thomas.Database.Cache.Metadata;
@@ -61,40 +61,9 @@ namespace Thomas.Cache
             }
         }
 
-        private int GenerateUniqueHash(string value)
-        {
-            int hash = 23;
-            hash = hash * 31 + value.GetHashCode();
-            hash = hash * 31 + _signature.GetHashCode();
-            return hash;
-        }
-
-        private int GenerateUniqueHash(string value, object inputData)
-        {
-            int hash = 23;
-            hash = hash * 31 + value.GetHashCode();
-
-            string jsonString = JsonSerializer.Serialize(inputData);
-            hash = hash * 31 + jsonString.GetHashCode();
-            hash = hash * 31 + _signature.GetHashCode();
-            return hash;
-        }
-
-        private int GenerateUniqueHashForInput(string value, object inputData)
-        {
-            int hash = 19;
-            hash = hash * 19 + value.GetHashCode();
-
-            string jsonString = JsonSerializer.Serialize(inputData);
-            hash = hash * 19 + jsonString.GetHashCode();
-            hash = hash * 19 + _signature.GetHashCode();
-            hash = hash * 19 + "input".GetHashCode();
-            return hash;
-        }
-
         public IEnumerable<T> ToList<T>(string script, bool isStoreProcedure = true) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(script);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature);
 
             if (!_cache.TryGet<T>(identifier, out IEnumerable<T> result))
             {
@@ -107,8 +76,8 @@ namespace Thomas.Cache
 
         public IEnumerable<T> ToList<T>(object inputData, string procedureName) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(procedureName, inputData);
-            var identifierForInput = GenerateUniqueHashForInput(procedureName, inputData);
+            var identifier = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData);
+            var identifierForInput = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData, TypeCacheObject.Input);
 
             var isAnonymousType = CheckIfAnonymousType(inputData.GetType());
 
@@ -131,35 +100,9 @@ namespace Thomas.Cache
             return result;
         }
 
-        //public DataBaseOperationResult<IEnumerable<T>> ToListOp<T>(string script, bool isStoreProcedure = true) where T : class, new()
-        //{
-        //    var identifier = GenerateUniqueHashFromString(script);
-
-        //    if (!_cache.TryGet(identifier, out DataBaseOperationResult<IEnumerable<T>> result))
-        //    {
-        //        result = _database.ToListOp<T>(script, isStoreProcedure);
-        //        _cache.Add(identifier, result);
-        //    }
-
-        //    return result;
-        //}
-
-        //public DataBaseOperationResult<IEnumerable<T>> ToListOp<T>(object inputData, string procedureName) where T : class, new()
-        //{
-        //    var identifier = GenerateUniqueHashFromString(procedureName, inputData);
-
-        //    if (!_cache.TryGet(identifier, out DataBaseOperationResult<IEnumerable<T>> result))
-        //    {
-        //        result = _database.ToListOp<T>(inputData, procedureName);
-        //        _cache.Add(identifier, result);
-        //    }
-
-        //    return result;
-        //}
-
         public T? ToSingle<T>(string script, bool isStoreProcedure = true) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(script);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature);
 
             if (!_cache.TryGet(identifier, out IEnumerable<T> result))
             {
@@ -173,7 +116,7 @@ namespace Thomas.Cache
 
         public T? ToSingle<T>(object inputData, string procedureName) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(procedureName, inputData);
+            var identifier = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData);
 
             if (!_cache.TryGet<T>(identifier, out IEnumerable<T> result))
             {
@@ -185,42 +128,16 @@ namespace Thomas.Cache
             return result.FirstOrDefault();
         }
 
-        //public DataBaseOperationResult<T> ToSingleOp<T>(string script, bool isStoreProcedure = true) where T : class, new()
-        //{
-        //    var identifier = GenerateUniqueHashFromString(script);
-
-        //    if (!_cache.TryGet<T>(identifier, out DataBaseOperationResult<T> result))
-        //    {
-        //        result = _database.ToSingleOp<T>(script, isStoreProcedure);
-        //        _cache.Add(identifier, result);
-        //    }
-
-        //    return result;
-        //}
-
-        //public DataBaseOperationResult<T> ToSingleOp<T>(object inputData, string procedureName) where T : class, new()
-        //{
-        //    var identifier = GenerateUniqueHashFromString(procedureName, inputData);
-
-        //    if (!_cache.TryGet<T>(identifier, out DataBaseOperationResult<T> result))
-        //    {
-        //        result = _database.ToSingleOp<T>(inputData, procedureName);
-        //        _cache.Add(identifier, result);
-        //    }
-
-        //    return result;
-        //}
-
         public void ReleaseResult(string script)
         {
-            var identifier = GenerateUniqueHash(script);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature);
             _cache.Release(identifier);
         }
 
         public void ReleaseResult(string script, object inputData)
         {
-            var identifier = GenerateUniqueHash(script, inputData);
-            var identifierForInput = GenerateUniqueHashForInput(script, inputData);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature, inputData);
+            var identifierForInput = HashHelper.GenerateUniqueHash(script, _signature, inputData, TypeCacheObject.Input);
             _cache.Release(identifier);
             _cache.Release(identifierForInput);
         }
@@ -232,7 +149,7 @@ namespace Thomas.Cache
 
         public async Task<T?> ToSingleAsync<T>(string script, bool isStoreProcedure, CancellationToken cancellationToken) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(script);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature);
 
             if (!_cache.TryGet(identifier, out IEnumerable<T> result))
             {
@@ -246,7 +163,7 @@ namespace Thomas.Cache
 
         public async Task<T?> ToSingleAsync<T>(object inputData, string procedureName, CancellationToken cancellationToken) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(procedureName, inputData);
+            var identifier = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData);
 
             if (!_cache.TryGet(identifier, out IEnumerable<T> result))
             {
@@ -260,7 +177,7 @@ namespace Thomas.Cache
 
         public async Task<IEnumerable<T>> ToListAsync<T>(string script, bool isStoreProcedure, CancellationToken cancellationToken) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(script);
+            var identifier = HashHelper.GenerateUniqueHash(script, _signature);
 
             if (!_cache.TryGet<T>(identifier, out IEnumerable<T> result))
             {
@@ -273,8 +190,8 @@ namespace Thomas.Cache
 
         public async Task<IEnumerable<T>> ToListAsync<T>(object inputData, string procedureName, CancellationToken cancellationToken) where T : class, new()
         {
-            var identifier = GenerateUniqueHash(procedureName, inputData);
-            var identifierForInput = GenerateUniqueHashForInput(procedureName, inputData);
+            var identifier = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData);
+            var identifierForInput = HashHelper.GenerateUniqueHash(procedureName, _signature, inputData, TypeCacheObject.Input);
 
             var isAnonymousType = CheckIfAnonymousType(inputData.GetType());
 

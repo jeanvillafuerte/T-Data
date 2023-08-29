@@ -595,7 +595,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
 
             command.CloseConnetion();
@@ -651,7 +651,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
             var (data3, columns3) = command.ReadNext();
             command.CloseConnetion();
@@ -715,7 +715,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
             var (data3, columns3) = command.ReadNext();
             var (data4, columns4) = command.ReadNext();
@@ -782,7 +782,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
             var (data3, columns3) = command.ReadNext();
             var (data4, columns4) = command.ReadNext();
@@ -855,7 +855,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
             var (data3, columns3) = command.ReadNext();
             var (data4, columns4) = command.ReadNext();
@@ -933,7 +933,7 @@ namespace Thomas.Database
             using var command = new DbCommand(Provider, JobStrategy, Options);
             command.Prepare(script, isStoreProcedure);
 
-            var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+            var (data1, columns1) = command.Read(CommandBehavior.Default);
             var (data2, columns2) = command.ReadNext();
             var (data3, columns3) = command.ReadNext();
             var (data4, columns4) = command.ReadNext();
@@ -981,7 +981,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
 
                 command.RescueOutParamValues();
@@ -1028,7 +1028,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
                 var (data3, columns3) = command.ReadNext();
 
@@ -1079,7 +1079,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
                 var (data3, columns3) = command.ReadNext();
                 var (data4, columns4) = command.ReadNext();
@@ -1136,7 +1136,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
                 var (data3, columns3) = command.ReadNext();
                 var (data4, columns4) = command.ReadNext();
@@ -1198,7 +1198,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
                 var (data3, columns3) = command.ReadNext();
                 var (data4, columns4) = command.ReadNext();
@@ -1265,7 +1265,7 @@ namespace Thomas.Database
                 using var command = new DbCommand(Provider, JobStrategy, Options);
                 parameters = command.Prepare(procedureName, true, inputData);
 
-                var (data1, columns1) = command.Read(CommandBehavior.SingleResult);
+                var (data1, columns1) = command.Read(CommandBehavior.Default);
                 var (data2, columns2) = command.ReadNext();
                 var (data3, columns3) = command.ReadNext();
                 var (data4, columns4) = command.ReadNext();
