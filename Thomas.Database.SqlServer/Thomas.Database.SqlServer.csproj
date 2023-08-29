@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netcoreapp3.1;net5.0</TargetFrameworks>
+    <TargetFrameworks>netcoreapp3.1;net6.0</TargetFrameworks>
     <Authors>Jean Villafuerte</Authors>
     <Product>ThomasDataAdapter</Product>
     <Description>Simple library to get data from Database SQL Server specially high load and low memory consum.</Description>
@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
+    <ProjectReference Include="..\Thomas.Extension\Thomas.Cache.csproj" />
   </ItemGroup>
 
   <ItemGroup>

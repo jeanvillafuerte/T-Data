@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Data;
-using System.Data.Common;
-using System.Security;
 using System.Text;
+using Thomas.Database.Exceptions;
 
 namespace Thomas.Database
 {
@@ -12,23 +11,7 @@ namespace Thomas.Database
 
         protected IDatabaseProvider Provider { get; set; }
 
-        protected int MaxDegreeOfParallelism { get; set; } = 1;
-
-        protected string User { get; set; } = string.Empty;
-
-        protected SecureString? Password { get; set; }
-
-        protected string StringConnection { get; set; } = string.Empty;
-
-        protected string CultureInfo { get; set; } = "";
-
-        protected bool DetailErrorMessage { get; set; }
-
-        protected bool StrictMode { get; set; }
-
-        protected bool SensitiveDataLog { get; set; }
-
-        protected int TimeOut { get; set; }
+        protected ThomasDbStrategyOptions Options { get; set; }
 
         #endregion
 
@@ -36,7 +19,7 @@ namespace Thomas.Database
 
         protected string ErrorDetailMessage(string procedureName, IDataParameter[]? parameters, Exception excepcion)
         {
-            if (!DetailErrorMessage)
+            if (!Options.DetailErrorMessage)
             {
                 return excepcion.Message;
             }
@@ -45,7 +28,7 @@ namespace Thomas.Database
             stringBuilder.AppendLine("Store Procedure:");
             stringBuilder.AppendLine("\t" + procedureName);
 
-            if (parameters != null && !SensitiveDataLog)
+            if (parameters != null && !Options.SensitiveDataLog)
             {
                 stringBuilder.AppendLine("Parameters:");
 
@@ -70,7 +53,7 @@ namespace Thomas.Database
 
         protected string ErrorDetailMessage(string scriptRaw, Exception excepcion)
         {
-            if (!DetailErrorMessage)
+            if (!Options.DetailErrorMessage)
             {
                 return excepcion.Message;
             }
@@ -96,51 +79,21 @@ namespace Thomas.Database
 
         #region Util
 
-        protected DbCommand PreProcessing(string script, bool isStoreProcedure)
-        {
-            var command = Provider.CreateCommand(script, isStoreProcedure);
-
-            command.Connection.Open();
-
-            return command;
-        }
-
-        protected (DbCommand, IDataParameter[]?) PreProcessing(string script, bool isStoreProcedure, object searchTerm)
-        {
-            IDataParameter[]? parameters = null;
-
-            var command = Provider.CreateCommand(script, isStoreProcedure);
-
-            if (searchTerm != null)
-            {
-                command.Parameters.Clear();
-                parameters = Provider.ExtractValuesFromSearchTerm(searchTerm);
-
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    command.Parameters.Add(parameters[i]);
-                }
-            }
-
-            command.Connection.Open();
-
-            return (command, parameters);
-        }
-
         protected string[] GetColumns(IDataReader listReader)
         {
             var count = listReader.FieldCount;
+
+            if (count == 0)
+                throw new EmptyDataReaderException("Not fields defined on result set");
+
             var cols = new string[count];
 
             for (int i = 0; i < count; i++)
-            {
                 cols[i] = listReader.GetName(i);
-            }
 
             return cols;
         }
 
         #endregion
-
     }
 }

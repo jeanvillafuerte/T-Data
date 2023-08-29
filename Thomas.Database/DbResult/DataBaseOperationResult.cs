@@ -1,12 +1,10 @@
-﻿using System.Collections.Generic;
-
-namespace Thomas.Database
+﻿namespace Thomas.Database
 {
     public class DataBaseOperationResult
     {
         public bool Success { get; set; }
+        public int RowsAffected { get; set; }
         public string ErrorMessage { get; set; }
-        public Dictionary<string, object> OutParameters { get; set; }
 
         public static DataBaseOperationResult SuccessResult()
         {
@@ -16,9 +14,9 @@ namespace Thomas.Database
             };
         }
 
-        public static DataBaseOperationResult ErrorResult(string message)
+        public static T ErrorResult<T>(string message) where T: DataBaseOperationResult, new()
         {
-            return new DataBaseOperationResult
+            return new T()
             {
                 ErrorMessage = message,
                 Success = false
@@ -26,13 +24,22 @@ namespace Thomas.Database
         }
     }
 
+    public class DataBaseOperationAsyncResult : DataBaseOperationResult
+    {
+        public bool Cancelled { get; set; }
+
+        public static T OperationCancelled<T>() where T : DataBaseOperationAsyncResult, new()
+        {
+            return new T()
+            {
+                Success = false,
+                Cancelled = true
+            };
+        }
+    }
+
     public class DataBaseOperationResult<T> : DataBaseOperationResult
     {
-        public DataBaseOperationResult()
-        {
-            OutParameters = new Dictionary<string, object>();
-        }
-
         public T Result { get; set; }
 
         public static DataBaseOperationResult<T> SuccessResult(T result)
@@ -44,13 +51,20 @@ namespace Thomas.Database
             };
         }
 
-        public new static DataBaseOperationResult<T> ErrorResult(string message)
+    }
+
+    public class DataBaseOperationAsyncResult<T> : DataBaseOperationAsyncResult
+    {
+        public T Result { get; set; }
+
+        public static DataBaseOperationAsyncResult<T> SuccessResult(T result)
         {
-            return new DataBaseOperationResult<T>
+            return new DataBaseOperationAsyncResult<T>
             {
-                ErrorMessage = message,
-                Success = false
+                Success = true,
+                Result = result
             };
         }
+
     }
 }

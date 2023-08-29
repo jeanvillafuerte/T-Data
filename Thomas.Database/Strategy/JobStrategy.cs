@@ -1,21 +1,23 @@
 ﻿using System.Collections.Generic;
+using System.Globalization;
 
 namespace Thomas.Database.Strategy
 {
-    using Cache;
+    using Thomas.Database.Cache.Metadata;
 
     public abstract class JobStrategy
     {
-        protected readonly string _cultureInfo;
+        protected readonly CultureInfo _cultureInfo;
+        protected readonly string _culture;
         protected readonly int _processorCount;
 
-        public JobStrategy(string cultureInfo, int processorCount)
+        public JobStrategy(string culture, int processorCount)
         {
-            _cultureInfo = cultureInfo;
+            _culture = culture;
+            _cultureInfo = new CultureInfo(culture);
             _processorCount = processorCount;
         }
 
-        public abstract T[] FormatData<T>(Dictionary<string, InfoProperty> props, object[][] data, string[] columns, int length) where T : class, new();
-
+        public abstract IEnumerable<T> FormatData<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] data, string[] columns) where T : class, new();
     }
 }

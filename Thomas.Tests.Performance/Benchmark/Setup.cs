@@ -1,17 +1,17 @@
-﻿using System;
+﻿using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using BenchmarkDotNet.Attributes;
+using System;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
-
+using Thomas.Database.Strategy.Factory;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
     [BenchmarkCategory("ORM")]
     public class Setup
     {
-        protected IThomasDb service;
+        protected IDatabase service;
 
         protected string TableName;
 
@@ -26,26 +26,23 @@ namespace Thomas.Tests.Performance.Benchmark
 
             var configuration = builder.Build();
 
-            var str = configuration["connection"];
+            var cnx = configuration["connection"];
             var len = configuration["rows"];
 
             CleanData = bool.Parse(configuration["cleanData"]);
 
             IServiceCollection serviceCollection = new ServiceCollection();
-            serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
-            {
-                StringConnection = str,
-                MaxDegreeOfParallelism = 1
-            });
+            serviceCollection.AddDbFactory();
+            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db", StringConnection = cnx, MaxDegreeOfParallelism = 1, ConnectionTimeout = 0 });
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
 
-            service = serviceProvider.GetService<IThomasDb>();
+            service = serviceProvider.GetRequiredService<IDbFactory>().CreateDbContext("db");
 
             SetDataBase(service, int.Parse(len));
         }
 
-        void SetDataBase(IThomasDb service, int length)
+        void SetDataBase(IDatabase service, int length)
         {
             TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
 
@@ -77,30 +74,40 @@ namespace Thomas.Tests.Performance.Benchmark
                 throw new Exception(result.ErrorMessage);
             }
 
-            var checkSp = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
+            var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
 
-            result = service.ExecuteOp(checkSp, false);
-
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
-
-            var createSp = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
-
-            result = service.ExecuteOp(createSp, false);
+            result = service.ExecuteOp(checkSp1, false);
 
             if (!result.Success)
-            {
                 throw new Exception(result.ErrorMessage);
-            }
+
+            var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
+
+            result = service.ExecuteOp(checkSp2, false);
+
+            if (!result.Success)
+                throw new Exception(result.ErrorMessage);
+
+            var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
+
+            result = service.ExecuteOp(createSp1, false);
+
+            if (!result.Success)
+                throw new Exception(result.ErrorMessage);
+
+            var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
+
+            result = service.ExecuteOp(createSp2, false);
+
+            if (!result.Success)
+                throw new Exception(result.ErrorMessage);
 
             string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX <= {length}
 							BEGIN
 								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
-								VALUES ( REPLICATE('A',25), REPLICATE('A',500), REPLICATE('A',500), '1988-01-01', 33, REPLICATE('A',300), REPLICATE('A',240), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
+                                VALUES ( REPLICATE('A', ROUND(RAND() * 25, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), '1988-01-01', ROUND(RAND() * 100, 0), REPLICATE('A', ROUND(RAND() * 300, 0)), REPLICATE('A', ROUND(RAND() * 240, 0)), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
 								SET @IDX = @IDX + 1;
 							END";
 
