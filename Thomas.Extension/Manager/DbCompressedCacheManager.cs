@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO.Compression;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
-using Thomas.Cache.Exceptions;
 using System.Threading;
+using Thomas.Cache.Exceptions;
 
 namespace Thomas.Cache.Manager
 {

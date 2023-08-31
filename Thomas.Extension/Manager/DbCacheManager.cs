@@ -23,7 +23,7 @@ namespace Thomas.Cache.Manager
 
         private static ConcurrentDictionary<uint, object> CacheObject { get; set; } = new ConcurrentDictionary<uint, object>();
 
-        public void Add<T>(uint hash, IEnumerable<T> result) where T : class, new()  => CacheObject.TryAdd(hash, result);
+        public void Add<T>(uint hash, IEnumerable<T> result) where T : class, new() => CacheObject.TryAdd(hash, result);
 
         public bool TryGet<T>(uint hash, out T result) where T : class, new()
         {

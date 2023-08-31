@@ -1,20 +1,20 @@
 ﻿namespace Thomas.Database
 {
-    public class DataBaseOperationResult
+    public class DbOpResult
     {
         public bool Success { get; set; }
         public int RowsAffected { get; set; }
         public string ErrorMessage { get; set; }
 
-        public static DataBaseOperationResult SuccessResult()
+        public static DbOpResult SuccessResult()
         {
-            return new DataBaseOperationResult
+            return new DbOpResult
             {
                 Success = true
             };
         }
 
-        public static T ErrorResult<T>(string message) where T: DataBaseOperationResult, new()
+        public static T ErrorResult<T>(string message) where T : DbOpResult, new()
         {
             return new T()
             {
@@ -24,11 +24,11 @@
         }
     }
 
-    public class DataBaseOperationAsyncResult : DataBaseOperationResult
+    public class DbOpAsyncResult : DbOpResult
     {
         public bool Cancelled { get; set; }
 
-        public static T OperationCancelled<T>() where T : DataBaseOperationAsyncResult, new()
+        public static T OperationCancelled<T>() where T : DbOpAsyncResult, new()
         {
             return new T()
             {
@@ -38,13 +38,13 @@
         }
     }
 
-    public class DataBaseOperationResult<T> : DataBaseOperationResult
+    public class DbOpResult<T> : DbOpResult
     {
         public T Result { get; set; }
 
-        public static DataBaseOperationResult<T> SuccessResult(T result)
+        public static DbOpResult<T> SuccessResult(T result)
         {
-            return new DataBaseOperationResult<T>
+            return new DbOpResult<T>
             {
                 Success = true,
                 Result = result
@@ -53,13 +53,13 @@
 
     }
 
-    public class DataBaseOperationAsyncResult<T> : DataBaseOperationAsyncResult
+    public class DbOpAsyncResult<T> : DbOpAsyncResult
     {
         public T Result { get; set; }
 
-        public static DataBaseOperationAsyncResult<T> SuccessResult(T result)
+        public static DbOpAsyncResult<T> SuccessResult(T result)
         {
-            return new DataBaseOperationAsyncResult<T>
+            return new DbOpAsyncResult<T>
             {
                 Success = true,
                 Result = result

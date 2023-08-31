@@ -10,17 +10,11 @@ namespace Thomas.Database.Strategy
 
     public sealed class MultithreadJobStrategy : JobStrategy
     {
-        public MultithreadJobStrategy(string culture, int processorCount) : base(culture, processorCount) { }
+        public MultithreadJobStrategy(string culture, int processorCount, uint thresholdParallelism) : base(culture, processorCount, thresholdParallelism) { }
 
         public override IEnumerable<T> FormatData<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] data, string[] columns)
         {
-            if (data.Length == 1)
-            {
-                var dictionary = new Dictionary<string, MetadataPropertyInfo>(props);
-                return new SimpleJobStrategy(_culture, 1).FormatData<T>(dictionary, data, columns);
-            }
-
-            int pageSize = data.Length < 100 ? 1 : data.Length / _processorCount;
+            int pageSize = data.Length / _processorCount;
 
             var main = new ConcurrentDictionary<int, (CultureInfo, object[][])>(1, _processorCount);
 
@@ -47,7 +41,6 @@ namespace Thomas.Database.Strategy
 
                     var length = data.Length;
                     var list = new T[length];
-                    var index = 0;
 
                     for (int j = 0; j < length; j++)
                     {
@@ -56,7 +49,7 @@ namespace Thomas.Database.Strategy
                         for (int k = 0; k < columns.Length; k++)
                             props[columns[k]].SetValue(item, data[j][k], _cultureInfo);
 
-                        list[index++] = item;
+                        list[j] = item;
                     }
 
                     listResult.TryAdd(i, list);

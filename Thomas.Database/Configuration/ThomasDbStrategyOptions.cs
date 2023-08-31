@@ -14,7 +14,7 @@ namespace Thomas.Database
         public bool DetailErrorMessage { get; set; }
         public bool SensitiveDataLog { get; set; }
         public bool StrictMode { get; set; }
-        public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount;
+        public uint ThresholdParallelism { get; set; } = 1000000;
         public int ConnectionTimeout { get; set; } = 0;
         public string ApplicationName { get; set; }
         public bool UseCache { get; set; } = true;

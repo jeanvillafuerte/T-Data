@@ -38,12 +38,12 @@ namespace Thomas.Tests.Performance.Benchmark
             AddJob(Job.ShortRun
                    .WithLaunchCount(1)
                    .WithWarmupCount(1)
-                   .WithUnrollFactor(Iterations)
-            );
+                   .WithUnrollFactor(Iterations));
+
             Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);
             Options |= ConfigOptions.JoinSummary;
 
-            //AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp31)));
+            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp31)));
             AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp60)));
         }
 

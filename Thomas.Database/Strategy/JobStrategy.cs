@@ -10,12 +10,14 @@ namespace Thomas.Database.Strategy
         protected readonly CultureInfo _cultureInfo;
         protected readonly string _culture;
         protected readonly int _processorCount;
+        protected readonly uint _thresholdParallelism;
 
-        public JobStrategy(string culture, int processorCount)
+        public JobStrategy(string culture, int processorCount, uint thresholdParallelism)
         {
             _culture = culture;
             _cultureInfo = new CultureInfo(culture);
             _processorCount = processorCount;
+            _thresholdParallelism = thresholdParallelism;
         }
 
         public abstract IEnumerable<T> FormatData<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] data, string[] columns) where T : class, new();

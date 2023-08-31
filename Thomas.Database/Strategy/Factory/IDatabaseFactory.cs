@@ -1,5 +1,4 @@
-﻿using System;
-using Thomas.Database.Configuration;
+﻿using Thomas.Database.Configuration;
 using Thomas.Database.Exceptions;
 
 namespace Thomas.Database.Strategy.Factory
@@ -25,24 +24,8 @@ namespace Thomas.Database.Strategy.Factory
             if (config == null)
                 throw new DbConfigurationNotFoundException($"Db configuration {signature} cannot found.");
 
-            int processors = GetMaxDegreeOfParallelism(config);
-
-            JobStrategy strategy;
-
-            if (processors == 1)
-                strategy = new SimpleJobStrategy(config.Culture, 1);
-            else
-                strategy = new MultithreadJobStrategy(config.Culture, processors);
-
-            return new DatabaseBase(provider, strategy, config);
+            return new DatabaseBase(provider, config);
         }
 
-        internal static int GetMaxDegreeOfParallelism(ThomasDbStrategyOptions options)
-        {
-            if (options.MaxDegreeOfParallelism <= 1)
-                return 1;
-            else
-                return options.MaxDegreeOfParallelism > Environment.ProcessorCount ? Environment.ProcessorCount : options.MaxDegreeOfParallelism;
-        }
     }
 }

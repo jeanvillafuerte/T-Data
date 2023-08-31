@@ -6,7 +6,7 @@ namespace Thomas.Database.Strategy
 
     public sealed class SimpleJobStrategy : JobStrategy
     {
-        public SimpleJobStrategy(string cultureInfo, int processorCount) : base(cultureInfo, processorCount)
+        public SimpleJobStrategy(string cultureInfo, int processorCount, uint thresholdParallelism) : base(cultureInfo, processorCount, thresholdParallelism)
         {
         }
 
@@ -15,9 +15,7 @@ namespace Thomas.Database.Strategy
             var length = data.Length;
 
             T[] list = new T[length];
-
-            var index = 0;
-
+            
             for (int i = 0; i < length; i++)
             {
                 T item = new T();
@@ -25,7 +23,7 @@ namespace Thomas.Database.Strategy
                 for (int j = 0; j < columns.Length; j++)
                     props[columns[j]].SetValue(item, data[i][j], _cultureInfo);
 
-                list[index++] = item;
+                list[i] = item;
             }
 
             return list;

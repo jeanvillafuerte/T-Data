@@ -1,7 +1,7 @@
-﻿using System;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Threading.Tasks;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
 using Thomas.Database;
@@ -108,10 +108,9 @@ namespace Thomas.Tests.Performance.Legacy
 
             serviceCollection.AddDbFactory();
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db1", StringConnection = cnx1, MaxDegreeOfParallelism = 4, ConnectionTimeout = 0, UseCache = false });
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db2", StringConnection = cnx2, MaxDegreeOfParallelism = 1, ConnectionTimeout = 0, UseCache = true });
+            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0, UseCache = false });
+            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0, UseCache = true });
             serviceCollection.AddDbResultCached();
-
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
 

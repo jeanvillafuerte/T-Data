@@ -11,15 +11,15 @@ namespace Thomas.Database.Exceptions
 
     public sealed class DbSignatureNotFoundException : Exception
     {
-        public DbSignatureNotFoundException(string message): base(message) { }
+        public DbSignatureNotFoundException(string message) : base(message) { }
     }
 
-    public sealed class DbProviderNotFoundException : Exception 
+    public sealed class DbProviderNotFoundException : Exception
     {
         public DbProviderNotFoundException(string message) : base(message) { }
     }
 
-    public sealed class EmptyDataReaderException : Exception 
+    public sealed class EmptyDataReaderException : Exception
     {
         public EmptyDataReaderException(string message) : base(message) { }
     }

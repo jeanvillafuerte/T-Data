@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+
 namespace Thomas.Database.SqlServer
 {
     using Thomas.Database.Configuration;

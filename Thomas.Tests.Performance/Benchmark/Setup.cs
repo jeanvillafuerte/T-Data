@@ -33,7 +33,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             IServiceCollection serviceCollection = new ServiceCollection();
             serviceCollection.AddDbFactory();
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db", StringConnection = cnx, MaxDegreeOfParallelism = 1, ConnectionTimeout = 0 });
+            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db", StringConnection = cnx, ConnectionTimeout = 0 });
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
 

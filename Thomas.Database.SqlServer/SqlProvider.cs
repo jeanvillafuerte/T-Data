@@ -55,7 +55,6 @@ namespace Thomas.Database.SqlServer
             command.CommandTimeout = Options.ConnectionTimeout;
             command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
             command.Prepare();
-
             return command;
         }
 
@@ -114,7 +113,7 @@ namespace Thomas.Database.SqlServer
 
         public bool IsCancellatedOperationException(Exception exception)
         {
-            if(exception is SqlException ex)
+            if (exception is SqlException ex)
                 return ex.Errors.Cast<SqlError>().Any(x => x.Message.Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase));
 
             return false;
