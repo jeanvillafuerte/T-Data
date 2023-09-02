@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Threading;
@@ -12,6 +13,6 @@ namespace Thomas.Database
         DbCommand CreateCommand(DbConnection connection, string script, bool isStoreProcedure);
         Task<DbCommand> CreateCommandAsync(DbConnection connection, string script, bool isStoreProcedure, CancellationToken cancellationToken);
         bool IsCancellatedOperationException(Exception? excetion);
-        (IDataParameter[], string) ExtractValuesFromSearchTerm(object searchTerm);
+        IEnumerable<IDataParameter> ExtractValuesFromSearchTerm(object searchTerm, string metadataKey);
     }
 }

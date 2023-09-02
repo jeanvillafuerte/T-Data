@@ -1,15 +1,16 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System;
+using BenchmarkDotNet.Attributes;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
 using Thomas.Database.Strategy.Factory;
+using System.Collections.Specialized;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
     [BenchmarkCategory("ORM")]
-    public class Setup
+    public class BenckmarkBase
     {
         protected IDatabase service;
 
@@ -17,9 +18,10 @@ namespace Thomas.Tests.Performance.Benchmark
 
         protected bool CleanData;
 
+        protected string StringConnection;
+
         public void Start()
         {
-
             var builder = new ConfigurationBuilder();
 
             builder.AddInMemoryCollection().AddJsonFile("dbsettings.json", true);
@@ -29,6 +31,7 @@ namespace Thomas.Tests.Performance.Benchmark
             var cnx = configuration["connection"];
             var len = configuration["rows"];
 
+            StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
             IServiceCollection serviceCollection = new ServiceCollection();

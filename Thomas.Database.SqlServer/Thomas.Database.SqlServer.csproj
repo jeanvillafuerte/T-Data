@@ -40,19 +40,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
-    <ProjectReference Include="..\Thomas.Extension\Thomas.Cache.csproj" />
+    <None Include="..\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+    <None Include="..\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\ThomasIco.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
-    <None Include="..\ThomasIco.png">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
+    <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
   </ItemGroup>
 
 </Project>

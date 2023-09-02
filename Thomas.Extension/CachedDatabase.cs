@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache.Helpers;
 using Thomas.Cache.Manager;
 using Thomas.Database;
 using Thomas.Database.Cache.Metadata;
@@ -44,18 +43,18 @@ namespace Thomas.Cache
                 && type.Attributes.HasFlag(TypeAttributes.NotPublic);
         }
 
-        private void CopyPropertyValues(object source, object dest)
+        private void CopyPropertyValues(object source, string scripts, object dest)
         {
-            var typeName = source.GetType().FullName;
+            var key = HashHelper.GenerateUniqueStringHash(scripts);
 
-            if (MetadataCacheManager.Instance.TryGet(typeName!, out var meta))
+            if (MetadataCacheManager.Instance.TryGet(key, out MetadataPropertyInfo[] meta))
             {
                 foreach (var item in meta)
                 {
-                    if (item.Value.IsOutParameter)
+                    if (item.IsOutParameter)
                     {
-                        var value = item.Value.GetValue(source);
-                        item.Value.SetValue(dest, value, _culture);
+                        var value = item.GetValue(source);
+                        item.SetValue(dest, value, _culture);
                     }
                 }
             }
@@ -93,7 +92,7 @@ namespace Thomas.Cache
                 if (!isAnonymousType)
                 {
                     _cache.TryGet(identifierForInput, out IEnumerable<object> value);
-                    CopyPropertyValues(value.First(), inputData);
+                    CopyPropertyValues(value.First(), procedureName, inputData);
                 }
             }
 
@@ -207,7 +206,7 @@ namespace Thomas.Cache
                 if (!isAnonymousType)
                 {
                     _cache.TryGet(identifierForInput, out IEnumerable<object> value);
-                    CopyPropertyValues(value.First(), inputData);
+                    CopyPropertyValues(value.First(), procedureName, inputData);
                 }
             }
 
@@ -284,6 +283,12 @@ namespace Thomas.Cache
             where T3 : class, new()
         {
             throw new NotImplementedException();
+        }
+
+        public IEnumerable<T> ToList<T>(object inputData, string script, bool isStoreProcedure = false) where T : class, new()
+        {
+            return new List<T>();
+            //throw new NotImplementedException();
         }
     }
 }

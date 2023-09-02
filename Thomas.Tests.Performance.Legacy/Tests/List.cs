@@ -45,7 +45,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             {
                 stopWatch.Start();
 
-                var data = service.ToList<Person>(new { age = 5 }, $@"get_{tableName}");
+                var data = service.ToList<Person>(new { age = 5 }, $@"get_{tableName}", true);
 
                 WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
 
@@ -73,7 +73,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
                 var st = new ListResult(age: 35);
 
-                var data = service.ToList<Person>(st, "get_byAge");
+                var data = service.ToList<Person>(st, "get_byAge", true);
 
                 WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
 

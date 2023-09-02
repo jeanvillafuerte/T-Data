@@ -1,13 +1,14 @@
-﻿using Microsoft.Data.SqlClient;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Data;
 using System.Data.Common;
+using Microsoft.Data.SqlClient;
 
 namespace Thomas.Database.SqlServer
 {
     using System.Collections.Concurrent;
+    using System.Collections.Generic;
     using System.Linq;
+    using System.Reflection;
     using System.Threading;
     using System.Threading.Tasks;
     using Thomas.Database.Cache.Metadata;
@@ -32,19 +33,19 @@ namespace Thomas.Database.SqlServer
         private static void LoadDbTypes()
         {
             DbTypes = new ConcurrentDictionary<string, SqlDbType>(Environment.ProcessorCount, 13);
-            DbTypes.TryAdd("string", SqlDbType.VarChar);
-            DbTypes.TryAdd("int16", SqlDbType.SmallInt);
-            DbTypes.TryAdd("int32", SqlDbType.Int);
-            DbTypes.TryAdd("int64", SqlDbType.BigInt);
-            DbTypes.TryAdd("byte", SqlDbType.TinyInt);
-            DbTypes.TryAdd("decimal", SqlDbType.Decimal);
-            DbTypes.TryAdd("boolean", SqlDbType.Bit);
-            DbTypes.TryAdd("date", SqlDbType.Date);
-            DbTypes.TryAdd("datetime", SqlDbType.DateTime);
-            DbTypes.TryAdd("double", SqlDbType.Real);
-            DbTypes.TryAdd("float", SqlDbType.Float);
-            DbTypes.TryAdd("xml", SqlDbType.Xml);
-            DbTypes.TryAdd("guid", SqlDbType.UniqueIdentifier);
+            DbTypes.TryAdd("String", SqlDbType.VarChar);
+            DbTypes.TryAdd("Int16", SqlDbType.SmallInt);
+            DbTypes.TryAdd("Int32", SqlDbType.Int);
+            DbTypes.TryAdd("Int64", SqlDbType.BigInt);
+            DbTypes.TryAdd("Byte", SqlDbType.TinyInt);
+            DbTypes.TryAdd("Decimal", SqlDbType.Decimal);
+            DbTypes.TryAdd("Boolean", SqlDbType.Bit);
+            DbTypes.TryAdd("Date", SqlDbType.Date);
+            DbTypes.TryAdd("DateTime", SqlDbType.DateTime);
+            DbTypes.TryAdd("Double", SqlDbType.Real);
+            DbTypes.TryAdd("Float", SqlDbType.Float);
+            DbTypes.TryAdd("Xml", SqlDbType.Xml);
+            DbTypes.TryAdd("Guid", SqlDbType.UniqueIdentifier);
         }
 
         public DbCommand CreateCommand(DbConnection connection, string script, bool isStoreProcedure)
@@ -75,38 +76,42 @@ namespace Thomas.Database.SqlServer
             return new SqlConnection(connection);
         }
 
-        public (IDataParameter[], string) ExtractValuesFromSearchTerm(object searchTerm)
+        public IEnumerable<IDataParameter> ExtractValuesFromSearchTerm(object searchTerm, string metadataKey)
         {
-            var tp = searchTerm.GetType();
-            var key = tp.FullName;
-
-            if (!MetadataCacheManager.Instance.TryGet(key, out Dictionary<string, MetadataPropertyInfo> propsCached))
+            if (!MetadataCacheManager.Instance.TryGet(metadataKey, out MetadataPropertyInfo[] dataParameters))
             {
-                var props = tp.GetProperties();
-                propsCached = props.ToDictionary(x => x.Name, y => y.PropertyType.IsGenericType ? new MetadataPropertyInfo(y, Nullable.GetUnderlyingType(y.PropertyType)) : new MetadataPropertyInfo(y, y.PropertyType));
-                MetadataCacheManager.Instance.Set(key, propsCached);
+                dataParameters = GetPropertiesCached(searchTerm);
+                MetadataCacheManager.Instance.Set(metadataKey, dataParameters);
             }
 
-            var parameters = new List<IDataParameter>();
-
-            foreach (var keyValuePair in propsCached)
+            for (int i = 0; i < dataParameters.Length; i++)
             {
-                var value = keyValuePair.Value.GetValue(searchTerm);
-
-                ParameterDirection direction = keyValuePair.Value.GetParameterDireccion();
-                int size = keyValuePair.Value.GetParameterSize();
-
-                parameters.Add(new SqlParameter()
+                yield return new SqlParameter()
                 {
-                    ParameterName = $"@{keyValuePair.Value.ParameterName}",
-                    Value = direction == ParameterDirection.Input ? value : DBNull.Value,
-                    SqlDbType = SqlProvider.GetSqlDbType(keyValuePair.Value.PropertyName),
-                    Direction = direction,
-                    Size = size
-                });
+                    ParameterName = dataParameters[i].ParameterName,
+                    SqlDbType = (SqlDbType)dataParameters[i].DbType,
+                    Direction = dataParameters[i].Direction,
+                    Value = dataParameters[i].GetDbParameterValue(searchTerm),
+                    Size = dataParameters[i].Size
+                };
             }
 
-            return (parameters.ToArray(), key);
+        }
+
+        MetadataPropertyInfo[] GetPropertiesCached(object searchTerm)
+        {
+            var props = searchTerm.GetType().GetProperties();
+            return props.Select(
+                y => new MetadataPropertyInfo(y, GetParameter(y, searchTerm), (int)GetSqlDbType(y.PropertyType.Name))).ToArray();
+        }
+
+        static DbParameter GetParameter(PropertyInfo info, object value)
+        {
+            return new SqlParameter()
+                {
+                    ParameterName = $"@{info.Name.ToLower()}",
+                    Value = info.GetValue(value) ?? DBNull.Value
+                };
         }
 
         private static SqlDbType GetSqlDbType(string propertyName) => DbTypes[propertyName];

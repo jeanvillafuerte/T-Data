@@ -8,29 +8,28 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Thomas.Database.Cache.Metadata;
 using Thomas.Database.Exceptions;
-using Thomas.Database.Strategy;
 
 namespace Thomas.Database.Database
 {
-
     //this class is responsible for executing the command and returning the result set
     public class DbCommand : IDisposable
     {
         private static Func<IDataParameter, bool> filter = (IDataParameter x) => x.Direction == ParameterDirection.Output || x.Direction == ParameterDirection.InputOutput;
 
         private readonly IDatabaseProvider _provider;
-        private string _searchTermName;
         private DbDataReader _reader;
         private readonly ThomasDbStrategyOptions _options;
         private readonly CultureInfo _cultureInfo;
-
+        private string _metadataKey;
+        private string _metadataInputKey;
         // object to get the values ​​of the output parameters
         private object _searchTerm { get; set; }
 
         // parameters of the command
-        public IDataParameter[] Parameters { get; set; }
+        public IDataParameter[] Parameters { get; set; } = Array.Empty<IDataParameter>();
 
         // output parameters
         public IDataParameter[] OutParameters
@@ -54,6 +53,8 @@ namespace Thomas.Database.Database
         // prepare the command to be executed and open the connection
         public void Prepare(string script, bool isStoreProcedure)
         {
+            _metadataKey = HashHelper.GenerateUniqueStringHash($"Script_WithoutParams_{script}");
+
             _connection = _provider.CreateConnection(_options.StringConnection);
             _command = _provider.CreateCommand(_connection, script, isStoreProcedure);
             _connection.Open();
@@ -61,6 +62,8 @@ namespace Thomas.Database.Database
 
         public async Task PrepareAsync(string script, bool isStoreProcedure, CancellationToken cancellationToken)
         {
+            _metadataKey = HashHelper.GenerateUniqueStringHash($"Script_WithoutParams_{script}");
+
             _connection = _provider.CreateConnection(_options.StringConnection);
             _command = await _provider.CreateCommandAsync(_connection, script, isStoreProcedure, cancellationToken);
             await _connection.OpenAsync(cancellationToken);
@@ -68,16 +71,17 @@ namespace Thomas.Database.Database
 
         public IDataParameter[] Prepare(string script, bool isStoreProcedure, object searchTerm)
         {
+            _metadataKey = HashHelper.GenerateUniqueStringHash($"Script_WithParams_{script}");
+            _metadataInputKey = HashHelper.GenerateUniqueStringHash($"Inputs_{script}");
+
             _connection = _provider.CreateConnection(_options.StringConnection);
             _command = _provider.CreateCommand(_connection, script, isStoreProcedure);
             _searchTerm = searchTerm;
 
-            Parameters = Array.Empty<IDataParameter>();
-
             if (searchTerm != null)
             {
                 _command.Parameters.Clear();
-                (Parameters, _searchTermName) = _provider.ExtractValuesFromSearchTerm(searchTerm);
+                Parameters = _provider.ExtractValuesFromSearchTerm(searchTerm, _metadataInputKey).ToArray();
                 _command.Parameters.AddRange(Parameters);
             }
 
@@ -94,6 +98,9 @@ namespace Thomas.Database.Database
         /// <returns>Parameters of the command</returns>
         public async Task<IDataParameter[]> PrepareAsync(string script, bool isStoreProcedure, object searchTerm, CancellationToken cancellationToken)
         {
+            _metadataKey = HashHelper.GenerateUniqueStringHash($"Script_WithParams_{script}");
+            _metadataInputKey = HashHelper.GenerateUniqueStringHash($"Inputs_{script}");
+
             _connection = _provider.CreateConnection(_options.StringConnection);
             _command = await _provider.CreateCommandAsync(_connection, script, isStoreProcedure, cancellationToken);
             _searchTerm = searchTerm;
@@ -102,8 +109,8 @@ namespace Thomas.Database.Database
 
             if (searchTerm != null)
             {
-                _command.Parameters.Clear();
-                (Parameters, _searchTermName) = _provider.ExtractValuesFromSearchTerm(searchTerm);
+
+                Parameters = _provider.ExtractValuesFromSearchTerm(searchTerm, _metadataInputKey).ToArray();
                 _command.Parameters.AddRange(Parameters);
             }
 
@@ -138,110 +145,42 @@ namespace Thomas.Database.Database
 
         public async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken) => await _command.ExecuteNonQueryAsync(cancellationToken);
 
-        public (object[][], string[]) Read(CommandBehavior behavior, int expectedSize = 256)
-        {
-            _reader = _command.ExecuteReader(behavior);
-            return GetRawData(expectedSize);
-        }
-
-        public (object[][], string[]) ReadNext(int size = 256)
-        {
-            NextResult();
-            return GetRawData(size);
-        }
-
-        private (object[][], string[]) GetRawData(int size)
-        {
-            var columns = GetColumns(_reader);
-
-            var data = new object[size][];
-            var index = 0;
-
-            while (_reader.Read())
-            {
-                var values = new object[columns.Length];
-                _reader.GetValues(values);
-
-                if (index + 1 == data.Length)
-                    ResizeArray(ref data);
-
-                data[index++] = values;
-            }
-
-            if (data.Length > index)
-                Array.Resize(ref data, index);
-
-            return (data.ToArray(), columns);
-        }
-
-        public async Task<(object[][], string[])> ReadAsync(CommandBehavior behavior, CancellationToken cancellationToken, int expectedSize = 256)
-        {
-            _reader = await _command.ExecuteReaderAsync(behavior, cancellationToken);
-            return await GetRawDataAsync(cancellationToken, expectedSize);
-        }
-
-        public async Task<(object[][], string[])> ReadNextAsync(CancellationToken cancellationToken, int size = 256)
-        {
-            await NextResultAsync(cancellationToken);
-            return await GetRawDataAsync(cancellationToken, size);
-        }
-
-        private async Task<(object[][], string[])> GetRawDataAsync(CancellationToken cancellationToken, int size)
-        {
-            var columns = GetColumns(_reader);
-
-            var data = new object[size][];
-
-            var index = 0;
-
-            while (await _reader.ReadAsync(cancellationToken))
-            {
-                var values = new object[columns.Length];
-                _reader.GetValues(values);
-
-                if (index + 1 == data.Length)
-                    ResizeArray(ref data);
-
-                data[index++] = values;
-            }
-
-            if (data.Length > index)
-                Array.Resize(ref data, index);
-
-            return (data, columns);
-        }
-
-        private static void ResizeArray(ref object[][] data)
-        {
-            int newcapacity = (int)(data.Length * 200L / 100);
-
-            if (newcapacity < data.Length + 4)
-                newcapacity = data.Length + 4;
-
-            object[][] newarray = new object[newcapacity][];
-
-            Array.Copy(data, newarray, data.Length);
-
-            data = newarray;
-        }
-
         public IEnumerable<T> TransformData<T>(object[][] data, string[] columns) where T : class, new()
         {
-            if (data.Length == 0)
-                return Enumerable.Empty<T>();
-
             var properties = GetProperties<T>();
 
-            if (_options.ThresholdParallelism > data.Length)
-                return FormatData<T>(properties, data, columns);
-            else
-                return FormatDataParallel<T>(properties, data, columns);
+            return FormatData<T>(properties, data, columns);
+            //if (data.Length == 0)
+            //    return Enumerable.Empty<T>();
+
+            //var properties = GetProperties<T>();
+
+            //if (_options.ThresholdParallelism > data.Length)
+
+            //else
+            //    return FormatDataParallel<T>(properties, data, columns);
 
         }
 
         private void NextResult() => _reader.NextResult();
 
         private async Task NextResultAsync(CancellationToken cancellationToken) => await _reader.NextResultAsync(cancellationToken);
+
+        private static bool IsAnonymousType<T>(T value)
+        {
+            var type = value.GetType();
+            return type.IsGenericType && type.Name.Contains("AnonymousType")
+                && (type.Name.StartsWith("<>") || type.Name.StartsWith("VB$"));
+        }
+
+        public void FinishConnection()
+        {
+            if (!IsAnonymousType(_searchTerm))
+            {
+                RescueOutParamValues();
+                SetValuesOutFields();
+            }
+        }
 
         public void RescueOutParamValues()
         {
@@ -254,53 +193,21 @@ namespace Thomas.Database.Database
 
         private Dictionary<string, MetadataPropertyInfo> GetProperties<T>()
         {
-            Type tp = typeof(T);
-
-            var key = tp.FullName!;
-
-            if (MetadataCacheManager.Instance.TryGet(key, out Dictionary<string, MetadataPropertyInfo> properties))
+            if (MetadataCacheManager.Instance.TryGet(_metadataKey, out Dictionary<string, MetadataPropertyInfo> properties))
                 return properties;
 
-            var props = tp.GetProperties();
+            var props = typeof(T).GetProperties();
 
-            //EnsureStrictMode(key, props, columns);
+            properties = props.ToDictionary(x => x.Name, y => new MetadataPropertyInfo(y));
 
-            properties = props.ToDictionary(x => x.Name, y =>
-                                 y.PropertyType.IsGenericType ? new MetadataPropertyInfo(y, Nullable.GetUnderlyingType(y.PropertyType)) : new MetadataPropertyInfo(y, y.PropertyType));
-
-            MetadataCacheManager.Instance.Set(key, properties);
+            MetadataCacheManager.Instance.Set(_metadataKey, properties);
 
             return properties;
         }
 
-        private void EnsureStrictMode(string key, PropertyInfo[] props, string[] columns)
-        {
-            if (_options.StrictMode)
-            {
-                string[] propsName = new string[props.Length];
-
-                for (int i = 0; i < props.Length; i++)
-                {
-                    propsName[i] = props[i].Name;
-                }
-
-                var propertiesNotFound = columns.Where(x => !propsName.Contains(x, StringComparer.OrdinalIgnoreCase)).ToArray();
-
-                if (propertiesNotFound.Length > 0)
-                {
-                    _connection.Close();
-
-                    throw new FieldsNotFoundException("There are columns doesn't match with entity's fields. " +
-                      "Columns : " + string.Join(", ", propertiesNotFound) + Environment.NewLine +
-                      "Entity Name : " + key + Environment.NewLine +
-                      "Script : " + "");
-                }
-            }
-        }
-
         public void SetValuesOutFields()
         {
-            if (_searchTerm != null && MetadataCacheManager.Instance.TryGet(_searchTermName, out Dictionary<string, MetadataPropertyInfo> properties))
+            if (_searchTerm != null && MetadataCacheManager.Instance.TryGet(_metadataKey, out Dictionary<string, MetadataPropertyInfo> properties))
             {
                 foreach (var item in properties)
                 {
@@ -330,25 +237,144 @@ namespace Thomas.Database.Database
             _connection?.Dispose();
         }
 
-        #region data treatment
+        #region reader operations
 
-        public IEnumerable<T> FormatData<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] data, string[] columns) where T : class, new()
+        public IEnumerable<T> ReadItems<T>(CommandBehavior behavior) where T : class, new()
         {
-            var length = data.Length;
+            _reader = _command.ExecuteReader(behavior);
 
-            T[] list = new T[length];
+            var columns = GetColumns(_reader);
+            var properties = GetProperties<T>();
+            var columnLen = columns.Length;
+            var values = new object[columnLen];
 
-            for (int i = 0; i < length; i++)
+            while (_reader.Read())
+            {
+                _reader.GetValues(values);
+
+                T item = new T();
+
+                for (int j = 0; j < columns.Length; j++)
+                    properties[columns[j]].SetValue(item, values[j], _cultureInfo);
+
+                yield return item;
+            }
+
+        }
+        public (object[][], string[]) Read(CommandBehavior behavior)
+        {
+            _reader = _command.ExecuteReader(behavior);
+            return GetRawData();
+        }
+
+        public (object[][], string[]) ReadNext()
+        {
+            NextResult();
+            return GetRawData();
+        }
+
+        private (object[][], string[]) GetRawData(int size = 256)
+        {
+            var columns = GetColumns(_reader);
+            var columnLen = columns.Length;
+
+            var data = new object[size][];
+            int index = 0;
+
+            while (_reader.Read())
+            {
+                var values = new object[columnLen];
+                _reader.GetValues(values);
+
+                if (index + 1 == data.Length)
+                    ResizeArray(ref data);
+
+                data[index++] = values;
+            }
+
+            if (data.Length > index)
+                Array.Resize(ref data, index);
+
+            return (data, columns);
+        }
+
+        public async Task<(object[][], string[])> ReadAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+        {
+            _reader = await _command.ExecuteReaderAsync(behavior, cancellationToken);
+            return await GetRawDataAsync(cancellationToken);
+        }
+
+        public async Task<(object[][], string[])> ReadNextAsync(CancellationToken cancellationToken)
+        {
+            await NextResultAsync(cancellationToken);
+            return await GetRawDataAsync(cancellationToken);
+        }
+
+        private async Task<(object[][], string[])> GetRawDataAsync(CancellationToken cancellationToken, int size = 256)
+        {
+            var columns = GetColumns(_reader);
+            int columnLen = columns.Length;
+
+            var data = new object[size][];
+            int index = 0;
+
+            while (await _reader.ReadAsync(cancellationToken))
+            {
+                var values = new object[columnLen];
+                _reader.GetValues(values);
+
+                if (index + 1 == data.Length)
+                    ResizeArray(ref data);
+
+                data[index++] = values;
+            }
+
+            if (data.Length > index)
+                Array.Resize(ref data, index);
+
+            return (data, columns);
+        }
+
+        private static void ResizeArray(ref object[][] data)
+        {
+            int newcapacity = (int)(data.Length * 200L / 100);
+
+            if (newcapacity < data.Length + 4)
+                newcapacity = data.Length + 4;
+
+            object[][] newarray = new object[newcapacity][];
+
+            Array.Copy(data, newarray, data.Length);
+
+            data = newarray;
+        }
+        #endregion
+        #region format data
+
+        //public struct object[]
+        //{
+        //    public readonly Queue<object> Data;
+
+        //    public object[](object[] data)
+        //    {
+        //        Data = new Queue<object>(data);
+        //    }
+        //}
+
+        
+        public IEnumerable<T> FormatData<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] records, string[] columns) where T : class, new()
+        {
+            foreach (var record in records)
             {
                 T item = new T();
 
                 for (int j = 0; j < columns.Length; j++)
-                    props[columns[j]].SetValue(item, data[i][j], _cultureInfo);
+                {
+                    props[columns[j]].SetValue(item, record[j], _cultureInfo);
+                }
 
-                list[i] = item;
+                yield return item;
             }
-
-            return list;
         }
 
         public IEnumerable<T> FormatDataParallel<T>(Dictionary<string, MetadataPropertyInfo> props, object[][] data, string[] columns) where T : class, new()

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Reflection;
 using Thomas.Database.Attributes;
@@ -9,25 +10,43 @@ namespace Thomas.Database.Cache.Metadata
 {
     public sealed class MetadataPropertyInfo
     {
-        public MetadataPropertyInfo(PropertyInfo info, Type? type)
+        private MetadataPropertyInfo() { }
+
+        public MetadataPropertyInfo(PropertyInfo info)
         {
             PropertyInfo = info;
-            Type = type;
+            Type = PropertyInfo.PropertyType.IsGenericType ? Nullable.GetUnderlyingType(info.PropertyType) : info.PropertyType;
+        }
+
+        public MetadataPropertyInfo(PropertyInfo info, DbParameter parameter, int dbType)
+        {
+            PropertyInfo = info;
+            Direction = GetParameterDireccion(PropertyInfo);
+            Size = GetParameterSize(PropertyInfo);
+            DbParameterName = parameter.ParameterName;
+            DbType = dbType;
         }
 
         public bool IsOutParameter
         {
             get
             {
-                var direction = GetParameterDireccion();
-                return direction == ParameterDirection.Output || direction == ParameterDirection.InputOutput;
+                return Direction == ParameterDirection.Output || Direction == ParameterDirection.InputOutput;
             }
         }
 
-        public delegate void SetValueDelegate(object item, object value, CultureInfo cultureInfo);
-
         private PropertyInfo PropertyInfo { get; }
         private Type? Type { get; }
+
+        public string DbParameterName { get; set; }
+        public ParameterDirection Direction { get; set; }
+        public int Size { get; set; }
+        public int DbType { get; set; }
+
+        public object GetDbParameterValue(object value)
+        {
+           return PropertyInfo.GetValue(value) ?? DBNull.Value;
+        }
 
         public void SetValue(object item, object value, CultureInfo cultureInfo)
         {
@@ -39,9 +58,9 @@ namespace Thomas.Database.Cache.Metadata
             return PropertyInfo.GetValue(item) ?? DBNull.Value;
         }
 
-        public int GetParameterSize()
+        static int GetParameterSize(PropertyInfo property)
         {
-            foreach (var attribute in PropertyInfo.GetCustomAttributes(true))
+            foreach (var attribute in property.GetCustomAttributes(true))
             {
                 var attr = attribute as ParameterSizeAttribute;
                 if (attr != null)
@@ -51,9 +70,9 @@ namespace Thomas.Database.Cache.Metadata
             return 0;
         }
 
-        public ParameterDirection GetParameterDireccion()
+        static ParameterDirection GetParameterDireccion(PropertyInfo property)
         {
-            foreach (var attribute in PropertyInfo.GetCustomAttributes(true))
+            foreach (var attribute in property.GetCustomAttributes(true))
             {
                 var attr = attribute as ParameterDirectionAttribute;
                 if (attr != null)
@@ -63,7 +82,7 @@ namespace Thomas.Database.Cache.Metadata
             return ParameterDirection.Input;
         }
 
-        public static ParameterDirection GetDirection(ParamDirection direction) => direction switch
+        static ParameterDirection GetDirection(ParamDirection direction) => direction switch
         {
             ParamDirection.Input => ParameterDirection.Input,
             ParamDirection.InputOutput => ParameterDirection.InputOutput,
@@ -76,14 +95,6 @@ namespace Thomas.Database.Cache.Metadata
             get
             {
                 return PropertyInfo.Name.ToLower();
-            }
-        }
-
-        public string PropertyName
-        {
-            get
-            {
-                return Type!.Name.ToLower();
             }
         }
     }

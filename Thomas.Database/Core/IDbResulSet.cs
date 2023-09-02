@@ -10,7 +10,7 @@ namespace Thomas.Database.Core
         T? ToSingle<T>(string script, bool isStoreProcedure = true) where T : class, new();
         T? ToSingle<T>(object inputData, string procedureName) where T : class, new();
         IEnumerable<T> ToList<T>(string script, bool isStoreProcedure = true) where T : class, new();
-        IEnumerable<T> ToList<T>(object inputData, string procedureName) where T : class, new();
+        IEnumerable<T> ToList<T>(object inputData, string script, bool isStoreProcedure = false) where T : class, new();
         Tuple<IEnumerable<T1>, IEnumerable<T2>> ToTuple<T1, T2>(string script, bool isStoreProcedure = true) where T1 : class, new() where T2 : class, new();
         Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>> ToTuple<T1, T2, T3>(string script, bool isStoreProcedure = true) where T1 : class, new() where T2 : class, new() where T3 : class, new();
         Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>> ToTuple<T1, T2, T3, T4>(string script, bool isStoreProcedure = true) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new();

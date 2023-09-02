@@ -33,9 +33,9 @@ namespace Thomas.Tests.Performance.Legacy
             RunTestsDatabase(Database2, "db2");
             WriteStep("Completed tests database2...", true);
 
-            WriteStep("Starting tests database2 (result cached)...");
-            RunTestsCachedDatabase(CachedResultDatabase, "db2 (cached)");
-            WriteStep("Completed tests database2 (result cached)...", true);
+            //WriteStep("Starting tests database2 (result cached)...");
+            //RunTestsCachedDatabase(CachedResultDatabase, "db2 (cached)");
+            //WriteStep("Completed tests database2 (result cached)...", true);
 
             WriteStep("Starting tests database2 (async)...");
             RunTestsDatabaseAsync(Database2, "db2 (async)");

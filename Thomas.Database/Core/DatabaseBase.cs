@@ -212,7 +212,7 @@ namespace Thomas.Database
                 using (var command = new DbCommand(Provider, Options))
                 {
                     parameters = command.Prepare(procedureName, true, inputData);
-                    var (data, columns) = command.Read(CommandBehavior.SingleRow, 1);
+                    var (data, columns) = command.Read(CommandBehavior.SingleRow);
                     command.RescueOutParamValues();
                     command.CloseConnetion();
 
@@ -242,7 +242,7 @@ namespace Thomas.Database
             using (var command = new DbCommand(Provider, Options))
             {
                 command.Prepare(script, isStoreProcedure);
-                var (data, columns) = command.Read(CommandBehavior.SingleRow, 1);
+                var (data, columns) = command.Read(CommandBehavior.SingleRow);
                 command.CloseConnetion();
 
                 return command.TransformData<T>(data, columns).FirstOrDefault();
@@ -261,7 +261,7 @@ namespace Thomas.Database
         {
             using var command = new DbCommand(Provider, Options);
             command.Prepare(procedureName, true, inputData);
-            var (data, columns) = command.Read(CommandBehavior.SingleRow, 1);
+            var (data, columns) = command.Read(CommandBehavior.SingleRow);
             command.RescueOutParamValues();
             command.CloseConnetion();
 
@@ -275,7 +275,7 @@ namespace Thomas.Database
             using (var command = new DbCommand(Provider, Options))
             {
                 await command.PrepareAsync(script, isStoreProcedure, cancellationToken);
-                var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken, 1);
+                var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken);
                 await command.CloseConnetionAsync();
 
                 return command.TransformData<T>(data, columns).FirstOrDefault();
@@ -287,7 +287,7 @@ namespace Thomas.Database
             using (var command = new DbCommand(Provider, Options))
             {
                 await command.PrepareAsync(procedureName, true, inputData, cancellationToken);
-                var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken, 1);
+                var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken);
                 command.RescueOutParamValues();
                 await command.CloseConnetionAsync();
 
@@ -328,7 +328,7 @@ namespace Thomas.Database
                 using (var command = new DbCommand(Provider, Options))
                 {
                     parameters = await command.PrepareAsync(procedureName, true, inputData, cancellationToken);
-                    var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken, 1);
+                    var (data, columns) = await command.ReadAsync(CommandBehavior.SingleRow, cancellationToken);
                     command.RescueOutParamValues();
                     await command.CloseConnetionAsync();
 
@@ -438,20 +438,12 @@ namespace Thomas.Database
         /// <param name="inputData">Matched fields from object names against store procedure parameters</param>
         /// <param name="procedureName">Store procedure name</param>
         /// <returns></returns>
-        public IEnumerable<T> ToList<T>(object inputData, string procedureName) where T : class, new()
+        public IEnumerable<T> ToList<T>(object inputData, string script, bool isStoreProcedure = false) where T : class, new()
         {
             using var command = new DbCommand(Provider, Options);
-            command.Prepare(procedureName, true, inputData);
+            command.Prepare(script, isStoreProcedure, inputData);
 
-            var (data, columns) = command.Read(CommandBehavior.SingleResult);
-
-            command.RescueOutParamValues();
-
-            command.CloseConnetion();
-
-            command.SetValuesOutFields();
-
-            return command.TransformData<T>(data, columns);
+            return command.ReadItems<T>(CommandBehavior.SingleResult);
         }
 
         public async Task<IEnumerable<T>> ToListAsync<T>(string script, bool isStoreProcedure, CancellationToken cancellationToken) where T : class, new()
