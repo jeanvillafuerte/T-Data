@@ -65,10 +65,10 @@ public class MyComponent
         }
     }
 
-    public void SavePeople(Person person)
+    public void Save(Person person)
     {
         var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ExecuteOp(person, "dbo.SavePerson");
+        var response = _db.ExecuteOp(person, "dbo.Save");
 
         if(response.Success)
         {
@@ -82,10 +82,10 @@ public class MyComponent
         }
     }
 
-    public void UpdateAge(string name, int age)
+    public void Update(string id, int age)
     {
         var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ExecuteOp(new { vcName = name, nbAge = age}, "dbo.UpdateAge");
+        var response = _db.ExecuteOp(new { id = id, age = age}, "dbo.Update");
 
         if(response.Success)
         {
@@ -102,7 +102,7 @@ public class MyComponent
     public void ProcessData()
     {
         var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ToTupleOp<Person, Office>("dbo.GetDataForProcess");
+        var response = _db.ToTupleOp<Person, Office>("dbo.Process");
 
         if(response.Success)
         {
@@ -118,7 +118,7 @@ public class MyComponent
         }
     }
 
-    public void ManyFormsToGetData()
+    public void RetrieveMoreData()
     {
         var _db = DbFactory.CreateDbContext("mssqldb1");
 

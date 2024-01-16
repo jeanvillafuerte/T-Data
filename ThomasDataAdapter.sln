@@ -16,7 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.editorconfig = .editorconfig
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Thomas.Cache", "Thomas.Extension\Thomas.Cache.csproj", "{906D5992-D77D-41CF-8646-E6B19766A46E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Thomas.Cache", "Thomas.Cache\Thomas.Cache.csproj", "{906D5992-D77D-41CF-8646-E6B19766A46E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
