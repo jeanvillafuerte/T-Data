@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netcoreapp3.1;net6.0;net8.0</TargetFrameworks>
+    <!--<ImplicitUsings>enable</ImplicitUsings>-->
+    <Nullable>enable</Nullable>
+    <Title>ThomasDataAdapter Cache Layer</Title>
+    <Authors>Jean Villafuerte</Authors>
+    <Product>ThomasDataAdapter</Product>
+    <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
+    <PackageIcon>ThomasIco.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
+    <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
+    <PackageReleaseNotes>Features released 2.0.0:
+
+- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
+- Straightforward way to match typed and anonymous types to query parameters.
+- Attributes to match parameter direction and size to configure DbParameter.
+- Optional Cache layer to boost application performance having control what will be stored, updated and removed.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\ThomasIco.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
+  </ItemGroup>
+
+</Project>

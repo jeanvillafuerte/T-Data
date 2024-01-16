@@ -1,5 +1,6 @@
 {
-  "connection": "Data Source=.;Initial Catalog=SampleDb;Persist Security Info=True;",
-  "rows": 1000000,
+  "connection1": "Data Source=DESKTOP-35G2IH6\\SQLEXPRESS;Initial Catalog=dbtest1;Persist Security Info=True;User ID=sa;Password=sa;TrustServerCertificate=true",
+  "connection2": "Data Source=DESKTOP-35G2IH6\\SQLEXPRESS;Initial Catalog=dbtest2;Persist Security Info=True;User ID=sa;Password=sa;TrustServerCertificate=true",
+  "rows": 100000,
   "cleanData": true
 }

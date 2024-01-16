@@ -7,8 +7,7 @@ namespace Thomas.Tests.Performance
     {
         static void Main(string[] args)
         {
-            new BenchmarkSwitcher(typeof(ThomasDataAdapterBenckmark).Assembly).Run(args, new BenchmarkConfig());
+            new BenchmarkSwitcher(typeof(BenckmarkBase).Assembly).Run(args, new BenchmarkConfig());
         }
-
     }
 }

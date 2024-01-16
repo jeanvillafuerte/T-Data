@@ -1,249 +1,128 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Reflection;
-#if NETCOREAPP3_1_OR_GREATER
-using System.Runtime.CompilerServices;
-#endif
-using System.Security;
 using Microsoft.Data.SqlClient;
 
 namespace Thomas.Database.SqlServer
 {
-    using Cache;
+    using System.Collections.Generic;
+    using System.Collections.Immutable;
+    using System.Linq;
+    using Thomas.Database.Cache.Metadata;
 
-    public class SqlProvider : IDatabaseProvider
+    internal sealed class SqlProvider : IDatabaseProvider
     {
-        private Dictionary<string, SqlDbType> DbTypes;
+        private static readonly ImmutableDictionary<string, SqlDbType> DbTypes = ImmutableDictionary.CreateRange(new[]
+            {
+                new KeyValuePair<string, SqlDbType>( "String", SqlDbType.VarChar),
+                new KeyValuePair<string, SqlDbType>("Int16", SqlDbType.SmallInt),
+                new KeyValuePair<string, SqlDbType>("Int32", SqlDbType.Int),
+                new KeyValuePair<string, SqlDbType>("Int64", SqlDbType.BigInt),
+                new KeyValuePair<string, SqlDbType>("Byte", SqlDbType.TinyInt),
+                new KeyValuePair<string, SqlDbType>("Decimal", SqlDbType.Decimal),
+                new KeyValuePair<string, SqlDbType>("Boolean", SqlDbType.Bit),
+                new KeyValuePair<string, SqlDbType>("Date", SqlDbType.Date),
+                new KeyValuePair<string, SqlDbType>("DateTime", SqlDbType.DateTime),
+                new KeyValuePair<string, SqlDbType>("Double", SqlDbType.Real),
+                new KeyValuePair<string, SqlDbType>("Float", SqlDbType.Float),
+                new KeyValuePair<string, SqlDbType>("Xml", SqlDbType.Xml),
+                new KeyValuePair<string, SqlDbType>("Guid", SqlDbType.UniqueIdentifier)
+            });
 
-        public ThomasDbStrategyOptions Options { get; }
+        public readonly DbSettings Options;
 
         static SqlProvider()
         {
-#if NETCOREAPP3_1_OR_GREATER
             DbProviderFactories.RegisterFactory("System.Data.SqlClient", SqlClientFactory.Instance);
-#endif
         }
 
-        public SqlProvider(ThomasDbStrategyOptions options)
+        public SqlProvider(DbSettings options)
         {
             Options = options;
-            LoadDbTypes();
         }
 
-        private void LoadDbTypes()
+        public DbCommand CreateCommand(in DbConnection connection,in string script, in bool isStoreProcedure)
         {
-            DbTypes = new Dictionary<string, SqlDbType>();
-            DbTypes.Add("String", SqlDbType.VarChar);
-            DbTypes.Add("Int16", SqlDbType.SmallInt);
-            DbTypes.Add("Int32", SqlDbType.Int);
-            DbTypes.Add("Int64", SqlDbType.BigInt);
-            DbTypes.Add("Decimal", SqlDbType.Decimal);
-            DbTypes.Add("Boolean", SqlDbType.Bit);
-            DbTypes.Add("Date", SqlDbType.Date);
-            DbTypes.Add("DateTime", SqlDbType.DateTime);
-            DbTypes.Add("Double", SqlDbType.Real);
-            DbTypes.Add("Xml", SqlDbType.Xml);
-            DbTypes.Add("Guid", SqlDbType.UniqueIdentifier);
-        }
+            var command = connection.CreateCommand();
+            command.CommandText = script;
+            command.CommandTimeout = Options.ConnectionTimeout;
 
-        public DbCommand CreateCommand(string connection)
-        {
-            var cnx = new SqlConnection(connection);
-            var cmd = new SqlCommand();
-            cmd.Connection = cnx;
-            cmd.CommandTimeout = Options.ConnectionTimeout;
-            return cmd;
-        }
-
-#if NETCOREAPP3_1_OR_GREATER
-        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#endif
-        public DbCommand CreateCommand(string script, bool isStoreProcedure)
-        {
-            if (!DbConnectionCache.Instance.TryGet(Options.StringConnection, out SqlConnection sqlConnection))
+            if(isStoreProcedure)
             {
-                if (!string.IsNullOrEmpty(Options.User) && Options.Password != null && Options.Password.Length > 0)
-                {
-                    sqlConnection = CreateConnection(Options.StringConnection, Options.User, Options.Password) as SqlConnection;
-                }
-                else
-                {
-                    sqlConnection = CreateConnection(Options.StringConnection) as SqlConnection;
-                }
-
-                DbConnectionCache.Instance.Set(Options.StringConnection, sqlConnection);
+                command.CommandType =  CommandType.StoredProcedure;
             }
-
-            sqlConnection.ConnectionString = Options.StringConnection;
-
-            if (!DbCommandCache.Instance.TryGet(script, out SqlCommand command))
-            {
-                command = sqlConnection.CreateCommand();
-                command.CommandText = script;
-                command.CommandTimeout = Options.ConnectionTimeout;
-                command.CommandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
-                command.UpdatedRowSource = UpdateRowSource.None;
-                DbCommandCache.Instance.Set(script, command);
-            }
-
-            command.Prepare();
 
             return command;
         }
 
-        public DbCommand CreateCommand(string connection, string user, SecureString password)
+        public DbConnection CreateConnection(in string connection)
         {
-            var cnxBuilder = new SqlConnectionStringBuilder();
-            cnxBuilder.ToString();
-            var credential = new SqlCredential(user, password);
-            var cnx = new SqlConnection(connection, credential);
-            var cmd = new SqlCommand();
-            cmd.Connection = cnx;
-            cmd.CommandTimeout = Options.ConnectionTimeout;
-            //cnx.Open();
-            return cmd;
+            return new SqlConnection(connection);
         }
 
-        public DbCommand CreateCommand()
+        public IEnumerable<IDbDataParameter> GetParams(string metadataKey, object searchTerm)
         {
-            var cmd = new SqlCommand();
-            cmd.CommandTimeout = Options.ConnectionTimeout;
-            return cmd;
-        }
+            MetadataParameters<SqlDbType>[] dataParameters = null;
 
-        public DbConnection CreateConnection(string connection)
-        {
-            var cnx = new SqlConnection(connection);
-            return cnx;
-        }
-
-        public DbConnection CreateConnection(string connection, string user, SecureString password)
-        {
-            var credential = new SqlCredential(user, password);
-            var cnx = new SqlConnection(connection, credential);
-            return cnx;
-        }
-
-        public DbParameter CreateParameter(string parameterName, object value, DbType type)
-        {
-            return new SqlParameter() { ParameterName = $"@{parameterName}", Value = value ?? DBNull.Value, SqlDbType = GetType(type) };
-        }
-
-        public DbTransaction CreateTransacion(string stringConnection)
-        {
-            var cnx = CreateConnection(stringConnection);
-
-            cnx.Open();
-
-            return cnx.BeginTransaction();
-        }
-
-        public DbTransaction CreateTransacion(DbConnection connection)
-        {
-            return connection.BeginTransaction();
-        }
-
-        public IDataParameter[] ExtractValuesFromSearchTerm(object searchTerm)
-        {
-            var properties = searchTerm.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-            var parameters = new List<IDataParameter>();
-
-            foreach (var property in properties)
+            if (!CacheDbParameter<SqlDbType>.TryGet(in metadataKey, ref dataParameters))
             {
-                var value = property.GetValue(searchTerm);
-
-                int direccion = 1;
-
-                foreach (var attribute in property.GetCustomAttributes(true))
+                var props = searchTerm.GetType().GetProperties();
+                dataParameters = props.Select( y =>
                 {
-                    DirectionAttribute attr = attribute as DirectionAttribute;
-                    if (attr != null)
-                    {
-                        direccion = (int)attr.Direction;
-                        break;
-                    }
+                    var name = $"@{y.Name.ToLower()}";
+                    var dbType = GetSqlDbType(y.PropertyType.Name);
+                    return new MetadataParameters<SqlDbType>(in y, in name, in dbType);
+                }).ToArray();
+
+                CacheDbParameter<SqlDbType>.Set(in metadataKey,in dataParameters);
+            }
+
+            foreach (var parameter in dataParameters)
+            {
+                yield return new SqlParameter()
+                {
+                    ParameterName = parameter.DbParameterName,
+                    Value = parameter.GetValue(in searchTerm),
+                    Direction = parameter.Direction,
+                    Size = parameter.Size,
+                    SqlDbType = parameter.DbType
+                };
+            }
+            
+        }
+
+        public IEnumerable<dynamic> GetParams(string metadataKey)
+        {
+            MetadataParameters<SqlDbType>[] dataParameters = null;
+            CacheDbParameter<SqlDbType>.TryGet(in metadataKey, ref dataParameters);
+            return dataParameters.Select(x => x as dynamic).ToList();
+        }
+
+        private static SqlDbType GetSqlDbType(in string propertyName) => DbTypes[propertyName];
+
+        public bool IsCancellatedOperationException(in Exception exception)
+        {
+            if (exception is SqlException ex)
+                return ex.Errors.Cast<SqlError>().Any(x => x.Message.Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase));
+
+            return false;
+        }
+
+        public void LoadParameterValues(IEnumerable<IDbDataParameter> parameters, in object searchTerm, in string metadataKey)
+        {
+            MetadataParameters<SqlDbType>[] dataParameters = null;
+
+            CacheDbParameter<SqlDbType>.TryGet(in metadataKey, ref dataParameters);
+
+            foreach (var item in dataParameters)
+            {
+                if (item.IsOutParameter)
+                {
+                    var parameter = parameters.First(x => x.ParameterName == item.DbParameterName);
+                    item.SetValue(searchTerm, parameter.Value, Options.CultureInfo);
                 }
-
-                parameters.Add(new SqlParameter()
-                {
-                    ParameterName = $"@{property.Name.ToLower()}",
-                    Value = value ?? DBNull.Value,
-                    SqlDbType = GetSqlDbType(property),
-                    Direction = (ParameterDirection)direccion
-                });
-            }
-
-            return parameters.ToArray();
-        }
-
-        private SqlDbType GetSqlDbType(PropertyInfo propertyInfo)
-        {
-            return DbTypes[propertyInfo.PropertyType.Name];
-        }
-
-        private SqlDbType GetType(DbType type)
-        {
-            switch (type)
-            {
-                case DbType.AnsiString:
-                    return SqlDbType.NVarChar;
-                case DbType.Binary:
-                    return SqlDbType.VarBinary;
-                case DbType.Byte:
-                    return SqlDbType.TinyInt;
-                case DbType.Boolean:
-                    return SqlDbType.Bit;
-                case DbType.Currency:
-                    return SqlDbType.Money;
-                case DbType.Date:
-                case DbType.DateTime:
-                    return SqlDbType.DateTime;
-                case DbType.DateTime2:
-                    return SqlDbType.DateTime2;
-                case DbType.DateTimeOffset:
-                    return SqlDbType.DateTimeOffset;
-                case DbType.Decimal:
-                    return SqlDbType.Decimal;
-                case DbType.Double:
-                    return SqlDbType.Float;
-                case DbType.Guid:
-                    return SqlDbType.UniqueIdentifier;
-                case DbType.Int16:
-                    return SqlDbType.SmallInt;
-                case DbType.Int32:
-                    return SqlDbType.Int;
-                case DbType.Int64:
-                    return SqlDbType.BigInt;
-                case DbType.Object:
-                    return SqlDbType.Variant;
-                case DbType.SByte:
-                    return SqlDbType.TinyInt;
-                case DbType.Single:
-                    return SqlDbType.Int;
-                case DbType.String:
-                    return SqlDbType.VarChar;
-                case DbType.Time:
-                    return SqlDbType.Time;
-                case DbType.UInt16:
-                    return SqlDbType.SmallInt;
-                case DbType.UInt32:
-                    return SqlDbType.Int;
-                case DbType.UInt64:
-                    return SqlDbType.BigInt;
-                case DbType.VarNumeric:
-                    return SqlDbType.BigInt;
-                case DbType.AnsiStringFixedLength:
-                    return SqlDbType.NChar;
-                case DbType.StringFixedLength:
-                    return SqlDbType.Char;
-                case DbType.Xml:
-                    return SqlDbType.Xml;
-                default:
-                    return SqlDbType.VarChar;
             }
         }
+        
     }
 }

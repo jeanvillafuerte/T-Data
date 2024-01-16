@@ -1,8 +1,8 @@
 ﻿namespace Thomas.Database
 {
-    public enum DirectionParameter
+    public enum ParamDirection
     {
-        Input = 1,
+        Input = 0,
         Output,
         InputOutput
     }

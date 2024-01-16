@@ -1,10 +1,13 @@
-﻿using System;
-using System.Diagnostics;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Threading.Tasks;
+using Thomas.Cache;
+using Thomas.Cache.Factory;
+using Thomas.Cache.MemoryCache;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
-using Thomas.Tests.Performance.Entities;
+using Thomas.Tests.Performance.Legacy.Setup;
 
 namespace Thomas.Tests.Performance.Legacy
 {
@@ -12,100 +15,40 @@ namespace Thomas.Tests.Performance.Legacy
     {
         public static string TableName { get; set; }
         public static bool CleanData { get; set; }
-        public static IThomasDb Service { get; set; }
+        public static IDatabase Database1 { get; set; }
+        public static IDatabase Database2 { get; set; }
+        public static ICachedDatabase CachedResultDatabase { get; set; }
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Start Setup...");
+            WriteStep("Starting setup...");
+            Setup(out var rows);
+            WriteStep("Completed Setup...", true);
 
-            Setup();
+            WriteStep("Starting tests database1...");
+            RunTestsDatabase(Database1, "db1", rows);
+            WriteStep("Completed tests database1...", true);
 
-            Console.WriteLine("End Setup...");
+            WriteStep("Starting tests database2...");
+            RunTestsDatabase(Database2, "db2", rows);
+            WriteStep("Completed tests database2...", true);
 
-            var stopWatch = new Stopwatch();
+            WriteStep("Starting tests database2 (result cached)...");
+            RunTestsCachedDatabase(CachedResultDatabase, "db2 (cached)", rows);
+            WriteStep("Completed tests database2 (result cached)...", true);
 
-            Console.WriteLine("");
-            Console.WriteLine("Secuencial calls.");
+            WriteStep("Starting tests database2 (async)...");
+            RunTestsDatabaseAsync(Database2, "db2 (async)", rows);
+            WriteStep("Completed tests database2 (async)...", true);
 
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("");
-            Console.WriteLine("Method ToList<>");
-            Console.ForegroundColor = ConsoleColor.White;
-
-            for (int i = 0; i < 10; i++)
-            {
-                stopWatch.Start();
-
-                var data = Service.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
-
-                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Count}");
-                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
-
-                stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("Method ToListOp<>");
-            Console.ForegroundColor = ConsoleColor.White;
-
-            for (int i = 0; i < 10; i++)
-            {
-                stopWatch.Start();
-
-                var data = Service.ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName};", false);
-
-                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Result.Count}");
-                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
-
-                stopWatch.Reset();
-            }
-
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("");
-            Console.WriteLine("Method ToList<> from store procedure");
-            Console.ForegroundColor = ConsoleColor.White;
-
-            for (int i = 0; i < 10; i++)
-            {
-                stopWatch.Start();
-
-                var data = Service.ToList<Person>(new { age = 5 }, $@"get_{TableName}");
-
-                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Count}");
-                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
-
-                stopWatch.Reset();
-            }
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("");
-            Console.WriteLine("Method ToListOp<> from store procedure");
-            Console.ForegroundColor = ConsoleColor.White;
-
-            for (int i = 0; i < 10; i++)
-            {
-                stopWatch.Start();
-
-                var data = Service.ToListOp<Person>(new { age = 5 }, $@"get_{TableName}");
-
-                Console.WriteLine($"Iteration {i + 1}, Rows processed : {data.Result?.Count}");
-                Console.WriteLine($"Elapse milliseconds: { stopWatch.ElapsedMilliseconds}");
-
-                stopWatch.Reset();
-            }
-
-            Console.WriteLine("Start Cleaning...");
-
-            Clean();
-
-            Console.WriteLine("End Cleaning...");
+            WriteStep("Dropping tables...");
+            DropTables();
+            WriteStep("Dropped tables.");
 
             Console.ReadKey();
         }
 
-        static void Setup()
+        static void Setup(out int rowsGenerated)
         {
             var builder = new ConfigurationBuilder();
 
@@ -113,101 +56,75 @@ namespace Thomas.Tests.Performance.Legacy
 
             var configuration = builder.Build();
 
-            var str = configuration["connection"];
+            var cnx1 = configuration["connection1"];
+            var cnx2 = configuration["connection2"];
             var len = configuration["rows"];
-
+            TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
             CleanData = bool.Parse(configuration["cleanData"]);
 
             IServiceCollection serviceCollection = new ServiceCollection();
-            serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
-            {
-                StringConnection = str,
-                MaxDegreeOfParallelism = 1,
-                ConnectionTimeout = 0
-            });
+
+            serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
+            SqlServerFactory.AddDb(new DbSettings { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0 });
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
+            var loadDataManager = serviceProvider.GetService<IDataBaseManager>();
 
-            Service = serviceProvider.GetService<IThomasDb>();
+            rowsGenerated = int.Parse(len);
+            loadDataManager.LoadDatabases(rowsGenerated, TableName);
 
-            SetDataBase(Service, int.Parse(len));
+            Database1 = DbFactory.CreateDbContext("db1");
+            Database2 = DbFactory.CreateDbContext("db2");
+            CachedResultDatabase = DbResultCachedFactory.CreateDbContext("db2");
         }
 
-        static void SetDataBase(IThomasDb service, int length)
+        static void RunTestsDatabase(IDatabase database, string databaseName, int rows)
         {
-            TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
-
-            string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
-                                                BEGIN
-																	
-	                                                CREATE TABLE {TableName}
-													(
-		                                                Id			INT PRIMARY KEY IDENTITY(1,1),
-		                                                UserName	VARCHAR(25),
-		                                                FirstName	VARCHAR(500),
-		                                                LastName	VARCHAR(500),
-		                                                BirthDate	DATE,
-		                                                Age			SMALLINT,
-		                                                Occupation	VARCHAR(300),
-		                                                Country		VARCHAR(240),
-		                                                Salary		DECIMAL(20,2),
-		                                                UniqueId	UNIQUEIDENTIFIER,
-		                                                [State]		BIT,
-		                                                LastUpdate	DATETIME
-	                                                )
-
-                                                END";
-
-            var result = service.ExecuteOp(tableScriptDefinition, false);
-
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
-
-            var createSp = $"CREATE PROCEDURE get_{TableName} (@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
-
-            result = service.ExecuteOp(createSp, false);
-
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
-
-            string data = $@"SET NOCOUNT ON
-							DECLARE @IDX INT = 0
-							WHILE @IDX < {length}
-							BEGIN
-								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
-								VALUES ( REPLICATE('A',25), REPLICATE('A',500), REPLICATE('A',500), '1988-01-01', ROUND(RAND() * 100, 0), REPLICATE('A',300), REPLICATE('A',240), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
-								SET @IDX = @IDX + 1;
-							END";
-
-            var dataResult = service.ExecuteOp(data, false);
-
-            if (!dataResult.Success)
-            {
-                throw new Exception(dataResult.ErrorMessage);
-            }
-
-
-            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
-
-            result = service.ExecuteOp(createIndexByAge, false);
-
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
-
+            Task.WaitAll(
+                Task.Run(() => new Tests.Single().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error().Execute(database, databaseName, TableName, rows))
+                );
         }
 
-        static void Clean()
+        static void RunTestsCachedDatabase(ICachedDatabase database, string databaseName, int rows)
         {
-            if (CleanData)
-            {
-                Service.Execute($"DROP TABLE {TableName}", false);
-            }
+            Task.WaitAll(
+                Task.Run(() => new Tests.Single().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error().ExecuteCachedDatabase(database, databaseName, TableName, rows))
+                );
+
+            database.ReleaseCache();
+        }
+
+        static void RunTestsDatabaseAsync(IDatabase database, string databaseName, int rows)
+        {
+            Task.WaitAll(
+                Task.Run(async () => await new Tests.List().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Tuple().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Procedures().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Error().ExecuteAsync(database, databaseName, TableName, rows))
+                );
+        }
+
+        static void DropTables()
+        {
+            DataBaseManager.DropTable(Database1, true, TableName);
+            DataBaseManager.DropTable(Database2, true, TableName);
+        }
+
+        static void WriteStep(string message, bool includeBlankLine = false)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine(message);
+            if (includeBlankLine)
+                Console.WriteLine();
         }
     }
 }

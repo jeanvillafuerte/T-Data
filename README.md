@@ -1,54 +1,58 @@
-# ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
-## Simple strong typed library to get data from Database SQL Server especially high load and low memory consum.
-#
->It Works matching class fields vs result set returned by database query. There are simples configurations for general purpose as high load work.
+# ![""](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
+
+>It Works matching class fields vs result set returned by database query. There are simple configurations for applications that need fast response time without must deal with database connections.
+
+Features released 2.0.0:
+
+- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
+- Straightforward way to match typed and anonymous types to query parameters.
+- Attributes to match parameter direction and size to configure DbParameter.
+- Optional Cache layer to boost application performance having control what will be stored, updated and removed.
+
+
 
 
 ## Nuget : https://www.nuget.org/packages/ThomasDataAdapter.SqlServer/
 #
-### Basic configuration in startup.cs :
+## Basic configuration in startup.cs :
 
 ```c#
 using Thomas.Database.SqlServer;
 .
 .
 .
-serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
+SqlServerFactory.AddDb(new DbSettings 
 {
+    Signature = "mssqldb1",
     StringConnection = @"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}"
 });
 ```
 
-### Custom configuration :
+## Custom configuration :
 
 ```c#
 using Thomas.Database.SqlServer;
 .
 .
 .
-serviceCollection.AddThomasSqlDatabase((options) => new ThomasDbStrategyOptions()
-{
+SqlServerFactory.AddDb(new DbSettings { 
+    Signature = "mssqldb1",
     StringConnection = @"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}",
     DetailErrorMessage = true,
-    MaxDegreeOfParallelism = 4,
     ConnectionTimeout = 300,
     SensitiveDataLog = true
-});
+ });
 ```
 
-### Inject **IThomasDb** interface in your component:
+## How to use it?
 ```c#
 public class MyComponent
 {
     private readonly IThomasDb _db;
 
-    public MyComponent(IThomasDb db)
-    {
-        _db = db;
-    }
-
     public IList<Person> GetPeople()
     {
+        var _db = DbFactory.CreateDbContext("mssqldb1");
         var response = _db.ToListOp<Person>("dbo.GetPeople");
 
         if(response.Success)
@@ -63,6 +67,7 @@ public class MyComponent
 
     public void SavePeople(Person person)
     {
+        var _db = DbFactory.CreateDbContext("mssqldb1");
         var response = _db.ExecuteOp(person, "dbo.SavePerson");
 
         if(response.Success)
@@ -79,6 +84,7 @@ public class MyComponent
 
     public void UpdateAge(string name, int age)
     {
+        var _db = DbFactory.CreateDbContext("mssqldb1");
         var response = _db.ExecuteOp(new { vcName = name, nbAge = age}, "dbo.UpdateAge");
 
         if(response.Success)
@@ -95,6 +101,7 @@ public class MyComponent
 
     public void ProcessData()
     {
+        var _db = DbFactory.CreateDbContext("mssqldb1");
         var response = _db.ToTupleOp<Person, Office>("dbo.GetDataForProcess");
 
         if(response.Success)
@@ -113,6 +120,8 @@ public class MyComponent
 
     public void ManyFormsToGetData()
     {
+        var _db = DbFactory.CreateDbContext("mssqldb1");
+
         Person person = _db.ToSingle<Person>("SELECT * FROM Person WHERE Id = 43");
 
         IReadOnlyList<Person> people = _db.ToList<Person>("SELECT * FROM Person WHERE name like '%jhon%'");
@@ -122,16 +131,12 @@ public class MyComponent
 }
 ```
 
-### More options to configure:
+### Options to configure:
 
 * **Culture**: Default 'en-US' (resource : https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/a9eac961-e77d-41a6-90a5-ce1a8b0cdb9c)
-* **User**: Username for string connection.
-* **Password**: Password for string connection. (type SecureString)
 * **StringConnection**: This can be combine optionally with User and Password.
 * **DetailErrorMessage**: Default false, return detail information when errors ocurrs and also parameters values.
-* **SensitiveDataLog**:  Default false, hide Parameters values.
-* **StrictMode**: Default false, all columns returned from database query must be match with fields in the class.
-* **MaxDegreeOfParallelism**: Default 1, useful when you need retrieve high volume of data and maintain original order. Depends on amount of logical processors you have
+* **HideSensibleDataValue**:  Default false, hide sensible data value in error message and log.
 * **ConnectionTimeout** : Default 0, time out for database request.
 
 ## Perfomance
@@ -155,29 +160,17 @@ Namespace=Thomas.Tests.Performance.Benchmark  Type=ThomasDataAdapterBenckmark
 
 
 ```
-|                         Method |     Mean |   StdDev |    Error |    Op/s |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|------------------------------- |---------:|---------:|---------:|--------:|-------:|------:|------:|----------:|
-|                       Single<> | 123.5 us |  0.37 us |  0.71 us | 8,095.1 | 1.8750 |     - |     - |      8 KB |
-|                     SingleOp<> | 124.3 us |  0.93 us |  1.12 us | 8,046.2 | 1.9531 |     - |     - |      8 KB |
-|  'SingleOp<> T with nullables' | 124.4 us |  0.46 us |  0.55 us | 8,038.0 | 1.9531 |     - |     - |      8 KB |
-|  'ToListOp<> T with nullables' | 125.8 us |  2.95 us |  4.96 us | 7,946.5 | 2.0313 |     - |     - |      8 KB |
-|  'ToListOp<> T with nullables' | 126.0 us |  0.62 us |  0.74 us | 7,935.7 | 1.9531 |     - |     - |      8 KB |
-|                     ToListOp<> | 126.0 us |  1.37 us |  2.62 us | 7,933.5 | 2.0313 |     - |     - |      8 KB |
-|    'ToList<> T with nullables' | 127.1 us |  0.69 us |  1.32 us | 7,868.4 | 1.8750 |     - |     - |      8 KB |
-|    'Single<> T with nullables' | 127.5 us |  4.29 us |  6.48 us | 7,840.7 | 1.8750 |     - |     - |      8 KB |
-|  'SingleOp<> T with nullables' | 128.0 us |  0.39 us |  0.74 us | 7,815.2 | 2.0313 |     - |     - |      8 KB |
-|                       Single<> | 128.1 us |  3.38 us |  2.47 us | 7,807.5 | 1.9531 |     - |     - |      8 KB |
-|                       ToList<> | 128.1 us |  3.38 us |  5.11 us | 7,806.2 | 1.8750 |     - |     - |      8 KB |
-|    'ToList<> T with nullables' | 128.2 us |  2.33 us |  2.37 us | 7,800.7 | 1.9531 |     - |     - |      8 KB |
-|                       ToList<> | 128.8 us |  2.81 us |  2.53 us | 7,762.4 | 1.9531 |     - |     - |      8 KB |
-|                     SingleOp<> | 129.7 us |  0.56 us |  0.85 us | 7,711.0 | 1.8750 |     - |     - |      8 KB |
-|    'Single<> T with nullables' | 130.0 us |  0.73 us |  0.82 us | 7,691.1 | 1.9531 |     - |     - |      8 KB |
-|                     ToListOp<> | 139.3 us |  2.23 us |  2.38 us | 7,177.7 | 1.9531 |     - |     - |      8 KB |
-|                    ToTupleOp<> | 140.1 us |  0.50 us |  0.59 us | 7,137.9 | 3.9063 |     - |     - |     17 KB |
-| 'ToTupleOp<> T with nullables' | 141.0 us |  0.37 us |  0.40 us | 7,092.4 | 3.9063 |     - |     - |     17 KB |
-|   'ToTuple<> T with nullables' | 144.0 us |  1.63 us |  1.95 us | 6,946.8 | 3.9063 |     - |     - |     17 KB |
-|   'ToTuple<> T with nullables' | 144.7 us |  6.08 us |  9.19 us | 6,909.9 | 3.9063 |     - |     - |     17 KB |
-|                      ToTuple<> | 147.9 us |  1.90 us |  2.14 us | 6,760.0 | 3.9063 |     - |     - |     17 KB |
-|                    ToTupleOp<> | 149.3 us |  0.75 us |  1.27 us | 6,699.1 | 3.9063 |     - |     - |     17 KB |
-| 'ToTupleOp<> T with nullables' | 161.8 us |  7.99 us | 12.08 us | 6,181.6 | 3.9063 |     - |     - |     17 KB |
-|                      ToTuple<> | 173.3 us | 32.93 us | 49.79 us | 5,769.8 | 3.9063 |     - |     - |     17 KB |
+| Detailed Runtime                         | Type                       | Method                       | Mean           | StdDev       | Error        | Op/s        | GcMode             | Completed Work Items | Lock Contentions | Gen0   | Allocated |
+|----------------------------------------- |--------------------------- |----------------------------- |---------------:|-------------:|-------------:|------------:|------------------- |---------------------:|-----------------:|-------:|----------:|
+| .NET 8.0.1 (8.0.123.58001)               | ThomasDataAdapterBenckmark | 'ToList<> (buffered)'        |       881.0 ns |     24.99 ns |     17.42 ns | 1,135,053.3 | Toolchain=.NET 8.0 |                    - |                - | 0.0343 |     440 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | ThomasDataAdapterBenckmark | 'ToList<> (buffered)'        |     1,066.4 ns |      0.00 ns |           NA |   937,747.7 | ShortRun           |               0.0000 |                - | 0.0488 |     624 B |
+| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> List (unbuffered)' |   558,085.4 ns | 24,088.59 ns | 10,974.18 ns |     1,791.8 | Toolchain=.NET 8.0 |                    - |                - |      - |    8481 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> List (unbuffered)' |   561,390.1 ns |      0.00 ns |           NA |     1,781.3 | ShortRun           |               0.0013 |                - | 0.6250 |    8168 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | ThomasDataAdapterBenckmark | 'ToList<> (unbuffered)'      |   562,313.2 ns |      0.00 ns |           NA |     1,778.4 | ShortRun           |               0.0013 |                - | 0.6250 |   10760 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<dynamic> (buffered)'  |   567,313.9 ns |      0.00 ns |           NA |     1,762.7 | ShortRun           |               0.0013 |                - | 0.6250 |    8384 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> (unbuffered)'      |   570,249.6 ns |      0.00 ns |           NA |     1,753.6 | ShortRun           |               0.0013 |                - | 0.6250 |    8096 B |
+| .NET 8.0.1 (8.0.123.58001)               | ThomasDataAdapterBenckmark | 'ToList<> (unbuffered)'      |   592,551.6 ns | 22,874.55 ns | 11,727.99 ns |     1,687.6 | Toolchain=.NET 8.0 |                    - |                - |      - |   10161 B |
+| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<dynamic> (buffered)'  |   593,874.5 ns | 29,064.91 ns | 11,758.83 ns |     1,683.9 | Toolchain=.NET 8.0 |                    - |                - |      - |    8577 B |
+| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> (unbuffered)'      |   632,908.2 ns | 32,045.51 ns | 12,589.98 ns |     1,580.0 | Toolchain=.NET 8.0 |                    - |                - |      - |    8025 B |
+| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> (unbuffered)'      | 1,000,659.2 ns |      0.00 ns |           NA |       999.3 | ShortRun           |               0.0025 |                - |      - |    8464 B |
+| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> (unbuffered)'      | 1,032,863.4 ns | 30,836.70 ns | 20,192.91 ns |       968.2 | Toolchain=.NET 8.0 |                    - |                - |      - |    8249 B |

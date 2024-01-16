@@ -1,24 +1,22 @@
-﻿using System.Collections.Generic;
-
-namespace Thomas.Database
+﻿namespace Thomas.Database
 {
-    public class DataBaseOperationResult
+    public class DbOpResult
     {
         public bool Success { get; set; }
+        public int RowsAffected { get; set; }
         public string ErrorMessage { get; set; }
-        public Dictionary<string, object> OutParameters { get; set; }
 
-        public static DataBaseOperationResult SuccessResult()
+        public static DbOpResult SuccessResult()
         {
-            return new DataBaseOperationResult
+            return new DbOpResult
             {
                 Success = true
             };
         }
 
-        public static DataBaseOperationResult ErrorResult(string message)
+        public static T ErrorResult<T>(in string message) where T : DbOpResult, new()
         {
-            return new DataBaseOperationResult
+            return new T()
             {
                 ErrorMessage = message,
                 Success = false
@@ -26,31 +24,47 @@ namespace Thomas.Database
         }
     }
 
-    public class DataBaseOperationResult<T> : DataBaseOperationResult
+    public class DbOpAsyncResult : DbOpResult
     {
-        public DataBaseOperationResult()
-        {
-            OutParameters = new Dictionary<string, object>();
-        }
+        public bool Cancelled { get; set; }
 
+        public static T OperationCancelled<T>() where T : DbOpAsyncResult, new()
+        {
+            return new T()
+            {
+                Success = false,
+                Cancelled = true
+            };
+        }
+    }
+
+    public class DbOpResult<T> : DbOpResult
+    {
         public T Result { get; set; }
 
-        public static DataBaseOperationResult<T> SuccessResult(T result)
+        public static DbOpResult<T> SuccessResult(T result)
         {
-            return new DataBaseOperationResult<T>
+            return new DbOpResult<T>
             {
                 Success = true,
                 Result = result
             };
         }
 
-        public new static DataBaseOperationResult<T> ErrorResult(string message)
+    }
+
+    public class DbOpAsyncResult<T> : DbOpAsyncResult
+    {
+        public T Result { get; set; }
+
+        public static DbOpAsyncResult<T> SuccessResult(T result)
         {
-            return new DataBaseOperationResult<T>
+            return new DbOpAsyncResult<T>
             {
-                ErrorMessage = message,
-                Success = false
+                Success = true,
+                Result = result
             };
         }
+
     }
 }

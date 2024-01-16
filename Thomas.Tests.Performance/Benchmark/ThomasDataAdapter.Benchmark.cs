@@ -1,19 +1,21 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
+using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
     [Description("ThomasDataAdapter")]
-    public class ThomasDataAdapterBenckmark : Setup
+    [ThreadingDiagnoser]
+    [MemoryDiagnoser]
+    public class ThomasDataAdapterBenckmark : BenckmarkBase
     {
-        string Query
-        {
-            get
-            {
-                return $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;";
-            }
-        }
+        private readonly Consumer consumer = new Consumer();
 
         [GlobalSetup]
         public void Setup()
@@ -21,89 +23,188 @@ namespace Thomas.Tests.Performance.Benchmark
             Start();
         }
 
-
-        [Benchmark(Description = "ToList<>")]
+        [Benchmark(Description = "ToList<> (unbuffered)")]
         public void ToList()
         {
-            service.ToList<Person>(Query, false);
+            var list = Database.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 });
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "ToList<> (buffered)")]
+        public void ToListCached()
+        {
+            var list = Database2.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 });
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "ToList<> (buffered & update)")]
+        public void ToListCached2()
+        {
+            var list = Database2.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 }, refresh: true);
+            list.Consume(consumer);
         }
 
         [Benchmark(Description = "Single<>")]
-        public void Single()
+        public Person Single()
         {
-            service.ToSingle<Person>(Query, false);
+            return Database.ToSingle<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "ToListAsync<>")]
+        public async Task ToListAsync()
+        {
+            var result = await Database.ToListAsync<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
+            result.Consume(consumer);
+        }
+
+        [Benchmark(Description = "SingleAsync<>")]
+        public async Task<Person> SingleAsync()
+        {
+            return await Database.ToSingleAsync<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
         }
 
         [Benchmark(Description = "ToTuple<>")]
-        public void ToTuple()
+        public Tuple<IEnumerable<Person>, IEnumerable<Person>> ToTuple()
         {
-            service.ToTuple<Person, Person>(Query + Query, false);
+            return Database.ToTuple<Person, Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToList<> T with nullables")]
         public void ToList2()
         {
-            service.ToList<PersonWithNullables>(Query, false);
+            var result = Database.ToList<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+            result.Consume(consumer);
         }
 
         [Benchmark(Description = "Single<> T with nullables")]
-        public void Single2()
+        public PersonWithNullables Single2()
         {
-            service.ToSingle<PersonWithNullables>(Query, false);
+            return Database.ToSingle<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "ToListAsync<> T with nullables")]
+        public async Task ToListAsync2()
+        {
+            var result = await Database.ToListAsync<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
+            result.Consume(consumer);
+        }
+
+        [Benchmark(Description = "SingleAsync<> T with nullables")]
+        public async Task<PersonWithNullables> SingleAsync2()
+        {
+            return await Database.ToSingleAsync<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
         }
 
         [Benchmark(Description = "ToTuple<> T with nullables")]
-        public void ToTuple2()
+        public Tuple<IEnumerable<PersonWithNullables>, IEnumerable<PersonWithNullables>> ToTuple2()
         {
-            service.ToTuple<PersonWithNullables, PersonWithNullables>(Query + Query, false);
+            return Database.ToTuple<PersonWithNullables, PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<>")]
-        public void ToListOp()
+        public DbOpResult<IEnumerable<Person>> ToListOp()
         {
-            service.ToListOp<Person>(Query, false);
+            return Database.ToListOp<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "SingleOp<>")]
-        public void SingleOp()
+        public DbOpResult<Person> SingleOp()
         {
-            service.ToSingle<Person>(Query, false);
+            return Database.ToSingleOp<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "ToListOp<>")]
+        public async Task<DbOpAsyncResult<IEnumerable<Person>>> ToListOpAsync()
+        {
+            return await Database.ToListOpAsync<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
+        }
+
+        [Benchmark(Description = "SingleOp<>")]
+        public async Task<DbOpAsyncResult<Person>> SingleOpAsync()
+        {
+            return await Database.ToSingleOpAsync<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
         }
 
         [Benchmark(Description = "ToTupleOp<>")]
-        public void ToTupleOp()
+        public DbOpResult<Tuple<IEnumerable<Person>, IEnumerable<Person>>> ToTupleOp()
         {
-            service.ToTuple<Person, Person>(Query + Query, false);
+            return Database.ToTupleOp<Person, Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<> T with nullables")]
-        public void ToList2op()
+        public DbOpResult<IEnumerable<PersonWithNullables>> ToList2op()
         {
-            service.ToListOp<PersonWithNullables>(Query, false);
+            return Database.ToListOp<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<> T from store procedure")]
-        public void ToList3op()
+        public DbOpResult<IEnumerable<Person>> ToList3op()
         {
-            service.ToListOp<Person>(new { age = 5 } , "get_persons");
+            return Database.ToListOp<Person>("get_persons", new { age = 5 });
         }
 
         [Benchmark(Description = "ToListOp<> T with nullables from store procedure")]
-        public void ToList4op()
+        public DbOpResult<IEnumerable<PersonWithNullables>> ToList4op()
         {
-            service.ToListOp<PersonWithNullables>(new { age = 5 }, "get_persons");
+            return Database.ToListOp<PersonWithNullables>("get_persons", new { age = 5 });
         }
 
         [Benchmark(Description = "SingleOp<> T with nullables")]
-        public void Single2Op()
+        public DbOpResult<PersonWithNullables> Single2Op()
         {
-            service.ToSingleOp<PersonWithNullables>(Query, false);
+            return Database.ToSingleOp<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToTupleOp<> T with nullables")]
-        public void ToTuple2Op()
+        public DbOpResult<Tuple<IEnumerable<PersonWithNullables>, IEnumerable<PersonWithNullables>>> ToTuple2Op()
         {
-            service.ToTuple<PersonWithNullables, PersonWithNullables>(Query + Query, false);
+            return Database.ToTupleOp<PersonWithNullables, PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "Execute with search term")]
+        public int Execute()
+        {
+            var searchTerm = new SearchTerm(id: 1);
+            return Database.Execute("get_byId", searchTerm);
+        }
+
+        [Benchmark(Description = "ExecuteOp with search term")]
+        public DbOpResult ExecuteOp()
+        {
+            var searchTerm = new SearchTerm(id: 1);
+            return Database.ExecuteOp("get_byId", searchTerm);
+        }
+
+        [Benchmark(Description = "Execute with search term (async)")]
+        public async Task<int> ExecuteAsync()
+        {
+            var searchTerm = new SearchTerm(id: 1);
+            return await Database.ExecuteAsync("get_byId", searchTerm, CancellationToken.None);
+        }
+
+        [Benchmark(Description = "ExecuteOp with search term (async)")]
+        public async Task<DbOpAsyncResult> ExecuteOpAsync()
+        {
+            var searchTerm = new SearchTerm(id: 1);
+            return await Database.ExecuteOpAsync("get_byId", searchTerm, CancellationToken.None);
+        }
+
+        [Benchmark(Description = "ExecuteOp Resilient error")]
+        public DbOpResult ToListError()
+        {
+            return Database.ExecuteOp($"UPDATE {TableName} SET UserName2 = 'sample 2' WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "ToSingleOp<> Resilient error")]
+        public DbOpResult<Person> ToSingleOpError()
+        {
+            return Database.ToSingleOp<Person>($"SELECT UserName2 FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "ToListOp<> Resilient error")]
+        public DbOpResult<IEnumerable<Person>> ToListOpError()
+        {
+            return Database.ToListOp<Person>($"SELECT UserName2 FROM {TableName} WHERE Id = 1;");
         }
 
         [GlobalCleanup]
