@@ -2,17 +2,16 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Thomas.Database
 {
     public interface IDatabaseProvider
     {
-        DbConnection CreateConnection(string connection);
-        DbCommand CreateCommand(DbConnection connection, string script, bool isStoreProcedure);
-        Task<DbCommand> CreateCommandAsync(DbConnection connection, string script, bool isStoreProcedure, CancellationToken cancellationToken);
-        bool IsCancellatedOperationException(Exception? excetion);
-        IEnumerable<IDataParameter> ExtractValuesFromSearchTerm(object searchTerm, string metadataKey);
+        DbConnection CreateConnection(in string connection);
+        DbCommand CreateCommand(in DbConnection connection, in string script, in bool isStoreProcedure);
+        bool IsCancellatedOperationException(in Exception? excetion);
+        IEnumerable<IDbDataParameter> GetParams(string metadataKey, object searchTerm);
+        void LoadParameterValues(IEnumerable<IDbDataParameter> parameters, in object searchTerm, in string metadataKey);
+        IEnumerable<dynamic> GetParams(string metadataKey);
     }
 }

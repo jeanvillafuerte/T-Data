@@ -4,19 +4,9 @@ namespace Thomas.Database.Exceptions
 {
     public sealed class UnknownParameterDirectionException : Exception { }
 
-    public sealed class DbConfigurationNotFoundException : Exception
+    public sealed class DbSettingsNotFoundException : Exception
     {
-        public DbConfigurationNotFoundException(string message) : base(message) { }
-    }
-
-    public sealed class DbSignatureNotFoundException : Exception
-    {
-        public DbSignatureNotFoundException(string message) : base(message) { }
-    }
-
-    public sealed class DbProviderNotFoundException : Exception
-    {
-        public DbProviderNotFoundException(string message) : base(message) { }
+        public DbSettingsNotFoundException(string message) : base(message) { }
     }
 
     public sealed class EmptyDataReaderException : Exception
@@ -39,4 +29,6 @@ namespace Thomas.Database.Exceptions
             DbColumnsNoMatch = dbColumnsNoMatch;
         }
     }
+
+    public sealed class DuplicateSignatureException : Exception { }
 }

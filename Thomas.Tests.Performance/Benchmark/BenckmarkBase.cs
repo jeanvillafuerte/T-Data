@@ -1,23 +1,20 @@
 ﻿using System;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using BenchmarkDotNet.Attributes;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
-using Thomas.Database.Strategy.Factory;
-using System.Collections.Specialized;
+using Thomas.Cache.Factory;
+using Thomas.Cache;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
     [BenchmarkCategory("ORM")]
     public class BenckmarkBase
     {
-        protected IDatabase service;
-
+        protected IDatabase Database;
+        protected ICachedDatabase Database2;
         protected string TableName;
-
         protected bool CleanData;
-
         protected string StringConnection;
 
         public void Start()
@@ -34,15 +31,11 @@ namespace Thomas.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            IServiceCollection serviceCollection = new ServiceCollection();
-            serviceCollection.AddDbFactory();
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db", StringConnection = cnx, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings { Signature = "db", StringConnection = cnx, ConnectionTimeout = 0 });
 
-            var serviceProvider = serviceCollection.BuildServiceProvider();
-
-            service = serviceProvider.GetRequiredService<IDbFactory>().CreateDbContext("db");
-
-            SetDataBase(service, int.Parse(len));
+            Database = DbFactory.CreateDbContext("db");
+            Database2 = DbResultCachedFactory.CreateDbContext("db");
+            SetDataBase(Database, int.Parse(len));
         }
 
         void SetDataBase(IDatabase service, int length)
@@ -127,7 +120,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             if (!result.Success)
             {
-                throw new Exception(result.ErrorMessage);
+                Console.WriteLine(result.ErrorMessage);
             }
         }
 
@@ -135,7 +128,7 @@ namespace Thomas.Tests.Performance.Benchmark
         {
             if (CleanData)
             {
-                service.Execute($"DROP TABLE {TableName}", false);
+                Database.Execute($"DROP TABLE {TableName}", false);
             }
         }
     }

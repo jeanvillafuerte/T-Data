@@ -14,7 +14,7 @@
             };
         }
 
-        public static T ErrorResult<T>(string message) where T : DbOpResult, new()
+        public static T ErrorResult<T>(in string message) where T : DbOpResult, new()
         {
             return new T()
             {

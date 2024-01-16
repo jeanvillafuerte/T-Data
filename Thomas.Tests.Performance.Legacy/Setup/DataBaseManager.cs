@@ -1,6 +1,5 @@
 ﻿using System;
 using Thomas.Database;
-using Thomas.Database.Strategy.Factory;
 
 namespace Thomas.Tests.Performance.Legacy.Setup
 {
@@ -14,10 +13,10 @@ namespace Thomas.Tests.Performance.Legacy.Setup
         private readonly IDatabase _database1;
         private readonly IDatabase _database2;
 
-        public DataBaseManager(IDbFactory dbFactory)
+        public DataBaseManager()
         {
-            _database1 = dbFactory.CreateDbContext("db1");
-            _database2 = dbFactory.CreateDbContext("db2");
+            _database1 = DbFactory.CreateDbContext("db1");
+            _database2 = DbFactory.CreateDbContext("db2");
         }
 
         public void LoadDatabases(int rows, string tableName)
@@ -49,7 +48,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
                                                 END";
 
-            var result = service.ExecuteOp(tableScriptDefinition, false);
+            var result = service.ExecuteOp(tableScriptDefinition);
 
             if (!result.Success)
             {
@@ -58,42 +57,42 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
             var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_{tableName}]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_{tableName}] AS' END ";
 
-            result = service.ExecuteOp(checkSp1, false);
+            result = service.ExecuteOp(checkSp1);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-            result = service.ExecuteOp(checkSp2, false);
+            result = service.ExecuteOp(checkSp2);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var checkSp3 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byAge]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byAge] AS' END ";
 
-            result = service.ExecuteOp(checkSp3, false);
+            result = service.ExecuteOp(checkSp3);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var createSp = $"ALTER PROCEDURE get_{tableName}(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp, false);
+            result = service.ExecuteOp(createSp);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
 
-            result = service.ExecuteOp(createSp2, false);
+            result = service.ExecuteOp(createSp2);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var createSp3 = $"ALTER PROCEDURE get_byAge(@age INT, @total INT OUTPUT) AS SELECT * FROM {tableName} WHERE Age = @age SELECT @total = COUNT(1) FROM {tableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp3, false);
+            result = service.ExecuteOp(createSp3);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
@@ -107,7 +106,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 								SET @IDX = @IDX + 1;
 							END";
 
-            var dataResult = service.ExecuteOp(data, false);
+            var dataResult = service.ExecuteOp(data);
 
             if (!dataResult.Success)
             {
@@ -116,11 +115,11 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
             var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
 
-            result = service.ExecuteOp(createIndexByAge, false);
+            result = service.ExecuteOp(createIndexByAge);
 
             if (!result.Success)
             {
-                throw new Exception(result.ErrorMessage);
+                Console.WriteLine($"Error : {result.ErrorMessage}");
             }
         }
 
@@ -128,7 +127,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
         {
             if (clean)
             {
-                service.Execute($"DROP TABLE {tableName}", false);
+                service.Execute($"DROP TABLE {tableName}");
             }
         }
     }

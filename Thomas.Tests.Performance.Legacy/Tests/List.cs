@@ -11,144 +11,151 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 {
     public class List : TestCase, ITestCase
     {
-        public void Execute(IDatabase service, string databaseName, string tableName)
+        private Stopwatch _stopWatch;
+
+        public List()
         {
-            var stopWatch = new Stopwatch();
+            _stopWatch = new Stopwatch();
+        }
+
+        public void Execute(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        {
+            _stopWatch.Reset();
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = service.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false);
+                var data = service.ToList<Person>($"SELECT * FROM {tableName} WHERE Id > @Id", new { Id = 0 });
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}", data.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = service.ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false);
+                var data = service.ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}");
 
-                WriteTestResult(i + 1, "ToListOp<>", databaseName, stopWatch.ElapsedMilliseconds, $"by query, records: {data.Result.Count()}");
+                WriteTestResult(i + 1, "ToListOp<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Result.Count()}", data.Result.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = service.ToList<Person>(new { age = 5 }, $@"get_{tableName}", true);
+                var data = service.ToList<Person>($@"get_{tableName}", new { age = 5 });
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = service.ToListOp<Person>(new { age = 5 }, $@"get_{tableName}");
+                var data = service.ToListOp<Person>($@"get_{tableName}", new { age = 5 });
 
-                WriteTestResult(i + 1, "ToListOp<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Result.Count()}");
+                WriteTestResult(i + 1, "ToListOp<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Result.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
                 var st = new ListResult(age: 35);
 
-                var data = service.ToList<Person>(st, "get_byAge", true);
+                var data = service.ToList<Person>("get_byAge", st);
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
         }
 
-        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName)
+        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
         {
-            var stopWatch = new Stopwatch();
+            _stopWatch.Reset();
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = await service.ToListAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false, CancellationToken.None);
+                var data = await service.ToListAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, CancellationToken.None);
 
-                WriteTestResult(i + 1, "ToListAsync<>", databaseName, stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToListAsync<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}", data.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = await service.ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false, CancellationToken.None);
+                var data = await service.ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, CancellationToken.None);
 
-                WriteTestResult(i + 1, "ToListOpAsync<>", databaseName, stopWatch.ElapsedMilliseconds, $"by query, records: {data.Result.Count()}");
+                WriteTestResult(i + 1, "ToListOpAsync<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Result.Count()}", data.Result.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = await service.ToListAsync<Person>(new { age = 5 }, $@"get_{tableName}", CancellationToken.None);
+                var data = await service.ToListAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None);
 
-                WriteTestResult(i + 1, "ToListAsync<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToListAsync<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = await service.ToListOpAsync<Person>(new { age = 5 }, $@"get_{tableName}", CancellationToken.None);
+                var data = await service.ToListOpAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None);
 
-                WriteTestResult(i + 1, "ToListOpAsync<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Result.Count()}");
+                WriteTestResult(i + 1, "ToListOpAsync<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Result.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
                 var st = new ListResult(age: 35);
 
-                var data = await service.ToListAsync<Person>(st, "get_byAge", CancellationToken.None);
+                var data = await service.ToListAsync<Person>("get_byAge", st, CancellationToken.None);
 
-                WriteTestResult(i + 1, "ToListAsync<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToListAsync<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             for (int i = 0; i < 10; i++)
@@ -157,57 +164,85 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(100);
 
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = await service.ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false, source.Token);
+                var data = await service.ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, source.Token);
 
-                WriteTestResult(i + 1, "ToListOpAsync<> Cancelled", databaseName, stopWatch.ElapsedMilliseconds, $"by query, cancelled = {data.Cancelled}");
+                WriteTestResult(i + 1, "ToListOpAsync<> Cancelled", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, cancelled = {data.Cancelled}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName)
+        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName, int expectedItems = 0)
         {
-            var stopWatch = new Stopwatch();
+            _stopWatch.Reset();
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = database.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", false);
+                var data = database.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}");
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}", data.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
-                var data = database.ToList<Person>(new { age = 5 }, $@"get_{tableName}");
+                var data = database.ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, refresh: true);
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<> (refresh)", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, records: {data.Count()}", data.Count(), expectedItems);
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
+
+                var data = database.ToList<Person>($@"get_{tableName}", new { age = 5 });
+
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_{tableName}, records: {data.Count()}");
+
+                _stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
 
                 var st = new ListResult(age: 35);
 
-                var data = database.ToList<Person>(st, "get_byAge");
+                var data = database.ToList<Person>("get_byAge", st);
 
-                WriteTestResult(i + 1, "ToList<>", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
+                WriteTestResult(i + 1, "ToList<>", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
+
+                var st = new ListResult(age: 35);
+
+                var data = database.ToList<Person>("get_byAge", st, refresh: true);
+
+                WriteTestResult(i + 1, "ToList<> (refresh)", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, ouput Total: {st.Total}, records: {data.Count()}");
+
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");

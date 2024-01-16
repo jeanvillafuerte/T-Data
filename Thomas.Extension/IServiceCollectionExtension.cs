@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Thomas.Cache.Factory;
 
 namespace Thomas.Cache
 {
@@ -9,7 +8,6 @@ namespace Thomas.Cache
         public static IServiceCollection AddDbResultCached(this IServiceCollection services)
         {
             services.TryAddSingleton<ICachedDatabase, CachedDatabase>();
-            services.TryAddSingleton<IDbResultCachedFactory, DbResultCachedFactory>();
             return services;
         }
     }

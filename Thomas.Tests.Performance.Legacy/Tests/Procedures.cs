@@ -10,53 +10,58 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 {
     public class Procedures : TestCase, ITestCase
     {
-        public void Execute(IDatabase service, string databaseName, string tableName)
+        private Stopwatch _stopWatch;
+
+        public Procedures()
         {
-            var stopWatch = new Stopwatch();
+            _stopWatch = new Stopwatch();
+        }
+
+        public void Execute(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        {
+            _stopWatch.Reset();
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
                 var st = new SearchTerm(id: 1);
 
-                service.ExecuteOp(st, "get_byid");
+                service.ExecuteOp("get_byid", st);
 
-                WriteTestResult(i + 1, "ExecuteOp", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byid, output userName: {st.UserName}");
+                WriteTestResult(i + 1, "ExecuteOp", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byid, output userName: {st.UserName}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
 
             for (int i = 0; i < 10; i++)
             {
-                stopWatch.Start();
+                _stopWatch.Start();
 
                 var st = new ListResult(age: 35);
 
-                service.ToListOp<Person>(st, "get_byAge");
+                service.ToListOp<Person>("get_byAge", st);
 
-                WriteTestResult(i + 1, "ToListOp", databaseName, stopWatch.ElapsedMilliseconds, $"sp: get_byAge, output total: {st.Total}");
+                WriteTestResult(i + 1, "ToListOp", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, output total: {st.Total}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
         }
 
-        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName)
+        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
         {
-            var stopWatch = new Stopwatch();
+            _stopWatch.Reset();
 
             for (int i = 0; i < 10; i++)
             {
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(1);
 
-                stopWatch.Start();
-
-                var st = new SearchTerm(id: 1);
+                _stopWatch.Start();
 
                 try
                 {
@@ -64,10 +69,10 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 }
                 catch
                 {
-                    WriteTestResult(i + 1, "ExecuteAsync", databaseName, stopWatch.ElapsedMilliseconds, $"script WAITFOR DELAY, test cancellation token error");
+                    WriteTestResult(i + 1, "ExecuteAsync", databaseName, _stopWatch.ElapsedMilliseconds, $"script WAITFOR DELAY, test cancellation token error");
                 }
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             for (int i = 0; i < 10; i++)
@@ -75,20 +80,36 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(100);
 
-                stopWatch.Start();
+                _stopWatch.Start();
 
                 var data = await service.ExecuteOpAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
 
-                WriteTestResult(i + 1, "ExecuteOpAsync", databaseName, stopWatch.ElapsedMilliseconds, $"by query, cancelled = {data.Cancelled}");
+                WriteTestResult(i + 1, "ExecuteOpAsync", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, cancelled = {data.Cancelled}");
 
-                stopWatch.Reset();
+                _stopWatch.Reset();
             }
 
             Console.WriteLine("");
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName)
+        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName, int expectedItems = 0)
         {
+            _stopWatch.Reset();
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
+
+                var st = new ListResult(age: 35);
+
+                database.ToList<Person>("get_byAge", st);
+
+                WriteTestResult(i + 1, "ToListOp", databaseName, _stopWatch.ElapsedMilliseconds, $"sp: get_byAge, output total: {st.Total}");
+
+                _stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
         }
     }
 }

@@ -1,15 +1,11 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using Thomas.Database.Core;
 
 namespace Thomas.Database
 {
-    public interface IDatabase : IDbOperationResult, IDbResulSet
+    public interface IDatabase : IDbOperationResult, IDbOperationResultAsync, IDbResulSet, IDbResultSetAsync
     {
-        int Execute(string script, bool isStoreProcedure = true);
-        int Execute(object inputData, string procedureName);
-
-        Task<int> ExecuteAsync(string script, bool isStoreProcedure, CancellationToken cancellationToken);
-        Task<int> ExecuteAsync(object inputData, string procedureName, CancellationToken cancellationToken);
+        int Execute(string script, object? inputData = null);
+        IEnumerable<dynamic> GetMetadataParameter(string script, object? parameters);
     }
 }

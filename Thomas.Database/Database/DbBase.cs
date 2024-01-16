@@ -11,7 +11,7 @@ namespace Thomas.Database
 
         protected IDatabaseProvider Provider { get; set; }
 
-        protected ThomasDbStrategyOptions Options { get; set; }
+        protected DbSettings Options { get; set; }
 
         #endregion
 
@@ -28,7 +28,7 @@ namespace Thomas.Database
             stringBuilder.AppendLine("Store Procedure:");
             stringBuilder.AppendLine("\t" + procedureName);
 
-            if (parameters != null && !Options.SensitiveDataLog)
+            if (parameters != null && !Options.HideSensibleDataValue)
             {
                 stringBuilder.AppendLine("Parameters:");
 

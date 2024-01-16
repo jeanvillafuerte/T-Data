@@ -4,9 +4,9 @@ using System;
 using System.Threading.Tasks;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
+using Thomas.Cache.MemoryCache;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
-using Thomas.Database.Strategy.Factory;
 using Thomas.Tests.Performance.Legacy.Setup;
 
 namespace Thomas.Tests.Performance.Legacy
@@ -22,23 +22,23 @@ namespace Thomas.Tests.Performance.Legacy
         static void Main(string[] args)
         {
             WriteStep("Starting setup...");
-            Setup();
+            Setup(out var rows);
             WriteStep("Completed Setup...", true);
 
             WriteStep("Starting tests database1...");
-            RunTestsDatabase(Database1, "db1");
+            RunTestsDatabase(Database1, "db1", rows);
             WriteStep("Completed tests database1...", true);
 
             WriteStep("Starting tests database2...");
-            RunTestsDatabase(Database2, "db2");
+            RunTestsDatabase(Database2, "db2", rows);
             WriteStep("Completed tests database2...", true);
 
-            //WriteStep("Starting tests database2 (result cached)...");
-            //RunTestsCachedDatabase(CachedResultDatabase, "db2 (cached)");
-            //WriteStep("Completed tests database2 (result cached)...", true);
+            WriteStep("Starting tests database2 (result cached)...");
+            RunTestsCachedDatabase(CachedResultDatabase, "db2 (cached)", rows);
+            WriteStep("Completed tests database2 (result cached)...", true);
 
             WriteStep("Starting tests database2 (async)...");
-            RunTestsDatabaseAsync(Database2, "db2 (async)");
+            RunTestsDatabaseAsync(Database2, "db2 (async)", rows);
             WriteStep("Completed tests database2 (async)...", true);
 
             WriteStep("Dropping tables...");
@@ -48,49 +48,7 @@ namespace Thomas.Tests.Performance.Legacy
             Console.ReadKey();
         }
 
-        static void WriteStep(string message, bool includeBlankLine = false)
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine(message);
-            if (includeBlankLine)
-                Console.WriteLine();
-        }
-
-        static void RunTestsDatabase(IDatabase database, string databaseName)
-        {
-            Task.WaitAll(
-                Task.Run(() => new Tests.Single().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.List().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Procedures().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Error().Execute(database, databaseName, TableName))
-                );
-        }
-
-        static void RunTestsCachedDatabase(ICachedDatabase database, string databaseName)
-        {
-            Task.WaitAll(
-                Task.Run(() => new Tests.Single().ExecuteCachedDatabase(database, databaseName, TableName)),
-                Task.Run(() => new Tests.List().ExecuteCachedDatabase(database, databaseName, TableName)),
-                //Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Procedures().ExecuteCachedDatabase(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Error().ExecuteCachedDatabase(database, databaseName, TableName))
-                );
-
-            database.ReleaseCache();
-        }
-
-        static void RunTestsDatabaseAsync(IDatabase database, string databaseName)
-        {
-            Task.WaitAll(
-                Task.Run(async () => await new Tests.List().ExecuteAsync(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Procedures().ExecuteAsync(database, databaseName, TableName)),
-                Task.Run(() => new Tests.Error().Execute(database, databaseName, TableName))
-                );
-        }
-
-        static void Setup()
+        static void Setup(out int rowsGenerated)
         {
             var builder = new ConfigurationBuilder();
 
@@ -106,27 +64,67 @@ namespace Thomas.Tests.Performance.Legacy
 
             IServiceCollection serviceCollection = new ServiceCollection();
 
-            serviceCollection.AddDbFactory();
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0, UseCache = false });
-            serviceCollection.AddSqlDatabase(new ThomasDbStrategyOptions { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0, UseCache = true });
-            serviceCollection.AddDbResultCached();
+            SqlServerFactory.AddDb(new DbSettings { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0 });
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
-
             var loadDataManager = serviceProvider.GetService<IDataBaseManager>();
 
-            loadDataManager.LoadDatabases(int.Parse(len), TableName);
+            rowsGenerated = int.Parse(len);
+            loadDataManager.LoadDatabases(rowsGenerated, TableName);
 
-            Database1 = serviceProvider.GetRequiredService<IDbFactory>().CreateDbContext("db1");
-            Database2 = serviceProvider.GetRequiredService<IDbFactory>().CreateDbContext("db2");
-            CachedResultDatabase = serviceProvider.GetRequiredService<IDbResultCachedFactory>().CreateDbContext("db2");
+            Database1 = DbFactory.CreateDbContext("db1");
+            Database2 = DbFactory.CreateDbContext("db2");
+            CachedResultDatabase = DbResultCachedFactory.CreateDbContext("db2");
+        }
+
+        static void RunTestsDatabase(IDatabase database, string databaseName, int rows)
+        {
+            Task.WaitAll(
+                Task.Run(() => new Tests.Single().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures().Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error().Execute(database, databaseName, TableName, rows))
+                );
+        }
+
+        static void RunTestsCachedDatabase(ICachedDatabase database, string databaseName, int rows)
+        {
+            Task.WaitAll(
+                Task.Run(() => new Tests.Single().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error().ExecuteCachedDatabase(database, databaseName, TableName, rows))
+                );
+
+            database.ReleaseCache();
+        }
+
+        static void RunTestsDatabaseAsync(IDatabase database, string databaseName, int rows)
+        {
+            Task.WaitAll(
+                Task.Run(async () => await new Tests.List().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Tuple().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Procedures().ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Error().ExecuteAsync(database, databaseName, TableName, rows))
+                );
         }
 
         static void DropTables()
         {
             DataBaseManager.DropTable(Database1, true, TableName);
             DataBaseManager.DropTable(Database2, true, TableName);
+        }
+
+        static void WriteStep(string message, bool includeBlankLine = false)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine(message);
+            if (includeBlankLine)
+                Console.WriteLine();
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using BenchmarkDotNet.Running;
 using Thomas.Tests.Performance.Benchmark;
-using Thomas.Tests.Performance.Benchmark.Others;
 
 namespace Thomas.Tests.Performance
 {
@@ -10,6 +9,5 @@ namespace Thomas.Tests.Performance
         {
             new BenchmarkSwitcher(typeof(BenckmarkBase).Assembly).Run(args, new BenchmarkConfig());
         }
-
     }
 }
