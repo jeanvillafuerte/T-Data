@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Cache;
@@ -50,6 +51,44 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             }
 
             Console.WriteLine("");
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
+
+                var result = DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
+                {
+                    var data = db.ToList<Person>($"SELECT * FROM {tableName}").ToArray();
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = data[0].Id });
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = data[1].Id });
+
+                    return db.ToList<Person>($"SELECT * FROM {tableName}");
+                });
+
+                WriteTestResult(i + 1, "Transaction", databaseName, _stopWatch.ElapsedMilliseconds, $"transaction 1, output total: {result.Count()}");
+
+                _stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
+
+                DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
+                {
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_3' WHERE Id = @Id", new { Id = 1 });
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 1 });
+                    db.Rollback();
+                });
+
+                WriteTestResult(i + 1, "Transaction Rollback", databaseName, _stopWatch.ElapsedMilliseconds, $"transaction 2");
+
+                _stopWatch.Reset();
+            }
+
+            Console.WriteLine("");
         }
 
         public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
@@ -75,6 +114,8 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 _stopWatch.Reset();
             }
 
+            Console.WriteLine("");
+
             for (int i = 0; i < 10; i++)
             {
                 CancellationTokenSource source = new CancellationTokenSource();
@@ -90,6 +131,22 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             }
 
             Console.WriteLine("");
+
+            for (int i = 0; i < 10; i++)
+            {
+                _stopWatch.Start();
+
+                var result = await DbFactory.CreateDbContext("db2").ExecuteTransactionAsync(async (db) =>
+                {
+                    await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 }, CancellationToken.None);
+                    await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 2 }, CancellationToken.None);
+                    return await db.ToListAsync<Person>($"SELECT * FROM {tableName}", null, CancellationToken.None);
+                }, CancellationToken.None).Unwrap();
+
+                WriteTestResult(i + 1, "Transaction Async", databaseName, _stopWatch.ElapsedMilliseconds, $"transaction async, output total: {result.Count()}");
+
+                _stopWatch.Reset();
+            }
         }
 
         public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName, int expectedItems = 0)

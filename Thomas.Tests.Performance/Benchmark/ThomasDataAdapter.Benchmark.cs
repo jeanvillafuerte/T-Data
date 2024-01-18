@@ -207,6 +207,30 @@ namespace Thomas.Tests.Performance.Benchmark
             return Database.ToListOp<Person>($"SELECT UserName2 FROM {TableName} WHERE Id = 1;");
         }
 
+        [Benchmark(Description = "Transaction 1")]
+        public void Transaction1()
+        {
+            var list = Database.ExecuteTransaction((db) =>
+            {
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 1 });
+                return db.ToList<Person>($"SELECT * FROM {TableName}");
+            });
+
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "Transaction Rollback")]
+        public void Transaction2()
+        {
+            Database.ExecuteTransaction((db) =>
+            {
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 1 });
+                db.Rollback();
+            });
+        }
+
         [GlobalCleanup]
         public void CleanTempData()
         {

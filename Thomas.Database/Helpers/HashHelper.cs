@@ -7,7 +7,7 @@ namespace Thomas.Database
     {
         static JsonSerializerOptions _options = new JsonSerializerOptions() { DefaultBufferSize = 1024, PropertyNamingPolicy = null, WriteIndented = false, MaxDepth = 3, ReadCommentHandling = JsonCommentHandling.Disallow };
 
-        public static string GenerateHash(string query, object parameters)
+        public static string GenerateHash(string query,in object parameters)
         {
             string json = string.Empty;
 

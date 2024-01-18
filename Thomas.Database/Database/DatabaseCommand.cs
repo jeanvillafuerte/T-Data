@@ -2,10 +2,13 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Transactions;
+using System.Windows.Input;
 using Thomas.Database.Cache.Metadata;
 using Thomas.Database.Exceptions;
 
@@ -21,12 +24,14 @@ namespace Thomas.Database
         private readonly string? _script;
         private readonly string? _metadataKey;
         private readonly string? _metadataInputKey;
-        private readonly object _searchTerm;
+        private readonly object? _searchTerm;
         private readonly bool _isStoreProcedure;
 
         private DbDataReader? _reader;
         private DbCommand? _command;
+
         private DbConnection? _connection;
+        private DbTransaction? _transaction;
 
         // output parameters
         public IEnumerable<IDbDataParameter> OutParameters
@@ -51,38 +56,89 @@ namespace Thomas.Database
             }
         }
 
-        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options, in string script, in object? searchTerm)
+        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options)
+        {
+            _provider = provider;
+            _options = options;
+        }
+
+        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options, in string script, in object? searchTerm, in DbTransaction transaction = null, in DbCommand command = null)
         {
             _provider = provider;
             _options = options;
             _script = script;
             _searchTerm = searchTerm;
+            _transaction = transaction;
+            _command = command;
+            _connection = transaction?.Connection;
 
-            if(_searchTerm != null)
+            if(script != null)
             {
-                _metadataInputKey = HashHelper.GenerateHash($"Params_{script}", searchTerm);
-            }
+                if (_searchTerm != null)
+                {
+                    _metadataInputKey = HashHelper.GenerateHash($"Params_{script}",in searchTerm);
+                }
 
-            _isStoreProcedure = storeProcedureNameRegex.Matches(script).Count > 0;
-            _metadataKey = HashHelper.GenerateUniqueHash($"Script_{script}");
+                _isStoreProcedure = storeProcedureNameRegex.Matches(script).Count > 0;
+                _metadataKey = HashHelper.GenerateUniqueHash($"Script_{script}");
+            }
         }
 
-        public void Prepare()
+        internal DbCommand CreateEmptyCommand()
         {
-            _connection = _provider.CreateConnection(_options.StringConnection);
-            _command = _provider.CreateCommand(in _connection, in _script, in _isStoreProcedure);
+            return _connection.CreateCommand();
+        }
 
-            if(_metadataInputKey != null)
-            {
-                var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
-                foreach (var parameter in parameters)
-                {
-                    _command.Parameters.Add(parameter);
-                }
-            }
-
+        internal DbTransaction BeginTransaction()
+        {
+            _connection = _provider.CreateConnection(in _options.StringConnection);
             _connection.Open();
-            _command.Prepare();
+            return _connection.BeginTransaction();
+        }
+
+        internal void Prepare()
+        {
+            if (_connection == null)
+            {
+                _connection = _provider.CreateConnection(in _options.StringConnection);
+                _command = _provider.CreateCommand(in _connection, in _script, in _isStoreProcedure);
+
+                if (_metadataInputKey != null)
+                {
+                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
+
+                    foreach (var parameter in parameters)
+                    {
+                        _command.Parameters.Add(parameter);
+                    }
+                }
+
+                _connection.Open();
+
+                _command.Prepare();
+            }
+            else
+            {
+                _command.CommandText = _script;
+                _command.CommandTimeout = _options.ConnectionTimeout;
+                _command.Transaction = _transaction;
+
+                if (_isStoreProcedure)
+                    _command.CommandType = CommandType.StoredProcedure;
+
+                if (_metadataInputKey != null)
+                {
+                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
+                    _command.Parameters.Clear();
+
+                    foreach (var parameter in parameters)
+                    {
+                        _command.Parameters.Add(parameter);
+                    }
+                }
+
+                _command.Prepare();
+            }
         }
 
         /// <summary>
@@ -94,8 +150,8 @@ namespace Thomas.Database
         /// <returns>Parameters of the command</returns>
         public async Task PrepareAsync(CancellationToken cancellationToken)
         {
-            _connection = _provider.CreateConnection(_options.StringConnection);
-            _command = _provider.CreateCommand(_connection, _script, _isStoreProcedure);
+            _connection = _provider.CreateConnection(in _options.StringConnection);
+            _command = _provider.CreateCommand(_connection, in _script, in _isStoreProcedure);
 
             if (_metadataInputKey != null)
             {
@@ -187,13 +243,6 @@ namespace Thomas.Database
             CacheResultInfo.Set(in _metadataKey,in props);
 
             return props;
-        }
-
-        public void Dispose()
-        {
-            _reader?.Dispose();
-            _command?.Dispose();
-            _connection?.Dispose();
         }
 
         #region reader operations
@@ -292,7 +341,7 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item,in values[j], _options.CultureInfo);
+                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
                 }
 
                 yield return item;
@@ -331,7 +380,16 @@ namespace Thomas.Database
         }
 
         #endregion
+        public void Dispose()
+        {
+            _reader?.Dispose();
 
+            if (_transaction == null)
+            {
+                _command?.Dispose();
+                _connection?.Dispose();
+            }
+        }
     }
 
 }

@@ -7,16 +7,16 @@ using Thomas.Database.Exceptions;
 
 namespace Thomas.Database.Cache.Metadata
 {
-    public readonly struct MetadataParameters<T> where T : Enum
+    public sealed class MetadataParameters<T> where T : Enum
     {
-        private readonly PropertyInfo PropertyInfo { get; }
-        private readonly Type? Type { get; }
+        private PropertyInfo PropertyInfo { get; }
+        private Type? Type { get; }
 
-        public readonly T DbType { get; }
-        public readonly int Size { get; }
-        public readonly ParameterDirection Direction { get; }
-        public readonly string DbParameterName { get; }
-        public readonly bool IsInParameter
+        public T DbType { get; }
+        public int Size { get; }
+        public ParameterDirection Direction { get; }
+        public string DbParameterName { get; }
+        public bool IsInParameter
         {
             get
             {
@@ -25,7 +25,7 @@ namespace Thomas.Database.Cache.Metadata
 
         }
 
-        public readonly bool IsOutParameter
+        public bool IsOutParameter
         {
             get
             {
@@ -34,7 +34,7 @@ namespace Thomas.Database.Cache.Metadata
         }
 
         public delegate void SetValueObject(in object item, in object value, in CultureInfo cultureInfo);
-        public readonly SetValueObject? SetValue;
+        public  SetValueObject? SetValue;
 
         //add by ref property that are byVal
         //add delegate to implement not null and nullable SetValue
@@ -64,14 +64,14 @@ namespace Thomas.Database.Cache.Metadata
             }
         }
 
-        public readonly object GetValue(in object value)
+        public object GetValue(in object value)
         {
             return PropertyInfo.GetValue(value) ?? DBNull.Value;
         }
 
-        private readonly void SetNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
-        private readonly void SetNotNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNotNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
         static ParameterDirection GetParameterDireccion(PropertyInfo property)
         {

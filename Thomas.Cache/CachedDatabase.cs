@@ -7,7 +7,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using Thomas.Cache.MemoryCache;
 using Thomas.Database;
-using Thomas.Database.Core;
 
 namespace Thomas.Cache
 {

@@ -4,7 +4,6 @@ using System;
 using System.Threading.Tasks;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
-using Thomas.Cache.MemoryCache;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
 using Thomas.Tests.Performance.Legacy.Setup;
@@ -65,8 +64,8 @@ namespace Thomas.Tests.Performance.Legacy
             IServiceCollection serviceCollection = new ServiceCollection();
 
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
-            SqlServerFactory.AddDb(new DbSettings { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0 });
-            SqlServerFactory.AddDb(new DbSettings { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings("db1", cnx1));
+            SqlServerFactory.AddDb(new DbSettings("db2", cnx2));
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
             var loadDataManager = serviceProvider.GetService<IDataBaseManager>();

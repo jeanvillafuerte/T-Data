@@ -31,7 +31,7 @@ namespace Thomas.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            SqlServerFactory.AddDb(new DbSettings { Signature = "db", StringConnection = cnx, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings("db", cnx));
 
             Database = DbFactory.CreateDbContext("db");
             Database2 = DbResultCachedFactory.CreateDbContext("db");
