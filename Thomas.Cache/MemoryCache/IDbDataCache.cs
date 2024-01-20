@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace Thomas.Cache.MemoryCache
+﻿namespace Thomas.Cache.MemoryCache
 {
     internal interface IDbDataCache
     {

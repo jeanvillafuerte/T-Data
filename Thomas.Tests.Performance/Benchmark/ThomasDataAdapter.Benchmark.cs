@@ -1,11 +1,11 @@
-﻿using System;
+﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
+using Microsoft.IdentityModel.Tokens;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
-using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
-using Microsoft.IdentityModel.Tokens;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 

@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Thomas.Cache.MemoryCache
+﻿namespace Thomas.Cache.MemoryCache
 {
     internal interface IDictionaryDbQueryItem
     {

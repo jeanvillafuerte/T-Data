@@ -1,5 +1,5 @@
-﻿using System.ComponentModel;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
+using System.ComponentModel;
 using Thomas.Database.Cache.Metadata;
 
 namespace Thomas.Tests.Performance.Benchmark.Cache

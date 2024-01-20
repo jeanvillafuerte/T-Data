@@ -1,10 +1,10 @@
-﻿using System;
+﻿using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.Configuration;
-using BenchmarkDotNet.Attributes;
+using System;
+using Thomas.Cache;
+using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
-using Thomas.Cache.Factory;
-using Thomas.Cache;
 
 namespace Thomas.Tests.Performance.Benchmark
 {

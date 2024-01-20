@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Data;
-using System.Reflection;
 using System.Globalization;
+using System.Reflection;
 using Thomas.Database.Attributes;
 using Thomas.Database.Exceptions;
 
@@ -34,12 +34,12 @@ namespace Thomas.Database.Cache.Metadata
         }
 
         public delegate void SetValueObject(in object item, in object value, in CultureInfo cultureInfo);
-        public  SetValueObject? SetValue;
+        public SetValueObject? SetValue;
 
         //add by ref property that are byVal
         //add delegate to implement not null and nullable SetValue
 
-        internal MetadataParameters(in PropertyInfo info,in string name,in T dbType)
+        internal MetadataParameters(in PropertyInfo info, in string name, in T dbType)
         {
             DbParameterName = name;
             DbType = dbType;
@@ -51,7 +51,7 @@ namespace Thomas.Database.Cache.Metadata
 
             if (Direction == ParameterDirection.Output || Direction == ParameterDirection.InputOutput)
             {
-                if(PropertyInfo.PropertyType.IsGenericType)
+                if (PropertyInfo.PropertyType.IsGenericType)
                 {
                     Type = Nullable.GetUnderlyingType(info.PropertyType);
                     SetValue = SetNullableValue;

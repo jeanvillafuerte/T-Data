@@ -1,7 +1,7 @@
-﻿using System.Linq;
-using BenchmarkDotNet.Columns;
+﻿using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
+using System.Linq;
 
 namespace Thomas.Tests.Performance.Column
 {
