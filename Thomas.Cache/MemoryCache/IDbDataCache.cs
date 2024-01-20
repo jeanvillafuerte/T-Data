@@ -2,15 +2,15 @@
 
 namespace Thomas.Cache.MemoryCache
 {
-    public interface IDbDataCache
+    internal interface IDbDataCache
     {
-        void AddOrUpdate<T>(string hash, IEnumerable<T> result) where T : class, new();
-        bool TryGet<T>(string hash, out IEnumerable<T> result) where T : class, new();
+        void AddOrUpdate(string hash, IDictionaryDbQueryItem result);
+        bool TryGet<T>(string hash, out DictionaryDbQueryItem<T>? result);
         void Release(string hash);
-        void Clear();
+        void Release();
     }
 
-    public interface IDbParameterCache
+    internal interface IDbParameterCache
     {
         void AddOrUpdate(string hash, object result);
         bool TryGet(string hash, out object? result);

@@ -1,15 +1,15 @@
 # ![""](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
->It Works matching class fields vs result set returned by database query. There are simple configurations for applications that need fast response time without must deal with database connections.
+>It Works matching class fields againts result set returned by database query. There are simple configurations for applications that need fast response time without must deal with database DbConnections and DbCommands.
 
-Features released 2.0.0:
+Features released 2.1.0:
 
 - Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
-- Straightforward way to match typed and anonymous types to query parameters.
+- Straightforward manner to match typed and anonymous types to query parameters.
+- Transaction support using lambda expressions.
 - Attributes to match parameter direction and size to configure DbParameter.
 - Optional Cache layer to boost application performance having control what will be stored, updated and removed.
-
-
+- Cache refresh throught a key identifier to allow refresh whenever you want update the cached data without use original query.
 
 
 ## Nuget : https://www.nuget.org/packages/ThomasDataAdapter.SqlServer/
@@ -46,87 +46,28 @@ SqlServerFactory.AddDb(new DbSettings {
 
 ## How to use it?
 ```c#
-public class MyComponent
+public class UserOffice
 {
     private readonly IThomasDb _db;
 
-    public IList<Person> GetPeople()
+    public User()
     {
-        var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ToListOp<Person>("dbo.GetPeople");
-
-        if(response.Success)
-        {
-            return response.Result;
-        }
-        else
-        {
-            Log.WriteLog(response.ErrorMessage);
-        }
+        _db =  DbFactory.CreateDbContext("mssqldb1");
     }
 
-    public void Save(Person person)
+    public IEnumerable<User> GetUsers() => _db.ToList<User>("dbo.GetPeople");
+    public void SaveUser(User person) =>_db.Execute(person, "dbo.Save");
+    public void UpdateUser(string id, int age) => _db.ExecuteOp(new { id = id, age = age}, "dbo.Update");
+    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() => _db.ToTupleOp<User, Office>("dbo.Process");
+
+    public bool ActiveOffice(decimal officeId)
     {
-        var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ExecuteOp(person, "dbo.Save");
-
-        if(response.Success)
+        return _db.ExecuteTransaction((db) =>
         {
-            .
-            .
-            .
-        }
-        else
-        {
-            Log.WriteLog(response.ErrorMessage);
-        }
-    }
-
-    public void Update(string id, int age)
-    {
-        var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ExecuteOp(new { id = id, age = age}, "dbo.Update");
-
-        if(response.Success)
-        {
-            .
-            .
-            .
-        }
-        else
-        {
-            Log.WriteLog(response.ErrorMessage);
-        }
-    }
-
-    public void ProcessData()
-    {
-        var _db = DbFactory.CreateDbContext("mssqldb1");
-        var response = _db.ToTupleOp<Person, Office>("dbo.Process");
-
-        if(response.Success)
-        {
-            IReadOnlyList<Person> persons = response.Result.Item1;
-            IReadOnlyList<Office> offices = response.Result.Item2;
-            .
-            .
-            .
-        }
-        else
-        {
-            Log.WriteLog(response.ErrorMessage);
-        }
-    }
-
-    public void RetrieveMoreData()
-    {
-        var _db = DbFactory.CreateDbContext("mssqldb1");
-
-        Person person = _db.ToSingle<Person>("SELECT * FROM Person WHERE Id = 43");
-
-        IReadOnlyList<Person> people = _db.ToList<Person>("SELECT * FROM Person WHERE name like '%jhon%'");
-
-        Tuple<IReadOnlyList<Person>, IReadOnlyList<Office>> peopleOffice = _db.Tuple<Person, Office>("SELECT * FROM Person WHERE name like '%jhon%'; SELECT * FROM Office WHERE name like '%US_%");
+            db.Execute($"UPDATE User SET Active = 1 WHERE OfficeId = @OfficeId", new { OfficeId = officeId });
+            db.Execute($"UPDATE Office SET Active = 1 WHERE OfficeId = @OfficeId", new { OfficeId = officeId });
+            return db.Commit();
+        });
     }
 }
 ```

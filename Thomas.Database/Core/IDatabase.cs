@@ -11,14 +11,14 @@ namespace Thomas.Database
         int Execute(string script, object? inputData = null);
         IEnumerable<dynamic> GetMetadataParameter(string script, object? parameters);
 
-        void ExecuteTransaction(Action<IDatabase> func);
+        bool ExecuteTransaction(Func<IDatabase, TransactionResult> func);
         T ExecuteTransaction<T>(Func<IDatabase, T> func);
-        void Commit();
-        void Rollback();
+        TransactionResult Commit();
+        TransactionResult Rollback();
 
         Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, T> func, CancellationToken cancellationToken);
-        Task ExecuteTransaction(Action<IDatabase> func, CancellationToken cancellationToken);
-        Task CommitAsync();
-        Task RollbackAsync();
+        Task<bool> ExecuteTransaction(Func<IDatabase, TransactionResult> func, CancellationToken cancellationToken);
+        Task<TransactionResult> CommitAsync();
+        Task<TransactionResult> RollbackAsync();
     }
 }

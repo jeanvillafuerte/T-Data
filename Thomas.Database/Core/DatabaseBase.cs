@@ -32,7 +32,7 @@ namespace Thomas.Database
             Options = options;
         }
 
-        #region transactions
+        #region transaction
         public T ExecuteTransaction<T>(Func<IDatabase, T> func)
         {
             using var command = new DatabaseCommand(in Provider,in Options);
@@ -89,7 +89,7 @@ namespace Thomas.Database
             }
         }
 
-        public void ExecuteTransaction(Action<IDatabase> func)
+        public bool ExecuteTransaction(Func<IDatabase, TransactionResult> func)
         {
             using var command = new DatabaseCommand(in Provider, in Options);
             _transaction = command.BeginTransaction();
@@ -97,8 +97,8 @@ namespace Thomas.Database
 
             try
             {
-                func(this);
-                _transaction.Commit();
+                var result = func(this);
+                return result == TransactionResult.Committed;
             }
             catch (Exception)
             {
@@ -107,6 +107,8 @@ namespace Thomas.Database
                     _transaction.Rollback();
                     throw;
                 }
+
+                return false;
             }
             finally
             {
@@ -114,7 +116,7 @@ namespace Thomas.Database
             }
         }
 
-        public async Task ExecuteTransaction(Action<IDatabase> func, CancellationToken cancellationToken)
+        public async Task<bool> ExecuteTransaction(Func<IDatabase, TransactionResult> func, CancellationToken cancellationToken)
         {
             using var command = new DatabaseCommand(in Provider,in Options);
             _transaction = command.BeginTransaction();
@@ -122,8 +124,9 @@ namespace Thomas.Database
 
             try
             {
-                await Task.Run(() => func(this), cancellationToken);
+                var result = await Task.Run(() => func(this), cancellationToken);
                 await _transaction.CommitAsync(cancellationToken);
+                return result == TransactionResult.Committed;
             }
             catch (Exception)
             {
@@ -132,6 +135,8 @@ namespace Thomas.Database
                     await _transaction.RollbackAsync(cancellationToken);
                     throw;
                 }
+
+                return false;
             }
             finally
             {
@@ -139,28 +144,44 @@ namespace Thomas.Database
             }
         }
 
-        public void Commit()
+        public TransactionResult Commit()
         {
+            if(_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
             _transactionCompleted = true;
             _transaction.Commit();
+            return TransactionResult.Committed;
         }
 
-        public void Rollback()
+        public TransactionResult Rollback()
         {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
             _transactionCompleted = true;
             _transaction.Rollback();
+            return TransactionResult.Rollbacked;
         }
 
-        public async Task CommitAsync()
+        public async Task<TransactionResult> CommitAsync()
         {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
             _transactionCompleted = true;
             await _transaction.CommitAsync();
+            return TransactionResult.Committed;
         }
 
-        public async Task RollbackAsync()
+        public async Task<TransactionResult> RollbackAsync()
         {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
             _transactionCompleted = true;
             await _transaction.RollbackAsync();
+            return TransactionResult.Rollbacked;
         }
 
         #endregion
@@ -876,5 +897,11 @@ namespace Thomas.Database
         }
 
         #endregion
+    }
+
+    public enum TransactionResult
+    {
+        Committed,
+        Rollbacked
     }
 }

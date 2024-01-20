@@ -59,8 +59,8 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 var result = DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
                 {
                     var data = db.ToList<Person>($"SELECT * FROM {tableName}").ToArray();
-                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = data[0].Id });
-                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = data[1].Id });
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { data[0].Id });
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { data[1].Id });
 
                     return db.ToList<Person>($"SELECT * FROM {tableName}");
                 });
@@ -76,14 +76,14 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             {
                 _stopWatch.Start();
 
-                DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
+                var transactionResult = DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
                 {
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_3' WHERE Id = @Id", new { Id = 1 });
-                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 1 });
-                    db.Rollback();
+                    db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 2 });
+                    return db.Rollback();
                 });
 
-                WriteTestResult(i + 1, "Transaction Rollback", databaseName, _stopWatch.ElapsedMilliseconds, $"transaction 2");
+                WriteTestResult(i + 1, "Transaction Rollback", databaseName, _stopWatch.ElapsedMilliseconds, $"transaction 2, commited: {transactionResult}");
 
                 _stopWatch.Reset();
             }

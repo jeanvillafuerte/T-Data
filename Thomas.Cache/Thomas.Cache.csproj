@@ -18,6 +18,7 @@
 - Straightforward way to match typed and anonymous types to query parameters.
 - Attributes to match parameter direction and size to configure DbParameter.
 - Optional Cache layer to boost application performance having control what will be stored, updated and removed.</PackageReleaseNotes>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
