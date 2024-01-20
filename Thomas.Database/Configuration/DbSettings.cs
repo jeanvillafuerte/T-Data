@@ -4,9 +4,9 @@ namespace Thomas.Database
 {
     public sealed class DbSettings
     {
-        public string Signature { get; set; }
-        public string Culture { get; set; } = "en-US";
-        public string StringConnection { get; set; }
+        public readonly string Signature;
+        public readonly string StringConnection;
+        public readonly CultureInfo CultureInfo;
 
         /// <summary>
         /// Show detail error message in error message and log adding store procedure name and parameters
@@ -19,15 +19,11 @@ namespace Thomas.Database
         public bool HideSensibleDataValue { get; set; }
         public int ConnectionTimeout { get; set; } = 0;
 
-        private CultureInfo? _cultureInfo;
-        public CultureInfo CultureInfo
+        public DbSettings(string signature, string stringConnection, string culture = "en-US")
         {
-            get
-            {
-                if(_cultureInfo == null)
-                    _cultureInfo = string.IsNullOrEmpty(Culture) ? CultureInfo.InvariantCulture : new CultureInfo(Culture);
-                return _cultureInfo;
-            }
+            Signature = signature;
+            StringConnection = stringConnection;
+            CultureInfo = string.IsNullOrEmpty(culture) ? CultureInfo.InvariantCulture : new CultureInfo(culture);
         }
     }
 }

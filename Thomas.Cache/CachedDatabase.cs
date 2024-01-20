@@ -1,21 +1,22 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Thomas.Cache.Helpers;
 using Thomas.Cache.MemoryCache;
 using Thomas.Database;
-using Thomas.Database.Core;
 
 namespace Thomas.Cache
 {
     public interface ICachedDatabase : IDbResulCachedSet
     {
-        void ReleaseCache();
-        void ReleaseResult(string script);
-        void ReleaseResult(string script, object inputData);
+        void Refresh(string key);
+        void Release();
+        void Release(string key);
     }
 
     internal sealed class CachedDatabase : ICachedDatabase
@@ -65,207 +66,130 @@ namespace Thomas.Cache
             }
         }
 
-        public T? ToSingle<T>(string script, object? parameters = null, bool refresh = false) where T : class, new()
+        public T? ToSingle<T>(string script, object? parameters = null, bool refresh = false, string? key = null) where T : class, new()
         {
-            var queryIdentifier = HashHelper.GenerateHash($"cache_query_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            var fromCache = _cache.TryGet(queryIdentifier, out IEnumerable<T> result);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<T>? result);
 
-            T? item;
 
             if (!fromCache || refresh)
             {
-                item = _database.ToSingle<T>(script, parameters);
-                result = new[] { item };
-
-                _cache.AddOrUpdate(queryIdentifier, result);
-            }
-            else
-            {
-                item = result.FirstOrDefault();
+                var item = _database.ToSingle<T>(script, parameters);
+                result = new DictionaryDbQueryItem<T>(script, parameters, item);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return item;
+            return result.Data;
         }
 
-        public IEnumerable<T> ToList<T>(string script, object? parameters = null, bool refresh = false) where T : class, new()
+        public IEnumerable<T> ToList<T>(string script, object? parameters = null, bool refresh = false, string? key = null) where T : class, new()
         {
-            var queryIdentifier = HashHelper.GenerateHash($"cache_query_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            var fromCache = _cache.TryGet<T>(queryIdentifier, out IEnumerable<T> result);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<IEnumerable<T>>? result);
 
             if (!fromCache || refresh)
             {
-                result = _database.ToList<T>(script, parameters);
-
-                _cache.AddOrUpdate(queryIdentifier, result);
+                var data = _database.ToList<T>(script, parameters);
+                result = new DictionaryDbQueryItem<IEnumerable<T>>(script, parameters, data);   
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
-
-            return result;
+            
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>> ToTuple<T1, T2>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>> ToTuple<T1, T2>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
 
-            IEnumerable<T2> t2;
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            var fromCache = _cache.TryGet(queryIdentifierT1, out IEnumerable<T1> t1); 
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>>(t1, t2);
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>> ToTuple<T1, T2, T3>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>> ToTuple<T1, T2, T3>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
             where T3 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
-            var queryIdentifierT3 = HashHelper.GenerateHash($"cache_query_t3_{script}", parameters);
-
-            IEnumerable<T2> t2;
-            IEnumerable<T3> t3;
-
-            var fromCache = _cache.TryGet(queryIdentifierT1, out IEnumerable<T1> t1);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2, T3>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-                t3 = tuple.Item3;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-                _cache.AddOrUpdate(queryIdentifierT3, t3);
-                
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
-                _cache.TryGet(queryIdentifierT3, out t3);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>(t1, t2, t3);
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>> ToTuple<T1, T2, T3, T4>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>> ToTuple<T1, T2, T3, T4>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
             where T3 : class, new()
             where T4 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
-            var queryIdentifierT3 = HashHelper.GenerateHash($"cache_query_t3_{script}", parameters);
-            var queryIdentifierT4 = HashHelper.GenerateHash($"cache_query_t4_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            IEnumerable<T2> t2;
-            IEnumerable<T3> t3;
-            IEnumerable<T4> t4;
-
-            var fromCache = _cache.TryGet<T1>(queryIdentifierT1, out IEnumerable<T1> t1);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2, T3, T4>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-                t3 = tuple.Item3;
-                t4 = tuple.Item4;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-                _cache.AddOrUpdate(queryIdentifierT3, t3);
-                _cache.AddOrUpdate(queryIdentifierT4, t4);
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
-                _cache.TryGet(queryIdentifierT3, out t3);
-                _cache.TryGet(queryIdentifierT4, out t4);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>(t1, t2, t3, t4);
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>> ToTuple<T1, T2, T3, T4, T5>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>> ToTuple<T1, T2, T3, T4, T5>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
             where T3 : class, new()
             where T4 : class, new()
             where T5 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
-            var queryIdentifierT3 = HashHelper.GenerateHash($"cache_query_t3_{script}", parameters);
-            var queryIdentifierT4 = HashHelper.GenerateHash($"cache_query_t4_{script}", parameters);
-            var queryIdentifierT5 = HashHelper.GenerateHash($"cache_query_t5_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            IEnumerable<T2> t2;
-            IEnumerable<T3> t3;
-            IEnumerable<T4> t4;
-            IEnumerable<T5> t5;
-
-            var fromCache = _cache.TryGet<T1>(queryIdentifierT1, out IEnumerable<T1> t1);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2, T3, T4, T5>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-                t3 = tuple.Item3;
-                t4 = tuple.Item4;
-                t5 = tuple.Item5;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-                _cache.AddOrUpdate(queryIdentifierT3, t3);
-                _cache.AddOrUpdate(queryIdentifierT4, t4);
-                _cache.AddOrUpdate(queryIdentifierT5, t5);
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
-                _cache.TryGet(queryIdentifierT3, out t3);
-                _cache.TryGet(queryIdentifierT4, out t4);
-                _cache.TryGet(queryIdentifierT5, out t5);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>(t1, t2, t3, t4, t5);
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
             where T3 : class, new()
@@ -273,53 +197,23 @@ namespace Thomas.Cache
             where T5 : class, new()
             where T6 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
-            var queryIdentifierT3 = HashHelper.GenerateHash($"cache_query_t3_{script}", parameters);
-            var queryIdentifierT4 = HashHelper.GenerateHash($"cache_query_t4_{script}", parameters);
-            var queryIdentifierT5 = HashHelper.GenerateHash($"cache_query_t5_{script}", parameters);
-            var queryIdentifierT6 = HashHelper.GenerateHash($"cache_query_t6_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            IEnumerable<T2> t2;
-            IEnumerable<T3> t3;
-            IEnumerable<T4> t4;
-            IEnumerable<T5> t5;
-            IEnumerable<T6> t6;
-
-            var fromCache = _cache.TryGet<T1>(queryIdentifierT1, out IEnumerable<T1> t1);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2, T3, T4, T5, T6>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-                t3 = tuple.Item3;
-                t4 = tuple.Item4;
-                t5 = tuple.Item5;
-                t6 = tuple.Item6;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-                _cache.AddOrUpdate(queryIdentifierT3, t3);
-                _cache.AddOrUpdate(queryIdentifierT4, t4);
-                _cache.AddOrUpdate(queryIdentifierT5, t5);
-                _cache.AddOrUpdate(queryIdentifierT6, t6);
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
-                _cache.TryGet(queryIdentifierT3, out t3);
-                _cache.TryGet(queryIdentifierT4, out t4);
-                _cache.TryGet(queryIdentifierT5, out t5);
-                _cache.TryGet(queryIdentifierT6, out t6);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>(t1, t2, t3, t4, t5, t6);
+            return result.Data;
         }
 
-        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null, bool refresh = false)
+        public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null, bool refresh = false, string? key = null)
             where T1 : class, new()
             where T2 : class, new()
             where T3 : class, new()
@@ -328,75 +222,106 @@ namespace Thomas.Cache
             where T6 : class, new()
             where T7 : class, new()
         {
-            var queryIdentifierT1 = HashHelper.GenerateHash($"cache_query_t1_{script}", parameters);
-            var queryIdentifierT2 = HashHelper.GenerateHash($"cache_query_t2_{script}", parameters);
-            var queryIdentifierT3 = HashHelper.GenerateHash($"cache_query_t3_{script}", parameters);
-            var queryIdentifierT4 = HashHelper.GenerateHash($"cache_query_t4_{script}", parameters);
-            var queryIdentifierT5 = HashHelper.GenerateHash($"cache_query_t5_{script}", parameters);
-            var queryIdentifierT6 = HashHelper.GenerateHash($"cache_query_t6_{script}", parameters);
-            var queryIdentifierT7 = HashHelper.GenerateHash($"cache_query_t7_{script}", parameters);
+            var k = !string.IsNullOrEmpty(key) ? key : HashHelper.GenerateHash(script, parameters);
 
-            IEnumerable<T2> t2;
-            IEnumerable<T3> t3;
-            IEnumerable<T4> t4;
-            IEnumerable<T5> t5;
-            IEnumerable<T6> t6;
-            IEnumerable<T7> t7;
-
-            var fromCache = _cache.TryGet<T1>(queryIdentifierT1, out IEnumerable<T1> t1);
+            var fromCache = _cache.TryGet(k, out DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>>? result);
 
             if (!fromCache || refresh)
             {
                 var tuple = _database.ToTuple<T1, T2, T3, T4, T5, T6, T7>(script, parameters);
-                t1 = tuple.Item1;
-                t2 = tuple.Item2;
-                t3 = tuple.Item3;
-                t4 = tuple.Item4;
-                t5 = tuple.Item5;
-                t6 = tuple.Item6;
-                t7 = tuple.Item7;
-
-                _cache.AddOrUpdate(queryIdentifierT1, t1);
-                _cache.AddOrUpdate(queryIdentifierT2, t2);
-                _cache.AddOrUpdate(queryIdentifierT3, t3);
-                _cache.AddOrUpdate(queryIdentifierT4, t4);
-                _cache.AddOrUpdate(queryIdentifierT5, t5);
-                _cache.AddOrUpdate(queryIdentifierT6, t6);
-                _cache.AddOrUpdate(queryIdentifierT7, t7);
-            }
-            else
-            {
-                _cache.TryGet(queryIdentifierT2, out t2);
-                _cache.TryGet(queryIdentifierT3, out t3);
-                _cache.TryGet(queryIdentifierT4, out t4);
-                _cache.TryGet(queryIdentifierT5, out t5);
-                _cache.TryGet(queryIdentifierT6, out t6);
-                _cache.TryGet(queryIdentifierT7, out t7);
+                result = new DictionaryDbQueryItem<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>>(script, parameters, tuple);
+                _cache.AddOrUpdate(k, result);
             }
 
             ReadParameter(script, parameters, fromCache & !refresh);
 
-            return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>(t1, t2, t3, t4, t5, t6, t7);
+            return result.Data;
         }
 
-        public void ReleaseResult(string script)
+        #region management
+
+        public void Release()
         {
-            var queryIdentifier = HashHelper.GenerateUniqueHash($"cache_query_{script}");
-            _cache.Release(queryIdentifier);
+            _cache.Release();
+            DbParameterCache.Instance.Release();
         }
 
-        public void ReleaseResult(string script, object inputData)
+        public void Release(string key)
         {
-            var queryIdentifier = HashHelper.GenerateUniqueHash($"cache_query_{script}");
-            var inputIdentifies = HashHelper.GenerateUniqueHash($"cache_params_{script}");
-            _cache.Release(queryIdentifier);
-            DbParameterCache.Instance.Release(inputIdentifies);
+            _cache.Release(key);
+            DbParameterCache.Instance.Release(key);
         }
 
-        public void ReleaseCache()
+        public void Refresh(string key)
         {
-            _cache.Clear();
-            DbParameterCache.Instance.Clear();
+            if (DbDataCache.Instance.TryGetNative(key, out IDictionaryDbQueryItem item))
+            {
+                Type itemType = item.GetType();
+
+                if (itemType.IsGenericType && itemType.GetGenericTypeDefinition() == typeof(DictionaryDbQueryItem<>))
+                {
+                    var arguments = itemType.GetGenericArguments();
+
+                    Type genericType = itemType.GetGenericArguments()[0];
+
+                    if (!ReflectionHelper.IsTuple(genericType))
+                    {
+                        if(ReflectionHelper.IsIEnumerable(genericType))
+                        {
+                            var elementType = ReflectionHelper.GetIEnumerableElementType(genericType); 
+                            MethodInfo refreshMethod = GetType().GetMethod("ToList").MakeGenericMethod(elementType);
+                            refreshMethod.Invoke(this, new object[] { item.Query, item.Params, true, key });
+                        } 
+                        else
+                        {
+                            MethodInfo refreshMethod = GetType().GetMethod("ToSingle").MakeGenericMethod(genericType);
+                            refreshMethod.Invoke(this, new object[] { item.Query, item.Params, true, key });
+                        }
+                       
+                    }
+                    else
+                    {
+
+                        var tupleArguments = ReflectionHelper.GetTupleGenericArguments(genericType);
+                        var method = GetType().GetMethods().First(x => x.GetGenericArguments().Length == tupleArguments.Length);
+                        object _ = tupleArguments.Length switch
+                        {
+                            2 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            3 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1], tupleArguments[2])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            4 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1], tupleArguments[2], tupleArguments[3])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            5 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1], tupleArguments[2], tupleArguments[3], tupleArguments[4])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            6 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1], tupleArguments[2], tupleArguments[3], tupleArguments[4], tupleArguments[5])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            7 =>
+                                method.MakeGenericMethod(tupleArguments[0], tupleArguments[1], tupleArguments[2], tupleArguments[3], tupleArguments[4], tupleArguments[5], tupleArguments[6])
+                                .Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                            _ => throw new InvalidOperationException("Unexpected type in cache.")
+                        };
+
+                        _ = null;
+                    }
+                    
+                }
+                else
+                {
+                    throw new InvalidOperationException("Unexpected type in cache.");
+                }
+            }
+            else
+            {
+                throw new KeyNotFoundException($"Item with key '{key}' not found in cache.");
+            }
         }
+
+        #endregion
     }
 }

@@ -21,28 +21,33 @@ namespace Thomas.Cache.MemoryCache
 
         private DbDataCache() { }
 
-        private static ConcurrentDictionary<string, object> CacheObject { get; set; } = new ConcurrentDictionary<string, object>();
+        private static ConcurrentDictionary<string, IDictionaryDbQueryItem> CacheObject { get; set; } = new ConcurrentDictionary<string, IDictionaryDbQueryItem>();
 
-        public void AddOrUpdate<T>(string hash, IEnumerable<T> result) where T : class, new() => CacheObject.AddOrUpdate(hash, result, (k, v) => result);
+        public void AddOrUpdate(string hash, IDictionaryDbQueryItem data) => CacheObject.AddOrUpdate(hash, data, (k, v) => data);
 
-        public bool TryGet<T>(string hash, out IEnumerable<T> result) where T : class, new()
+        public bool TryGetNative(string hash, out IDictionaryDbQueryItem? data)
         {
-            if (CacheObject.TryGetValue(hash, out object? data))
+            return CacheObject.TryGetValue(hash, out data);
+        }
+
+        public bool TryGet<T>(string hash, out DictionaryDbQueryItem<T>? result)
+        {
+            if (CacheObject.TryGetValue(hash, out IDictionaryDbQueryItem? data))
             {
-                if (data is IEnumerable<T> convertedValue)
+                if (data is DictionaryDbQueryItem<T> convertedValue)
                 {
                     result = convertedValue;
                     return true;
                 }
             }
 
-            result = Enumerable.Empty<T>();
+            result = null;
             return false;
         }
 
         public void Release(string hash) => CacheObject.TryRemove(hash, out var _);
 
-        public void Clear()
+        public void Release()
         {
             CacheObject.Clear();
         }

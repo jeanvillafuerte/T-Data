@@ -30,9 +30,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Thomas.Cache\Thomas.Cache.csproj" />
     <ProjectReference Include="..\Thomas.Database.SqlServer\Thomas.Database.SqlServer.csproj" />
     <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
-    <ProjectReference Include="..\Thomas.Extension\Thomas.Cache.csproj" />
   </ItemGroup>
 
 </Project>

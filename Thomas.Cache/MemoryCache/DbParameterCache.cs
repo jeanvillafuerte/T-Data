@@ -25,6 +25,6 @@ namespace Thomas.Cache.MemoryCache
 
         public bool TryGet(string hash, out object? result) => CacheParams.TryGetValue(hash, out result);
 
-        public void Clear() => CacheParams.Clear();
+        public void Release() => CacheParams.Clear();
     }
 }

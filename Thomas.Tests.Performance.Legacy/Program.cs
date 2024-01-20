@@ -1,10 +1,9 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using System;
+﻿using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
-using Thomas.Cache.MemoryCache;
 using Thomas.Database;
 using Thomas.Database.SqlServer;
 using Thomas.Tests.Performance.Legacy.Setup;
@@ -65,8 +64,8 @@ namespace Thomas.Tests.Performance.Legacy
             IServiceCollection serviceCollection = new ServiceCollection();
 
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
-            SqlServerFactory.AddDb(new DbSettings { Signature = "db1", StringConnection = cnx1, ConnectionTimeout = 0 });
-            SqlServerFactory.AddDb(new DbSettings { Signature = "db2", StringConnection = cnx2, ConnectionTimeout = 0 });
+            SqlServerFactory.AddDb(new DbSettings("db1", cnx1));
+            SqlServerFactory.AddDb(new DbSettings("db2", cnx2));
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
             var loadDataManager = serviceProvider.GetService<IDataBaseManager>();
@@ -100,7 +99,7 @@ namespace Thomas.Tests.Performance.Legacy
                 Task.Run(() => new Tests.Error().ExecuteCachedDatabase(database, databaseName, TableName, rows))
                 );
 
-            database.ReleaseCache();
+            database.Release();
         }
 
         static void RunTestsDatabaseAsync(IDatabase database, string databaseName, int rows)
@@ -117,6 +116,7 @@ namespace Thomas.Tests.Performance.Legacy
         {
             DataBaseManager.DropTable(Database1, true, TableName);
             DataBaseManager.DropTable(Database2, true, TableName);
+            CachedResultDatabase.Release();
         }
 
         static void WriteStep(string message, bool includeBlankLine = false)

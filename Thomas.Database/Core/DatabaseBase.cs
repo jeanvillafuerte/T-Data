@@ -9,10 +9,12 @@ using System.Runtime.CompilerServices;
 
 namespace Thomas.Database
 {
+    using System.Data.Common;
     using System.Runtime.CompilerServices;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using System.Windows.Input;
     using Thomas.Database.Cache.Metadata;
 
     public sealed class DatabaseBase: IDatabase
@@ -20,21 +22,180 @@ namespace Thomas.Database
         private readonly IDatabaseProvider Provider;
         public readonly DbSettings Options;
 
+        private DbTransaction _transaction;
+        private DbCommand _command;
+        private bool _transactionCompleted;
+
         internal DatabaseBase(in IDatabaseProvider provider,in DbSettings options)
         {
             Provider = provider;
             Options = options;
         }
 
+        #region transaction
+        public T ExecuteTransaction<T>(Func<IDatabase, T> func)
+        {
+            using var command = new DatabaseCommand(in Provider,in Options);
+            _transaction = command.BeginTransaction();
+            _command = command.CreateEmptyCommand();
+
+            try
+            {
+                var result = func(this);
+                _transaction.Commit();
+                return result;
+            }
+            catch (Exception)
+            {
+                if (!_transactionCompleted)
+                {
+                    _transaction.Rollback();
+                    throw;
+                }
+
+               return default;
+            }
+            finally
+            {
+                _transaction.Dispose();
+            }
+        }
+
+        public async Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, T> func, CancellationToken cancellationToken)
+        {
+            using var command = new DatabaseCommand(in Provider,in Options);
+            _transaction = command.BeginTransaction();
+            _command = command.CreateEmptyCommand();
+
+            try
+            {
+                var result = await Task.Run(() => func(this), cancellationToken);
+                await _transaction.CommitAsync(cancellationToken);
+                return result;
+            }
+            catch (Exception)
+            {
+                if (!_transactionCompleted)
+                {
+                    await _transaction.RollbackAsync(cancellationToken);
+                    throw;
+                }
+
+                return default;
+            }
+            finally
+            {
+                _transaction.Dispose();
+            }
+        }
+
+        public bool ExecuteTransaction(Func<IDatabase, TransactionResult> func)
+        {
+            using var command = new DatabaseCommand(in Provider, in Options);
+            _transaction = command.BeginTransaction();
+            _command = command.CreateEmptyCommand();
+
+            try
+            {
+                var result = func(this);
+                return result == TransactionResult.Committed;
+            }
+            catch (Exception)
+            {
+                if(!_transactionCompleted)
+                {
+                    _transaction.Rollback();
+                    throw;
+                }
+
+                return false;
+            }
+            finally
+            {
+                _transaction.Dispose();
+            }
+        }
+
+        public async Task<bool> ExecuteTransaction(Func<IDatabase, TransactionResult> func, CancellationToken cancellationToken)
+        {
+            using var command = new DatabaseCommand(in Provider,in Options);
+            _transaction = command.BeginTransaction();
+            _command = command.CreateEmptyCommand();
+
+            try
+            {
+                var result = await Task.Run(() => func(this), cancellationToken);
+                await _transaction.CommitAsync(cancellationToken);
+                return result == TransactionResult.Committed;
+            }
+            catch (Exception)
+            {
+                if (!_transactionCompleted)
+                {
+                    await _transaction.RollbackAsync(cancellationToken);
+                    throw;
+                }
+
+                return false;
+            }
+            finally
+            {
+                _transaction.Dispose();
+            }
+        }
+
+        public TransactionResult Commit()
+        {
+            if(_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
+            _transactionCompleted = true;
+            _transaction.Commit();
+            return TransactionResult.Committed;
+        }
+
+        public TransactionResult Rollback()
+        {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
+            _transactionCompleted = true;
+            _transaction.Rollback();
+            return TransactionResult.Rollbacked;
+        }
+
+        public async Task<TransactionResult> CommitAsync()
+        {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
+            _transactionCompleted = true;
+            await _transaction.CommitAsync();
+            return TransactionResult.Committed;
+        }
+
+        public async Task<TransactionResult> RollbackAsync()
+        {
+            if (_transaction == null)
+                throw new InvalidOperationException("Transaction not started");
+
+            _transactionCompleted = true;
+            await _transaction.RollbackAsync();
+            return TransactionResult.Rollbacked;
+        }
+
+        #endregion
+
         #region without result data
-        
+
         public int Execute(string script, object? parameters = null)
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(in Provider,in Options, in script, in parameters, in _transaction, in _command);
+
             command.Prepare();
             var affected = command.ExecuteNonQuery();
-            if(parameters != null)
-             command.SetValuesOutFields();
+            if (command.OutParameters != null)
+                command.SetValuesOutFields();
             return affected;
         }
 
@@ -169,7 +330,7 @@ namespace Thomas.Database
 
         public IEnumerable<T> ToList<T>(string script, object? parameters = null) where T : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in _transaction, in _command);
             command.Prepare();
 
             var result = command.ReadListItems<T>(CommandBehavior.SingleResult);
@@ -736,5 +897,11 @@ namespace Thomas.Database
         }
 
         #endregion
+    }
+
+    public enum TransactionResult
+    {
+        Committed,
+        Rollbacked
     }
 }

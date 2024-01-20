@@ -36,12 +36,6 @@ namespace Thomas.Tests.Performance.Benchmark
             AddColumn(StatisticColumn.Error);
             AddColumn(StatisticColumn.OperationsPerSecond);
 
-            AddJob(Job.ShortRun
-                   .WithLaunchCount(1)
-                   .WithWarmupCount(1)
-                   .WithUnrollFactor(Iterations)
-                   .WithIterationCount(1));
-
             Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);
             Options |= ConfigOptions.JoinSummary;
 

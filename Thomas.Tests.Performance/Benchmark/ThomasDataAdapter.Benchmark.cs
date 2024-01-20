@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using Microsoft.IdentityModel.Tokens;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -37,7 +38,7 @@ namespace Thomas.Tests.Performance.Benchmark
             list.Consume(consumer);
         }
 
-        [Benchmark(Description = "ToList<> (buffered & update)")]
+        [Benchmark(Description = "ToList<> (buffered & refresh)")]
         public void ToListCached2()
         {
             var list = Database2.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 }, refresh: true);
@@ -205,6 +206,46 @@ namespace Thomas.Tests.Performance.Benchmark
         public DbOpResult<IEnumerable<Person>> ToListOpError()
         {
             return Database.ToListOp<Person>($"SELECT UserName2 FROM {TableName} WHERE Id = 1;");
+        }
+
+        [Benchmark(Description = "Transaction 1")]
+        public void Transaction1()
+        {
+            var list = Database.ExecuteTransaction((db) =>
+            {
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 1 });
+                return db.ToList<Person>($"SELECT * FROM {TableName}");
+            });
+
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "Transaction 2")]
+        public bool Transaction2()
+        {
+            var searchTerm = new SearchTerm(id: 1);
+            return Database.ExecuteTransaction((db) =>
+            {
+                db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
+                db.Execute("get_byId", searchTerm);
+
+                if (searchTerm.UserName.IsNullOrEmpty())
+                    return db.Rollback();
+                else
+                    return db.Commit();
+            });
+        }
+
+        [Benchmark(Description = "Transaction Rollback")]
+        public bool Transaction3()
+        {
+            return Database.ExecuteTransaction((db) =>
+             {
+                 db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
+                 db.Execute($"UPDATE {TableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 1 });
+                 return db.Rollback();
+             });
         }
 
         [GlobalCleanup]

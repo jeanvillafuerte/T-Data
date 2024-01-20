@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace Thomas.Database.Cache.Metadata
 {
-    public readonly struct MetadataPropertyInfo
+    public sealed class MetadataPropertyInfo
     {
         internal MetadataPropertyInfo(in PropertyInfo info)
         {
@@ -23,22 +23,22 @@ namespace Thomas.Database.Cache.Metadata
             }
         }
 
-        private readonly PropertyInfo PropertyInfo { get; }
-        private readonly Type? Type { get; }
+        private PropertyInfo PropertyInfo { get; }
+        private Type? Type { get; }
 
         public delegate void SetValueObject(in object item, in object value, in CultureInfo cultureInfo);
-        public readonly SetValueObject SetValue;
+        public SetValueObject SetValue;
 
-        private readonly void SetNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
-        private readonly void SetNotNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNotNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
-        public readonly object GetValue<T>(in T item)
+        public object GetValue<T>(in T item)
         {
             return PropertyInfo.GetValue(item) ?? DBNull.Value;
         }
 
-        public readonly string ErrorFormat(in object value)
+        public string ErrorFormat(in object value)
         {
             var val = GetValue(in value);
             return $"\t" + PropertyInfo.Name + " : " + (val is null ? "NULL" : val) + " ";
