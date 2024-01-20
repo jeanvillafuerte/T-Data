@@ -1,9 +1,9 @@
-﻿using System.ComponentModel;
-using System.Linq;
-using Microsoft.Data.SqlClient;
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Dapper;
+using Microsoft.Data.SqlClient;
+using System.ComponentModel;
+using System.Linq;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark.Others

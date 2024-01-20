@@ -2,20 +2,17 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Transactions;
-using System.Windows.Input;
 using Thomas.Database.Cache.Metadata;
 using Thomas.Database.Exceptions;
 
 namespace Thomas.Database
 {
     //Preset and Execute database command
-    internal sealed class DatabaseCommand: IDisposable
+    internal sealed class DatabaseCommand : IDisposable
     {
         private static readonly Regex storeProcedureNameRegex = new Regex(@"^(?!EXEC)(?:\[?\w+\]?$|^\[?\w+\]?\.\[?\w+\]?$|\[?\w+\]?\.\[?\w+\]?.\[?\w+\]?)$", RegexOptions.Compiled);
 
@@ -39,16 +36,16 @@ namespace Thomas.Database
             get
             {
 
-                if(_command.Parameters == null || _command.Parameters.Count == 0)
+                if (_command.Parameters == null || _command.Parameters.Count == 0)
                 {
                     yield break;
                 }
 
                 foreach (DbParameter item in _command.Parameters)
                 {
-                    if(item.Direction == ParameterDirection.InputOutput || item.Direction == ParameterDirection.Output)
+                    if (item.Direction == ParameterDirection.InputOutput || item.Direction == ParameterDirection.Output)
                     {
-                        yield return item;   
+                        yield return item;
                     }
                 }
 
@@ -72,15 +69,15 @@ namespace Thomas.Database
             _command = command;
             _connection = transaction?.Connection;
 
-            if(script != null)
+            if (script != null)
             {
                 if (_searchTerm != null)
                 {
-                    _metadataInputKey = HashHelper.GenerateHash($"Params_{script}",in searchTerm);
+                    _metadataInputKey = HashHelper.GenerateHash(script, in searchTerm);
                 }
 
                 _isStoreProcedure = storeProcedureNameRegex.Matches(script).Count > 0;
-                _metadataKey = HashHelper.GenerateUniqueHash($"Script_{script}");
+                _metadataKey = HashHelper.GenerateUniqueHash(script);
             }
         }
 
@@ -226,7 +223,7 @@ namespace Thomas.Database
             {
                 foreach (var property in properties)
                 {
-                    if(property.Name.Equals(columns[i], StringComparison.InvariantCultureIgnoreCase))
+                    if (property.Name.Equals(columns[i], StringComparison.InvariantCultureIgnoreCase))
                     {
                         props[i] = new MetadataPropertyInfo(in property);
                         realProperties++;
@@ -235,12 +232,12 @@ namespace Thomas.Database
                 }
             }
 
-            if(columns.Length > realProperties)
+            if (columns.Length > realProperties)
             {
                 Array.Resize(ref props, realProperties);
             }
 
-            CacheResultInfo.Set(in _metadataKey,in props);
+            CacheResultInfo.Set(in _metadataKey, in props);
 
             return props;
         }
@@ -250,7 +247,7 @@ namespace Thomas.Database
         {
             var list = new List<T>();
 
-            await foreach(var item in ReadItemsAsync<T>(behavior, cancellationToken))
+            await foreach (var item in ReadItemsAsync<T>(behavior, cancellationToken))
             {
                 list.Add(item);
             }
@@ -273,14 +270,14 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item,in values[j], _options.CultureInfo);
+                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
                 }
 
                 yield return item;
             }
         }
 
-        public async Task<IEnumerable<T>> ReadListNextItemsAsync<T>( CancellationToken cancellationToken) where T : class, new()
+        public async Task<IEnumerable<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken) where T : class, new()
         {
             var list = new List<T>();
 
@@ -358,7 +355,7 @@ namespace Thomas.Database
             return list;
         }
 
-        private IEnumerable<T> ReadNextItems<T>() where T: class, new()
+        private IEnumerable<T> ReadNextItems<T>() where T : class, new()
         {
             _reader.NextResult();
             var columns = GetColumns(in _reader);

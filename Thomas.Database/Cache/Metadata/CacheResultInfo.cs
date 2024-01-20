@@ -28,7 +28,7 @@ namespace Thomas.Database.Cache.Metadata
         {
             var result = ResponseTypes.TryGetValue(key, out var parameters);
 
-            if(!result)
+            if (!result)
             {
                 return false;
             }

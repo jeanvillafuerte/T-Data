@@ -11,19 +11,19 @@ namespace Thomas.Database.Core
 
         DbOpResult<IEnumerable<T>> ToListOp<T>(string script, object? parameters = null) where T : class, new();
 
-        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>>> ToTupleOp<T1, T2>(string script, object? parameters = null) 
-            where T1 : class, new() 
+        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>>> ToTupleOp<T1, T2>(string script, object? parameters = null)
+            where T1 : class, new()
             where T2 : class, new();
 
-        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>> ToTupleOp<T1, T2, T3>(string script, object? parameters = null) 
-            where T1 : class, new() 
-            where T2 : class, new() 
+        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>> ToTupleOp<T1, T2, T3>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
             where T3 : class, new();
 
-        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleOp<T1, T2, T3, T4>(string script, object? parameters) 
-            where T1 : class, new() 
-            where T2 : class, new() 
-            where T3 : class, new() 
+        DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleOp<T1, T2, T3, T4>(string script, object? parameters)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
             where T4 : class, new();
 
         DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>> ToTupleOp<T1, T2, T3, T4, T5>(string script, object? parameters = null)

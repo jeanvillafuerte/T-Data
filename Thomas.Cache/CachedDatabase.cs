@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -59,7 +58,7 @@ namespace Thomas.Cache
                             var value = item.GetValue(ref output);
                             item.SetValue(ref parameters, ref value, ref _cultureInfo);
                         }
-                    } 
+                    }
                     else
                         DbParameterCache.Instance.AddOrUpdate(inputIdentifies, parameters);
                 }
@@ -94,7 +93,7 @@ namespace Thomas.Cache
             if (!fromCache || refresh)
             {
                 var data = _database.ToList<T>(script, parameters);
-                result = new DictionaryDbQueryItem<IEnumerable<T>>(script, parameters, data);   
+                result = new DictionaryDbQueryItem<IEnumerable<T>>(script, parameters, data);
                 _cache.AddOrUpdate(k, result);
             }
 
@@ -266,18 +265,18 @@ namespace Thomas.Cache
 
                     if (!ReflectionHelper.IsTuple(genericType))
                     {
-                        if(ReflectionHelper.IsIEnumerable(genericType))
+                        if (ReflectionHelper.IsIEnumerable(genericType))
                         {
-                            var elementType = ReflectionHelper.GetIEnumerableElementType(genericType); 
+                            var elementType = ReflectionHelper.GetIEnumerableElementType(genericType);
                             MethodInfo refreshMethod = GetType().GetMethod("ToList").MakeGenericMethod(elementType);
                             refreshMethod.Invoke(this, new object[] { item.Query, item.Params, true, key });
-                        } 
+                        }
                         else
                         {
                             MethodInfo refreshMethod = GetType().GetMethod("ToSingle").MakeGenericMethod(genericType);
                             refreshMethod.Invoke(this, new object[] { item.Query, item.Params, true, key });
                         }
-                       
+
                     }
                     else
                     {
@@ -309,7 +308,7 @@ namespace Thomas.Cache
 
                         _ = null;
                     }
-                    
+
                 }
                 else
                 {

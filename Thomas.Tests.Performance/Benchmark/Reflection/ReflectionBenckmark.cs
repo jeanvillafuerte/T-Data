@@ -1,6 +1,6 @@
-﻿using System.ComponentModel;
+﻿using BenchmarkDotNet.Attributes;
+using System.ComponentModel;
 using System.Reflection;
-using BenchmarkDotNet.Attributes;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark.Reflection

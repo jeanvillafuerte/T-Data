@@ -14,7 +14,7 @@ namespace Thomas.Database.SqlServer
     {
         private static readonly ImmutableDictionary<string, SqlDbType> DbTypes = ImmutableDictionary.CreateRange(new[]
             {
-                new KeyValuePair<string, SqlDbType>( "String", SqlDbType.VarChar),
+                new KeyValuePair<string, SqlDbType>("String", SqlDbType.VarChar),
                 new KeyValuePair<string, SqlDbType>("Int16", SqlDbType.SmallInt),
                 new KeyValuePair<string, SqlDbType>("Int32", SqlDbType.Int),
                 new KeyValuePair<string, SqlDbType>("Int64", SqlDbType.BigInt),
@@ -41,16 +41,14 @@ namespace Thomas.Database.SqlServer
             Options = options;
         }
 
-        public DbCommand CreateCommand(in DbConnection connection,in string script, in bool isStoreProcedure)
+        public DbCommand CreateCommand(in DbConnection connection, in string script, in bool isStoreProcedure)
         {
             var command = connection.CreateCommand();
             command.CommandText = script;
             command.CommandTimeout = Options.ConnectionTimeout;
 
-            if(isStoreProcedure)
-            {
-                command.CommandType =  CommandType.StoredProcedure;
-            }
+            if (isStoreProcedure)
+                command.CommandType = CommandType.StoredProcedure;
 
             return command;
         }
@@ -67,14 +65,14 @@ namespace Thomas.Database.SqlServer
             if (!CacheDbParameter<SqlDbType>.TryGet(in metadataKey, ref dataParameters))
             {
                 var props = searchTerm.GetType().GetProperties();
-                dataParameters = props.Select( y =>
+                dataParameters = props.Select(y =>
                 {
                     var name = $"@{y.Name.ToLower()}";
                     var dbType = GetSqlDbType(y.PropertyType.Name);
                     return new MetadataParameters<SqlDbType>(in y, in name, in dbType);
                 }).ToArray();
 
-                CacheDbParameter<SqlDbType>.Set(in metadataKey,in dataParameters);
+                CacheDbParameter<SqlDbType>.Set(in metadataKey, in dataParameters);
             }
 
             foreach (var parameter in dataParameters)
@@ -88,7 +86,7 @@ namespace Thomas.Database.SqlServer
                     SqlDbType = parameter.DbType
                 };
             }
-            
+
         }
 
         public IEnumerable<dynamic> GetParams(string metadataKey)
@@ -123,6 +121,6 @@ namespace Thomas.Database.SqlServer
                 }
             }
         }
-        
+
     }
 }

@@ -14,10 +14,9 @@ namespace Thomas.Database
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using System.Windows.Input;
     using Thomas.Database.Cache.Metadata;
 
-    public sealed class DatabaseBase: IDatabase
+    public sealed class DatabaseBase : IDatabase
     {
         private readonly IDatabaseProvider Provider;
         public readonly DbSettings Options;
@@ -26,7 +25,7 @@ namespace Thomas.Database
         private DbCommand _command;
         private bool _transactionCompleted;
 
-        internal DatabaseBase(in IDatabaseProvider provider,in DbSettings options)
+        internal DatabaseBase(in IDatabaseProvider provider, in DbSettings options)
         {
             Provider = provider;
             Options = options;
@@ -35,7 +34,7 @@ namespace Thomas.Database
         #region transaction
         public T ExecuteTransaction<T>(Func<IDatabase, T> func)
         {
-            using var command = new DatabaseCommand(in Provider,in Options);
+            using var command = new DatabaseCommand(in Provider, in Options);
             _transaction = command.BeginTransaction();
             _command = command.CreateEmptyCommand();
 
@@ -53,7 +52,7 @@ namespace Thomas.Database
                     throw;
                 }
 
-               return default;
+                return default;
             }
             finally
             {
@@ -63,7 +62,7 @@ namespace Thomas.Database
 
         public async Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, T> func, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(in Provider,in Options);
+            using var command = new DatabaseCommand(in Provider, in Options);
             _transaction = command.BeginTransaction();
             _command = command.CreateEmptyCommand();
 
@@ -102,7 +101,7 @@ namespace Thomas.Database
             }
             catch (Exception)
             {
-                if(!_transactionCompleted)
+                if (!_transactionCompleted)
                 {
                     _transaction.Rollback();
                     throw;
@@ -118,7 +117,7 @@ namespace Thomas.Database
 
         public async Task<bool> ExecuteTransaction(Func<IDatabase, TransactionResult> func, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(in Provider,in Options);
+            using var command = new DatabaseCommand(in Provider, in Options);
             _transaction = command.BeginTransaction();
             _command = command.CreateEmptyCommand();
 
@@ -146,7 +145,7 @@ namespace Thomas.Database
 
         public TransactionResult Commit()
         {
-            if(_transaction == null)
+            if (_transaction == null)
                 throw new InvalidOperationException("Transaction not started");
 
             _transactionCompleted = true;
@@ -190,7 +189,7 @@ namespace Thomas.Database
 
         public int Execute(string script, object? parameters = null)
         {
-            using var command = new DatabaseCommand(in Provider,in Options, in script, in parameters, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Provider, in Options, in script, in parameters, in _transaction, in _command);
 
             command.Prepare();
             var affected = command.ExecuteNonQuery();
@@ -224,7 +223,7 @@ namespace Thomas.Database
                 using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
                 await command.PrepareAsync(cancellationToken);
                 response.RowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
-                
+
                 command.SetValuesOutFields();
             }
             catch (Exception ex) when (ex is TaskCanceledException || Provider.IsCancellatedOperationException(in ex))
@@ -336,7 +335,7 @@ namespace Thomas.Database
             var result = command.ReadListItems<T>(CommandBehavior.SingleResult);
 
             command.SetValuesOutFields();
-            
+
             return result;
         }
 
@@ -422,7 +421,7 @@ namespace Thomas.Database
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>>(t1, t2);
         }
 
-        public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>>>> ToTupleOpAsync<T1, T2>(string script, object? parameters, [EnumeratorCancellation]  CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>>>> ToTupleOpAsync<T1, T2>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken)
            where T1 : class, new()
            where T2 : class, new()
         {
@@ -578,7 +577,7 @@ namespace Thomas.Database
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>(t1, t2, t3, t4);
         }
 
-        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4: class, new()
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new()
         {
             using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
             await command.PrepareAsync(cancellationToken);
@@ -646,7 +645,7 @@ namespace Thomas.Database
             using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
             command.Prepare();
 
-            var t1= command.ReadListItems<T1>(CommandBehavior.Default);
+            var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
             var t2 = command.ReadListNextItems<T2>();
             var t3 = command.ReadListNextItems<T3>();
             var t4 = command.ReadListNextItems<T4>();
@@ -849,7 +848,7 @@ namespace Thomas.Database
 
         public IEnumerable<dynamic> GetMetadataParameter(string script, object? parameters)
         {
-           return Provider.GetParams(HashHelper.GenerateHash($"Params_{script}", parameters));
+            return Provider.GetParams(HashHelper.GenerateHash($"Params_{script}", parameters));
         }
 
         #region Error Handling

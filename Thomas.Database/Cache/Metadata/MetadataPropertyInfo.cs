@@ -29,9 +29,9 @@ namespace Thomas.Database.Cache.Metadata
         public delegate void SetValueObject(in object item, in object value, in CultureInfo cultureInfo);
         public SetValueObject SetValue;
 
-        private void SetNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
-        private void SetNotNullableValue(in object item,in object value,in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        private void SetNotNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
 
         public object GetValue<T>(in T item)
         {
