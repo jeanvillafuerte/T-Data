@@ -1,4 +1,4 @@
-# ![""](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
+# ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
 >It Works matching class fields againts result set returned by database query. There are simple configurations for applications that need fast response time without must deal with database DbConnections and DbCommands.
 
