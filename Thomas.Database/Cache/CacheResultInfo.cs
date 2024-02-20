@@ -2,10 +2,9 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Thomas.Database.SqlServer")]
 [assembly: InternalsVisibleTo("Thomas.Tests.Performance")]
 
-namespace Thomas.Database.Cache.Metadata
+namespace Thomas.Database.Cache
 {
     public sealed class CacheResultInfo
     {

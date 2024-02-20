@@ -2,17 +2,17 @@
 using System.Data;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Thomas.Database.Attributes;
 using Thomas.Database.Exceptions;
 
-namespace Thomas.Database.Cache.Metadata
+namespace Thomas.Database.Cache
 {
-    public sealed class MetadataParameters<T> where T : Enum
+    internal struct MetadataParameters
     {
         private PropertyInfo PropertyInfo { get; }
         private Type? Type { get; }
-
-        public T DbType { get; }
+        public string DbTypeName { get; }
         public int Size { get; }
         public ParameterDirection Direction { get; }
         public string DbParameterName { get; }
@@ -24,7 +24,6 @@ namespace Thomas.Database.Cache.Metadata
             }
 
         }
-
         public bool IsOutParameter
         {
             get
@@ -36,42 +35,40 @@ namespace Thomas.Database.Cache.Metadata
         public delegate void SetValueObject(in object item, in object value, in CultureInfo cultureInfo);
         public SetValueObject? SetValue;
 
-        //add by ref property that are byVal
-        //add delegate to implement not null and nullable SetValue
-
-        internal MetadataParameters(in PropertyInfo info, in string name, in T dbType)
+        internal MetadataParameters(in PropertyInfo propertyInfo, in string name, in string dbTypeName)
         {
             DbParameterName = name;
-            DbType = dbType;
-            Size = GetParameterSize(info);
-            Direction = GetParameterDireccion(info);
+            DbTypeName = dbTypeName;
+            Size = GetParameterSize(propertyInfo);
+            Direction = GetParameterDireccion(propertyInfo);
+            PropertyInfo = propertyInfo;
             Type = null;
-            PropertyInfo = info;
             SetValue = null;
 
             if (Direction == ParameterDirection.Output || Direction == ParameterDirection.InputOutput)
             {
-                if (PropertyInfo.PropertyType.IsGenericType)
-                {
-                    Type = Nullable.GetUnderlyingType(info.PropertyType);
-                    SetValue = SetNullableValue;
-                }
+                SetValue = SetInternalValue;
+
+                if (propertyInfo.PropertyType.IsGenericType)
+                    Type = Nullable.GetUnderlyingType(propertyInfo.PropertyType);
                 else
-                {
-                    Type = info.PropertyType;
-                    SetValue = SetNotNullableValue;
-                }
+                    Type = propertyInfo.PropertyType;
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public object GetValue(in object value)
         {
-            return PropertyInfo.GetValue(value) ?? DBNull.Value;
+            var getter = PropertyInfo.GetMethod!.CreateDelegate(typeof(Func<,>).MakeGenericType(PropertyInfo.DeclaringType!, PropertyInfo.PropertyType));
+            return getter.DynamicInvoke(value) ?? DBNull.Value;
         }
 
-        private void SetNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, Convert.ChangeType(value, Type!), BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
-
-        private void SetNotNullableValue(in object item, in object value, in CultureInfo cultureInfo) => PropertyInfo.SetValue(item, value, BindingFlags.GetField | BindingFlags.Public, null, null, cultureInfo);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SetInternalValue(in object item, in object value, in CultureInfo cultureInfo)
+        {
+            var setter = PropertyInfo.SetMethod!.CreateDelegate(typeof(Action<,>).MakeGenericType(PropertyInfo.DeclaringType!, PropertyInfo.PropertyType));
+            setter.DynamicInvoke(item, Convert.ChangeType(value, Type!, cultureInfo));
+        }
 
         static ParameterDirection GetParameterDireccion(PropertyInfo property)
         {

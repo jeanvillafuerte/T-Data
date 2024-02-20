@@ -19,6 +19,12 @@ namespace Thomas.Database
 
         public static string GenerateUniqueHash(ReadOnlySpan<char> span)
         {
+            ulong hash = GenerateHash(span);
+            return $"{hash:x}";
+        }
+
+        public static ulong GenerateHash(ReadOnlySpan<char> span)
+        {
             ulong hash = 5381;
 
             foreach (char c in span)
@@ -26,7 +32,7 @@ namespace Thomas.Database
                 hash = ((hash << 5) + hash) + c;
             }
 
-            return $"{hash:x}";
+            return hash;
         }
 
     }

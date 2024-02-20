@@ -2,8 +2,8 @@
 {
     internal interface IDbDataCache
     {
-        void AddOrUpdate(string hash, IDictionaryDbQueryItem result);
-        bool TryGet<T>(string hash, out DictionaryDbQueryItem<T>? result);
+        void AddOrUpdate(string hash, IQueryResult result);
+        bool TryGet<T>(string hash, out QueryResult<T>? result);
         void Release(string hash);
         void Release();
     }

@@ -1,11 +1,11 @@
-﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
-using Microsoft.IdentityModel.Tokens;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.IdentityModel.Tokens;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -35,6 +35,20 @@ namespace Thomas.Tests.Performance.Benchmark
         public void ToListCached()
         {
             var list = Database2.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 });
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "ToList<> Expression (unbuffered)")]
+        public void ToListExpression()
+        {
+            var list = Database.ToList<Person>(x => x.Id == 1);
+            list.Consume(consumer);
+        }
+
+        [Benchmark(Description = "ToList<> Expression (buffered)")]
+        public void ToListExpression2()
+        {
+            var list = Database2.ToList<Person>(x => x.Id == 1);
             list.Consume(consumer);
         }
 

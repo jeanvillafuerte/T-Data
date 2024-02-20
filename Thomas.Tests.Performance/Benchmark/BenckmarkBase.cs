@@ -1,10 +1,12 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿using System;
 using Microsoft.Extensions.Configuration;
-using System;
+using BenchmarkDotNet.Attributes;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
 using Thomas.Database;
-using Thomas.Database.SqlServer;
+using Thomas.Database.Configuration;
+using System.Data.Common;
+using Microsoft.Data.SqlClient;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
@@ -31,10 +33,12 @@ namespace Thomas.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            SqlServerFactory.AddDb(new DbSettings("db", cnx));
+            DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
+
+            DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
 
             Database = DbFactory.CreateDbContext("db");
-            Database2 = DbResultCachedFactory.CreateDbContext("db");
+            Database2 = CachedDbFactory.CreateContext("db");
             SetDataBase(Database, int.Parse(len));
         }
 

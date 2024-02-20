@@ -19,20 +19,20 @@ namespace Thomas.Cache.MemoryCache
 
         private DbDataCache() { }
 
-        private static ConcurrentDictionary<string, IDictionaryDbQueryItem> CacheObject { get; set; } = new ConcurrentDictionary<string, IDictionaryDbQueryItem>();
+        private static ConcurrentDictionary<string, IQueryResult> CacheObject { get; set; } = new();
 
-        public void AddOrUpdate(string hash, IDictionaryDbQueryItem data) => CacheObject.AddOrUpdate(hash, data, (k, v) => data);
+        public void AddOrUpdate(string hash, IQueryResult data) => CacheObject.AddOrUpdate(hash, data, (k, v) => data);
 
-        public bool TryGetNative(string hash, out IDictionaryDbQueryItem? data)
+        public bool TryGetValue(string hash, out IQueryResult? data)
         {
             return CacheObject.TryGetValue(hash, out data);
         }
 
-        public bool TryGet<T>(string hash, out DictionaryDbQueryItem<T>? result)
+        public bool TryGet<T>(string hash, out QueryResult<T>? result)
         {
-            if (CacheObject.TryGetValue(hash, out IDictionaryDbQueryItem? data))
+            if (CacheObject.TryGetValue(hash, out IQueryResult? data))
             {
-                if (data is DictionaryDbQueryItem<T> convertedValue)
+                if (data is QueryResult<T> convertedValue)
                 {
                     result = convertedValue;
                     return true;

@@ -1,9 +1,9 @@
-﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
-using Dapper;
-using Microsoft.Data.SqlClient;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Linq;
+using Microsoft.Data.SqlClient;
+using Dapper;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark.Others
@@ -19,6 +19,18 @@ namespace Thomas.Tests.Performance.Benchmark.Others
         public void Setup()
         {
             Start();
+        }
+
+        [Benchmark(Description = "QuerySingle<T>")]
+        public Person QuerySingle()
+        {
+            var _connection = new SqlConnection(StringConnection);
+            _connection.Open();
+
+            var item = _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
+            _connection.Close();
+
+            return item;
         }
 
         [Benchmark(Description = "Query<T> (unbuffered)")]

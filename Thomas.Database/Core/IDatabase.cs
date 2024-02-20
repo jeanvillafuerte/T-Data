@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database.Core;
+using Thomas.Database.Core.WriteDatabase;
 
 namespace Thomas.Database
 {
-    public interface IDatabase : IDbOperationResult, IDbOperationResultAsync, IDbResulSet, IDbResultSetAsync
+    public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbOperationResultAsync, IDbResulSet, IDbResultSetAsync, IDbSetExpression
     {
         int Execute(string script, object? inputData = null);
         IEnumerable<dynamic> GetMetadataParameter(string script, object? parameters);

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace Thomas.Cache.MemoryCache
 {
@@ -15,6 +16,10 @@ namespace Thomas.Cache.MemoryCache
         /// <param name="key">custom key to store in cache</param>
         /// <returns></returns>
         T? ToSingle<T>(string script, object? parameters = null, bool refresh = false, string? key = null) where T : class, new();
+
+        T? ToSingle<T>(Expression<Func<T, bool>>? where = null, bool refresh = false, string? key = null) where T : class, new();
+
+        IEnumerable<T> ToList<T>(Expression<Func<T, bool>>? where = null, bool refresh = false, string? key = null) where T : class, new();
 
         /// <summary>
         /// Get the cached result of the query of a result set.

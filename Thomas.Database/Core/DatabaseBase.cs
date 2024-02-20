@@ -10,25 +10,31 @@ using System.Runtime.CompilerServices;
 namespace Thomas.Database
 {
     using System.Data.Common;
+    using System.Linq.Expressions;
     using System.Runtime.CompilerServices;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using Thomas.Database.Cache.Metadata;
+    using Thomas.Database.Cache;
+    using Thomas.Database.Core.Converters;
+    using Thomas.Database.Core.Provider;
+    using Thomas.Database.Core.QueryGenerator;
 
     public sealed class DatabaseBase : IDatabase
     {
-        private readonly IDatabaseProvider Provider;
+        private readonly DatabaseProvider Provider;
         public readonly DbSettings Options;
 
         private DbTransaction _transaction;
         private DbCommand _command;
         private bool _transactionCompleted;
+        private DbDataConverter DbDataConverter;
 
-        internal DatabaseBase(in IDatabaseProvider provider, in DbSettings options)
+        internal DatabaseBase(in DbSettings options)
         {
-            Provider = provider;
+            Provider = new DatabaseProvider(options);
             Options = options;
+            DbDataConverter = new DbDataConverter(Provider.Provider);
         }
 
         #region transaction
@@ -189,7 +195,7 @@ namespace Thomas.Database
 
         public int Execute(string script, object? parameters = null)
         {
-            using var command = new DatabaseCommand(in Provider, in Options, in script, in parameters, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Provider, in Options, in script, in parameters, in DbDataConverter.Converters, in _transaction, in _command);
 
             command.Prepare();
             var affected = command.ExecuteNonQuery();
@@ -220,7 +226,7 @@ namespace Thomas.Database
             var response = new DbOpAsyncResult() { Success = true };
             try
             {
-                using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+                using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
                 await command.PrepareAsync(cancellationToken);
                 response.RowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
 
@@ -241,11 +247,16 @@ namespace Thomas.Database
 
         public async Task<int> ExecuteAsync(string script, object? parameters, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             command.SetValuesOutFields();
             return affected;
+        }
+
+        public async Task<int> ExecuteAsync(string script, object? parameters = null)
+        {
+            return await ExecuteAsync(script, parameters, CancellationToken.None);
         }
 
         #endregion
@@ -254,11 +265,26 @@ namespace Thomas.Database
 
         public T? ToSingle<T>(string script, object? parameters = null) where T : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
             var item = command.ReadListItems<T>(CommandBehavior.SingleRow).FirstOrDefault();
             command.SetValuesOutFields();
             return item;
+        }
+
+        public T? ToSingle<T>(Expression<Func<T, bool>>? where = null) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, in DbDataConverter.Converters);
+            var script = generator.GenerateSelectWhere(where);
+            return ToSingle<T>(script, generator.DbParametersToBind);
+        }
+
+        internal T? ToSingle<T>(string query, Dictionary<string, QueryParameter> parameters) where T : class, new()
+        {
+            using var command = new DatabaseCommand(Provider, Options, in query, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(parameters);
+            return command.ReadListItems<T>(CommandBehavior.SingleRow).FirstOrDefault();
         }
 
         public DbOpResult<T> ToSingleOp<T>(string script, object? parameters = null) where T : class, new()
@@ -280,9 +306,14 @@ namespace Thomas.Database
 
         public async Task<T?> ToSingleAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
             return command.ReadListItems<T>(CommandBehavior.SingleRow).FirstOrDefault();
+        }
+
+        public async Task<T?> ToSingleAsync<T>(string script, object? parameters = null) where T : class, new()
+        {
+            return await ToSingleAsync<T>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<T>> ToSingleOpAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
@@ -309,6 +340,24 @@ namespace Thomas.Database
         #endregion
 
         #region one result set
+        public IEnumerable<T> ToList<T>(Expression<Func<T, bool>>? where = null) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, in DbDataConverter.Converters);
+            var script = generator.GenerateSelectWhere(where);
+            return ToList<T>(script, generator.DbParametersToBind);
+        }
+
+        public async Task<IEnumerable<T>> ToListAsync<T>(Expression<Func<T, bool>>? where) where T : class, new()
+        {
+            return await ToListAsync<T>(where, CancellationToken.None);
+        }
+
+        public async Task<IEnumerable<T>> ToListAsync<T>(Expression<Func<T, bool>> where, [EnumeratorCancellation] CancellationToken cancellationToken) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, in DbDataConverter.Converters);
+            var script = generator.GenerateSelectWhere(where);
+            return await ToListAsync<T>(script, generator.DbParametersToBind, cancellationToken);
+        }
 
         public DbOpResult<IEnumerable<T>> ToListOp<T>(string script, object? parameters = null) where T : class, new()
         {
@@ -327,9 +376,25 @@ namespace Thomas.Database
             return response;
         }
 
+        internal IEnumerable<T> ToList<T>(string query, Dictionary<string, QueryParameter> parameters) where T : class, new()
+        {
+            using var command = new DatabaseCommand(Provider, Options, in query, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(parameters);
+            return command.ReadListItems<T>(CommandBehavior.SingleResult);
+        }
+
+        internal async Task<IEnumerable<T>> ToListAsync<T>(string query, Dictionary<string, QueryParameter> parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T : class, new()
+        {
+            using var command = new DatabaseCommand(Provider, Options, in query, null, in DbDataConverter.Converters, _transaction, _command);
+            await command.PrepareAsync(cancellationToken);
+            command.AddDynamicParameters(parameters);
+            return await command.ReadListItemsAsync<T>(CommandBehavior.SingleResult, cancellationToken);
+        }
+
         public IEnumerable<T> ToList<T>(string script, object? parameters = null) where T : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in _transaction, in _command);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters, in _transaction, in _command);
             command.Prepare();
 
             var result = command.ReadListItems<T>(CommandBehavior.SingleResult);
@@ -341,7 +406,7 @@ namespace Thomas.Database
 
         public async Task<IEnumerable<T>> ToListAsync<T>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, parameters, in DbDataConverter.Converters);
 
             await command.PrepareAsync(cancellationToken);
 
@@ -350,6 +415,11 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return result;
+        }
+
+        public async Task<IEnumerable<T>> ToListAsync<T>(string script, object? parameters = null) where T : class, new()
+        {
+            return await ToListAsync<T>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<IEnumerable<T>>> ToListOpAsync<T>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T : class, new()
@@ -398,7 +468,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>> ToTuple<T1, T2>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
             var t2 = command.ReadListNextItems<T2>();
@@ -410,7 +480,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>>> ToTupleAsync<T1, T2>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new()
         {
-            var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -419,6 +489,13 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>>(t1, t2);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>>> ToTupleAsync<T1, T2>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+        {
+            return await ToTupleAsync<T1, T2>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>>>> ToTupleOpAsync<T1, T2>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -466,7 +543,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>> ToTuple<T1, T2, T3>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
@@ -504,7 +581,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>> ToTupleAsync<T1, T2, T3>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -514,6 +591,14 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>(t1, t2, t3);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>>> ToTupleAsync<T1, T2, T3>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+        {
+            return await ToTupleAsync<T1, T2, T3>(script, parameters, CancellationToken.None);
         }
 
         public DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleOp<T1, T2, T3, T4>(string script, object? parameters)
@@ -564,7 +649,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>> ToTuple<T1, T2, T3, T4>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
@@ -579,7 +664,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -590,6 +675,15 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>(t1, t2, t3, t4);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+        {
+            return await ToTupleAsync<T1, T2, T3, T4>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>>> ToTupleOp<T1, T2, T3, T4, T5>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -642,7 +736,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>> ToTuple<T1, T2, T3, T4, T5>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
@@ -658,7 +752,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -670,6 +764,16 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>(t1, t2, t3, t4, t5);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+        {
+            return await ToTupleAsync<T1, T2, T3, T4, T5>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>>> ToTupleOp<T1, T2, T3, T4, T5, T6>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -724,7 +828,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
@@ -741,7 +845,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -754,6 +858,17 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>(t1, t2, t3, t4, t5, t6);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+            where T6 : class, new()
+        {
+            return await ToTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, CancellationToken.None);
         }
 
         public DbOpResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null)
@@ -782,7 +897,7 @@ namespace Thomas.Database
 
         public Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new() where T7 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>(CommandBehavior.Default);
@@ -800,7 +915,7 @@ namespace Thomas.Database
 
         public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new() where T7 : class, new()
         {
-            using var command = new DatabaseCommand(Provider, Options, in script, in parameters);
+            using var command = new DatabaseCommand(Provider, Options, in script, in parameters, in DbDataConverter.Converters);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(CommandBehavior.Default, cancellationToken);
@@ -814,6 +929,18 @@ namespace Thomas.Database
             command.SetValuesOutFields();
 
             return new Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>(t1, t2, t3, t4, t5, t6, t7);
+        }
+
+        public async Task<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null)
+            where T1 : class, new()
+            where T2 : class, new()
+            where T3 : class, new()
+            where T4 : class, new()
+            where T5 : class, new()
+            where T6 : class, new()
+            where T7 : class, new()
+        {
+            return await ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>, IEnumerable<T6>, IEnumerable<T7>>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -848,7 +975,7 @@ namespace Thomas.Database
 
         public IEnumerable<dynamic> GetMetadataParameter(string script, object? parameters)
         {
-            return Provider.GetParams(HashHelper.GenerateHash($"Params_{script}", parameters));
+            return Provider.GetParams(HashHelper.GenerateHash(script, parameters));
         }
 
         #region Error Handling
@@ -866,7 +993,7 @@ namespace Thomas.Database
 
             if (value != null)
             {
-                var hash = HashHelper.GenerateUniqueHash($"Inputs_{script}");
+                var hash = HashHelper.GenerateUniqueHash(script);
 
                 MetadataPropertyInfo[] parameters = null;
                 CacheResultInfo.TryGet(in hash, ref parameters);
@@ -895,6 +1022,61 @@ namespace Thomas.Database
             return stringBuilder.ToString();
         }
 
+        #endregion
+
+        #region Write operations
+
+        public int Update<T>(T entity, Expression<Func<T, object>> where) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, DbDataConverter.Converters);
+            var script = generator.GenerateUpdate<T>(entity, where);
+            using var command = new DatabaseCommand(Provider, Options, in script, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(generator.DbParametersToBind);
+            return command.ExecuteNonQuery();
+        }
+
+        public void Add<T>(T entity) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, DbDataConverter.Converters);
+            var script = generator.GenerateInsert<T>(entity);
+            using var command = new DatabaseCommand(Provider, Options, in script, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(generator.DbParametersToBind);
+
+            command.ExecuteNonQuery();
+        }
+
+        public TE Add<T, TE>(T entity) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, DbDataConverter.Converters);
+            var script = generator.GenerateInsert<T>(entity, true);
+            using var command = new DatabaseCommand(Provider, Options, in script, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(generator.DbParametersToBind);
+            object? rawValue = null;
+
+            if (Options.SqlProvider == SqlProvider.Oracle)
+            {
+                command.ExecuteNonQuery();
+                var param = command.OutParameters.First();
+                rawValue = Provider.GetValueFromParameter(param);
+            }
+            else
+                rawValue = command.ExecuteScalar();
+
+            return (TE)TypeConversionRegistry.ConvertByType(rawValue, typeof(TE), Options.CultureInfo, DbDataConverter.Converters);
+        }
+
+        public void Delete<T>(Expression<Func<T, object>> where) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues, Options.CultureInfo, DbDataConverter.Converters);
+            var script = generator.GenerateDelete<T>(where);
+            using var command = new DatabaseCommand(Provider, Options, in script, null, in DbDataConverter.Converters, _transaction, _command);
+            command.Prepare();
+            command.AddDynamicParameters(generator.DbParametersToBind);
+            command.ExecuteNonQuery();
+        }
         #endregion
     }
 

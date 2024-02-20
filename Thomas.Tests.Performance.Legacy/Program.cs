@@ -1,11 +1,14 @@
 ﻿using System;
+using System.Data.Common;
 using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Thomas.Cache;
 using Thomas.Cache.Factory;
 using Thomas.Database;
-using Thomas.Database.SqlServer;
+using Thomas.Database.Configuration;
+
 using Thomas.Tests.Performance.Legacy.Setup;
 
 namespace Thomas.Tests.Performance.Legacy
@@ -64,8 +67,11 @@ namespace Thomas.Tests.Performance.Legacy
             IServiceCollection serviceCollection = new ServiceCollection();
 
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
-            SqlServerFactory.AddDb(new DbSettings("db1", cnx1));
-            SqlServerFactory.AddDb(new DbSettings("db2", cnx2));
+
+            DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
+
+            DbConfigurationFactory.Register(new DbSettings("db1", SqlProvider.SqlServer, cnx1));
+            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx2));
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
             var loadDataManager = serviceProvider.GetService<IDataBaseManager>();
@@ -75,28 +81,30 @@ namespace Thomas.Tests.Performance.Legacy
 
             Database1 = DbFactory.CreateDbContext("db1");
             Database2 = DbFactory.CreateDbContext("db2");
-            CachedResultDatabase = DbResultCachedFactory.CreateDbContext("db2");
+            CachedResultDatabase = CachedDbFactory.CreateContext("db2");
         }
 
         static void RunTestsDatabase(IDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(() => new Tests.Single().Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.List().Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Tuple().Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Procedures().Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Error().Execute(database, databaseName, TableName, rows))
+                Task.Run(() => new Tests.Expression(databaseName).Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Single(databaseName).Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List(databaseName).Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple(databaseName).Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures(databaseName).Execute(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error(databaseName).Execute(database, databaseName, TableName, rows))
                 );
         }
 
         static void RunTestsCachedDatabase(ICachedDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(() => new Tests.Single().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.List().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Tuple().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Procedures().ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Error().ExecuteCachedDatabase(database, databaseName, TableName, rows))
+                Task.Run(() => new Tests.Expression(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Single(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.List(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Tuple(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Procedures(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
+                Task.Run(() => new Tests.Error(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows))
                 );
 
             database.Release();
@@ -105,10 +113,11 @@ namespace Thomas.Tests.Performance.Legacy
         static void RunTestsDatabaseAsync(IDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(async () => await new Tests.List().ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Tuple().ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Procedures().ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Error().ExecuteAsync(database, databaseName, TableName, rows))
+                Task.Run(async () => await new Tests.Expression(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.List(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Tuple(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Procedures(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
+                Task.Run(async () => await new Tests.Error(databaseName).ExecuteAsync(database, databaseName, TableName, rows))
                 );
         }
 
@@ -121,10 +130,12 @@ namespace Thomas.Tests.Performance.Legacy
 
         static void WriteStep(string message, bool includeBlankLine = false)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine(message);
             if (includeBlankLine)
                 Console.WriteLine();
+
+            Console.ForegroundColor = ConsoleColor.White;
         }
     }
 }

@@ -4,13 +4,13 @@ using Thomas.Database.Configuration;
 
 namespace Thomas.Cache.Factory
 {
-    public static class DbResultCachedFactory
+    public static class CachedDbFactory
     {
-        public static ICachedDatabase CreateDbContext(string signature)
+        public static ICachedDatabase CreateContext(string signature)
         {
-            var (config, provider) = DbConfigurationFactory.Get(signature);
-            var database = new DatabaseBase(provider, config);
-            return new CachedDatabase(DbDataCache.Instance, database, config.CultureInfo);
+            var config = DbConfigurationFactory.Get(signature);
+            var database = new DatabaseBase(config);
+            return new CachedDatabase(DbDataCache.Instance, database, config.CultureInfo, config.SQLValues);
         }
     }
 }

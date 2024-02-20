@@ -24,14 +24,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.4" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.130" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Thomas.Cache\Thomas.Cache.csproj" />
-    <ProjectReference Include="..\Thomas.Database.SqlServer\Thomas.Database.SqlServer.csproj" />
     <ProjectReference Include="..\Thomas.Database\Thomas.Database.csproj" />
   </ItemGroup>
 

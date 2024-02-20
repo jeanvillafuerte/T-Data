@@ -3,10 +3,15 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Database.Cache.Metadata;
+using Thomas.Database.Cache;
+using Thomas.Database.Configuration;
+using Thomas.Database.Core.Converters;
+using Thomas.Database.Core.Provider;
+using Thomas.Database.Core.QueryGenerator;
 using Thomas.Database.Exceptions;
 
 namespace Thomas.Database
@@ -15,12 +20,12 @@ namespace Thomas.Database
     internal sealed class DatabaseCommand : IDisposable
     {
         private static readonly Regex storeProcedureNameRegex = new Regex(@"^(?!EXEC)(?:\[?\w+\]?$|^\[?\w+\]?\.\[?\w+\]?$|\[?\w+\]?\.\[?\w+\]?.\[?\w+\]?)$", RegexOptions.Compiled);
-
-        private readonly IDatabaseProvider? _provider;
+        private readonly ITypeConversionStrategy[] _converters;
+        private readonly DatabaseProvider? _provider;
         private readonly DbSettings _options;
         private readonly string? _script;
-        private readonly string? _metadataKey;
-        private readonly string? _metadataInputKey;
+
+        private readonly string? _operationKey;
         private readonly object? _searchTerm;
         private readonly bool _isStoreProcedure;
 
@@ -29,7 +34,6 @@ namespace Thomas.Database
 
         private DbConnection? _connection;
         private DbTransaction? _transaction;
-
         // output parameters
         public IEnumerable<IDbDataParameter> OutParameters
         {
@@ -53,14 +57,15 @@ namespace Thomas.Database
             }
         }
 
-        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options)
+        public DatabaseCommand(in DatabaseProvider provider, in DbSettings options)
         {
             _provider = provider;
             _options = options;
         }
 
-        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options, in string script, in object? searchTerm, in DbTransaction transaction = null, in DbCommand command = null)
+        public DatabaseCommand(in DatabaseProvider provider, in DbSettings options, in string script, in object? searchTerm, in ITypeConversionStrategy[] converters, in DbTransaction transaction = null, in DbCommand command = null)
         {
+            _converters = converters;
             _provider = provider;
             _options = options;
             _script = script;
@@ -73,18 +78,15 @@ namespace Thomas.Database
             {
                 if (_searchTerm != null)
                 {
-                    _metadataInputKey = HashHelper.GenerateHash(script, in searchTerm);
+                    _operationKey = HashHelper.GenerateHash(script, in searchTerm);
                 }
 
                 _isStoreProcedure = storeProcedureNameRegex.Matches(script).Count > 0;
-                _metadataKey = HashHelper.GenerateUniqueHash(script);
             }
         }
 
-        internal DbCommand CreateEmptyCommand()
-        {
-            return _connection.CreateCommand();
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal DbCommand CreateEmptyCommand() => _connection.CreateCommand();
 
         internal DbTransaction BeginTransaction()
         {
@@ -100,9 +102,9 @@ namespace Thomas.Database
                 _connection = _provider.CreateConnection(in _options.StringConnection);
                 _command = _provider.CreateCommand(in _connection, in _script, in _isStoreProcedure);
 
-                if (_metadataInputKey != null)
+                if (_operationKey != null)
                 {
-                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
+                    var parameters = _provider.GetParams(_operationKey, _searchTerm);
 
                     foreach (var parameter in parameters)
                     {
@@ -123,9 +125,9 @@ namespace Thomas.Database
                 if (_isStoreProcedure)
                     _command.CommandType = CommandType.StoredProcedure;
 
-                if (_metadataInputKey != null)
+                if (_operationKey != null)
                 {
-                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
+                    var parameters = _provider.GetParams(_operationKey, _searchTerm);
                     _command.Parameters.Clear();
 
                     foreach (var parameter in parameters)
@@ -150,9 +152,9 @@ namespace Thomas.Database
             _connection = _provider.CreateConnection(in _options.StringConnection);
             _command = _provider.CreateCommand(_connection, in _script, in _isStoreProcedure);
 
-            if (_metadataInputKey != null)
+            if (_operationKey != null)
             {
-                var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
+                var parameters = _provider.GetParams(_operationKey, _searchTerm);
                 foreach (var parameter in parameters)
                 {
                     _command.Parameters.Add(parameter);
@@ -169,6 +171,7 @@ namespace Thomas.Database
         /// <param name="reader">Data reader</param>
         /// <returns>Column names array</returns>
         /// <exception cref="Exception"></exception>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static string[] GetColumns(in DbDataReader reader)
         {
             var count = reader.FieldCount;
@@ -186,10 +189,16 @@ namespace Thomas.Database
             return cols;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public object? ExecuteScalar() => _command.ExecuteScalar();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken) => await _command.ExecuteNonQueryAsync(cancellationToken);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void NextResult() => _reader.NextResult();
 
         public void SetValuesOutFields()
@@ -202,22 +211,40 @@ namespace Thomas.Database
                 foreach (var item in OutParameters)
                     item.Value = _command.Parameters[item.ParameterName].Value;
 
-                _provider.LoadParameterValues(OutParameters, in _searchTerm, in _metadataInputKey);
+                _provider.LoadParameterValues(OutParameters, in _searchTerm, in _operationKey);
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private IEnumerable<MetadataPropertyInfo> GetProperties<T>(in string[] columns)
         {
-            MetadataPropertyInfo[]? props = null;
+            MetadataPropertyInfo[]? cacheableProps = null;
 
-            if (CacheResultInfo.TryGet(in _metadataKey, ref props))
-                return props!;
+            var type = typeof(T);
 
-            props = new MetadataPropertyInfo[columns.Length];
+            if (CacheResultInfo.TryGet(type.FullName!, ref cacheableProps))
+                return GetUtilProperties(cacheableProps, columns);
 
-            var properties = typeof(T).GetProperties();
+            if (DbConfigurationFactory.Tables.ContainsKey(type.FullName!))
+            {
+                var table = DbConfigurationFactory.Tables[type.FullName!];
+                cacheableProps = table.Columns.Select(p => new MetadataPropertyInfo(p.Property)).ToArray();
+            }
+            else
+            {
+                var properties = type.GetProperties();
+                cacheableProps = properties.Select(p => new MetadataPropertyInfo(p)).ToArray();
+            }
 
-            int realProperties = 0;
+            CacheResultInfo.Set(type.FullName!, cacheableProps);
+
+            return GetUtilProperties(cacheableProps, columns);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private IEnumerable<MetadataPropertyInfo> GetUtilProperties(MetadataPropertyInfo[]? properties, string[] columns)
+        {
+            List<MetadataPropertyInfo> props = new List<MetadataPropertyInfo>();
 
             for (int i = 0; i < columns.Length; i++)
             {
@@ -225,19 +252,10 @@ namespace Thomas.Database
                 {
                     if (property.Name.Equals(columns[i], StringComparison.InvariantCultureIgnoreCase))
                     {
-                        props[i] = new MetadataPropertyInfo(in property);
-                        realProperties++;
-                        break;
+                        props.Add(property);
                     }
                 }
             }
-
-            if (columns.Length > realProperties)
-            {
-                Array.Resize(ref props, realProperties);
-            }
-
-            CacheResultInfo.Set(in _metadataKey, in props);
 
             return props;
         }
@@ -270,7 +288,8 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
+                    if (!values[j].Equals(DBNull.Value))
+                        properties[j].SetValue(item, in values[j], _options.CultureInfo, in _converters);
                 }
 
                 yield return item;
@@ -304,7 +323,8 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
+                    if (!values[j].Equals(DBNull.Value))
+                        properties[j].SetValue(item, in values[j], _options.CultureInfo, in _converters);
                 }
 
                 yield return item;
@@ -338,7 +358,8 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
+                    if (!values[j].Equals(DBNull.Value))
+                        properties[j].SetValue(item, in values[j], _options.CultureInfo, in _converters);
                 }
 
                 yield return item;
@@ -369,7 +390,8 @@ namespace Thomas.Database
 
                 for (int j = 0; j < columns.Length; j++)
                 {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
+                    if (!values[j].Equals(DBNull.Value))
+                        properties[j].SetValue(item, in values[j], _options.CultureInfo, in _converters);
                 }
 
                 yield return item;
@@ -387,6 +409,14 @@ namespace Thomas.Database
                 _connection?.Dispose();
             }
         }
-    }
 
+        internal void AddDynamicParameters(Dictionary<string, QueryParameter> dbParametersToBind)
+        {
+            if (dbParametersToBind == null)
+                return;
+
+            foreach (var item in dbParametersToBind)
+                _command.Parameters.Add(_provider.CreateParameter(item.Key, item.Value));
+        }
+    }
 }
