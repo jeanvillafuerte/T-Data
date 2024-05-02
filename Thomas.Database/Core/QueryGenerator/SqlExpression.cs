@@ -2,7 +2,7 @@
 
 namespace Thomas.Database.Core.QueryGenerator
 {
-    public class SqlExpression
+    public static class SqlExpression
     {
         public static bool Between<T>(Func<T, object> field, int a, int b) => true;
         public static bool Between<T>(Func<T, object> field, long a, long b) => true;

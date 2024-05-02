@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Database.Core.FluentApi;
@@ -12,19 +13,19 @@ namespace Thomas.Tests.Performance.Legacy.Tests
         {
         }
 
-        public void Execute(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        public void Execute(IDatabase service, string tableName, int expectedItems = 0)
         {
             LoadTableBuilder(tableName);
-            PerformOperation(() => service.ToList<Person>(x => x.Id > 0), expectedItems, "ToList<> Expression");
+            PerformOperation<Person>(() => service.ToList<Person>(x => x.Id > 0), expectedItems, "ToList<> Expression");
         }
 
-        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        public async Task ExecuteAsync(IDatabase service, string tableName, int expectedItems = 0)
         {
             LoadTableBuilder(tableName);
             await PerformOperationAsync(() => service.ToListAsync<Person>(x => x.Id > 0), expectedItems, "ToListAsync<> Expression");
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName, int expectedItems = 0)
+        public void ExecuteCachedDatabase(ICachedDatabase database, string tableName, int expectedItems = 0)
         {
             LoadTableBuilder(tableName);
             PerformOperation(() => database.ToList<Person>(x => x.Id > 0), expectedItems, "ToList<> Expression (cached)");

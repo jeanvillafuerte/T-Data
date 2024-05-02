@@ -1,14 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq;
 using Thomas.Database.Core.Converters.Oracle;
 
 namespace Thomas.Database.Core.Converters
 {
-    internal class TypeConversionRegistry
+    internal static class TypeConversionRegistry
     {
-        internal readonly static Dictionary<SqlProvider, ITypeConversionStrategy[]> Strategies = new Dictionary<SqlProvider, ITypeConversionStrategy[]>();
+        internal readonly static ConcurrentDictionary<SqlProvider, ITypeConversionStrategy[]> ProviderConverters = new ConcurrentDictionary<SqlProvider, ITypeConversionStrategy[]>(Environment.ProcessorCount * 2, 5);
 
         static TypeConversionRegistry()
         {
@@ -21,32 +21,33 @@ namespace Thomas.Database.Core.Converters
 
         private static void RegisterStrategy(SqlProvider provider, ITypeConversionStrategy[] converters)
         {
-            Strategies[provider] = converters;
+            ProviderConverters[provider] = converters;
         }
 
-        public static object Convert(object value, Type targetType, in CultureInfo cultureInfo, in ITypeConversionStrategy[] converters)
+        public static object Convert(object value, Type targetType, in CultureInfo cultureInfo, SqlProvider provider)
         {
-            var converter = converters.Where(x => x.CanConvert(targetType, value)).FirstOrDefault();
+            var converter = ProviderConverters[provider].FirstOrDefault(x => x.CanConvert(targetType, value));
             if (converter != null)
                 return converter.Convert(value, cultureInfo);
 
-            // Fallback for unregistered type/provider combinations
+            // Fall-back for unregistered type/provider combinations
             return System.Convert.ChangeType(value, targetType, cultureInfo);
         }
 
-        public static object ConvertByType(object value, Type targetType, CultureInfo cultureInfo, ITypeConversionStrategy[] converters)
+        public static object ConvertByType(object value, Type targetType, CultureInfo cultureInfo, SqlProvider provider, bool reduceNumericToIntegerWhenPossible = false)
         {
-            var converter = converters.Where(x => x.CanConvertByType(value)).FirstOrDefault();
+            var converter = ProviderConverters[provider].FirstOrDefault(x => x.CanConvertByType(value));
             if (converter != null)
                 return converter.ConvertByType(value, cultureInfo);
 
+            if (reduceNumericToIntegerWhenPossible &&
+                (value is decimal || value is double || value is float)
+                && int.TryParse(value.ToString(), out var intValue))
+            {
+                return intValue;
+            }
+
             return System.Convert.ChangeType(value, targetType, cultureInfo);
         }
-    }
-
-    internal class DbDataConverter
-    {
-        internal ITypeConversionStrategy[] Converters;
-        public DbDataConverter(SqlProvider provider) => Converters = TypeConversionRegistry.Strategies[provider];
     }
 }

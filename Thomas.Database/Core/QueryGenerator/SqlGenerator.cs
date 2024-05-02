@@ -6,25 +6,30 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Thomas.Database.Cache;
 using Thomas.Database.Configuration;
 using Thomas.Database.Core.Converters;
 using Thomas.Database.Core.FluentApi;
-using Thomas.Database.Helpers;
+using Thomas.Database.Core.Provider;
+
+[assembly: InternalsVisibleTo("Thomas.Cache")]
 
 namespace Thomas.Database.Core.QueryGenerator
 {
     public interface IParameterHandler
     {
-        void AddInParam(in Type propertyType, object value, out string paramName);
+        void AddInParam(in Type propertyType, object value, string dbType, out string paramName);
+        void AddInParam(in PropertyInfo propertyInfo);
+        void AddInParam(in PropertyInfo propertyInfo, out string paramName);
         void AddOutParam(DbColumn column, out string paramName);
     }
 
-    internal class SqlGenerator<T> : IParameterHandler where T : class, new()
+    internal partial class SqlGenerator<T> : IParameterHandler where T : class, new()
     {
 
-        private string TableAlias;
+        private readonly char TableAlias;
         private readonly Type Type;
         private string DbSchema
         {
@@ -32,114 +37,117 @@ namespace Thomas.Database.Core.QueryGenerator
             {
                 if (_table.Schema != null)
                     return $"{_table.Schema}.";
-                else
-                    return string.Empty;
+                return string.Empty;
             }
         }
         private string TableName
         {
             get
             {
-                return $"{DbSchema}{_formatter.CuratedTableName(_table.Name, _table.DbName)} {TableAlias}";
+                return $"{DbSchema}{_table.DbName ?? _table.Name} {TableAlias}";
             }
         }
         private string TableNameWithoutAlias
         {
             get
             {
-                return $"{DbSchema}{_formatter.CuratedTableName(_table.Name, _table.DbName)}";
+                return DbSchema + (_table.DbName ?? _table.Name);
             }
         }
 
-        private readonly string _columns;
-        private const string SELECT = "SELECT ";
-        private const string FROM = "FROM";
-        private const string WHERE = " WHERE ";
-        private const string UPDATE = "UPDATE";
-        private const string DELETE = "DELETE";
         private readonly DbTable _table;
-        private readonly ITypeConversionStrategy[] _converters;
         private readonly ISqlFormatter _formatter;
-        private readonly CultureInfo _culture;
 
-        public Dictionary<string, QueryParameter> DbParametersToBind { get; set; }
+        /// <summary>
+        /// considering is an arbitrary amount of parameters, a linked list is the best option
+        /// </summary>
+        internal readonly LinkedList<DbParameterInfo> DbParametersToBind;
+        private readonly T _entity;
 
-        //TODO: support for multiple tables
-        //support convert without table configuration (OK)
-        //cache de SQL script and just obtain the parameter values to save in DbParamteresToBind (OK)
-        public SqlGenerator(ISqlFormatter formatter, in CultureInfo culture, in ITypeConversionStrategy[] converters)
+        public SqlGenerator(ISqlFormatter formatter, T entity = null)
         {
-            _converters = converters;
+            _entity = entity;
             _formatter = formatter;
-            _culture = culture;
             Type = typeof(T);
             TableAlias = GetTableAlias();
 
             if (!DbConfigurationFactory.Tables.ContainsKey(Type.FullName!))
             {
-                var builder = new TableBuilder();
-                DbTable dbTable = builder.Configure<T>();
+                var dbTable = new DbTable { Name = Type.Name! };
                 dbTable.AddFieldsAsColumns<T>();
-                DbFactory.AddDbBuilder(builder);
+                DbConfigurationFactory.Tables.TryAdd(Type.FullName!, dbTable);
             }
 
             _table = DbConfigurationFactory.Tables[Type.FullName!];
-            _columns = string.Join(',', _table.Columns.Select(x => x.FullDbName).ToArray());
-            DbParametersToBind = new Dictionary<string, QueryParameter>();
+            DbParametersToBind = new LinkedList<DbParameterInfo>();
         }
 
         public string[][] GetAlias(LambdaExpression predicate)
         {
             string[][] aliasIdentifiers = new string[1][];
             var tableIdentifier = predicate!.Parameters[0]!.Name;
-            aliasIdentifiers[0] = new string[] { tableIdentifier!, TableAlias };
+            aliasIdentifiers[0] = new string[] { tableIdentifier!, TableAlias.ToString() };
             return aliasIdentifiers;
         }
 
-        public string GenerateSelectWhere(Expression<Func<T, bool>>? predicate)
+        public string GenerateSelectWhere(Expression<Func<T, bool>>? predicate, SqlOperation operation, ref object filter)
         {
-            var key = ExpressionHasher.GetHashCode(predicate, _formatter.Provider, false).ToString();
+            string sqlText;
+            ulong key = 0;
 
-            if (GetSQL(key, predicate, out var sqlText))
-                return sqlText;
-            else
+            if (predicate != null)
             {
-                var stringBuilder = new StringBuilder();
-                stringBuilder.Append(SELECT);
-                stringBuilder.Append(_columns);
-                stringBuilder.Append($" {FROM} {TableName}");
-
-                if (predicate != null)
-                {
-                    stringBuilder.Append(WHERE);
-                    stringBuilder.Append(WhereClause(predicate!.Body, GetAlias(predicate)));
-                }
-
-                sqlText = stringBuilder.ToString();
-
-                CacheQueryString.Set(key, sqlText);
+                key = CalculateExpressionKey(predicate, operation, _formatter.Provider);
+                if (GetCachedValues(key, predicate, false, out sqlText, ref filter))
+                    return sqlText;
             }
+
+            var stringBuilder = new StringBuilder("SELECT ")
+                                    .AppendJoin(',', _table.Columns.Select(x => x.FullDbName).ToArray())
+                                    .Append($" FROM {TableName}");
+
+            if (predicate != null)
+            {
+                stringBuilder.Append(" WHERE ");
+                stringBuilder.Append(WhereClause(predicate!.Body, null, GetAlias(predicate)));
+            }
+
+            sqlText = stringBuilder.ToString();
+
+            if (predicate != null)
+                EnsureCacheItem(key, sqlText, false, ref filter);
 
             return sqlText;
         }
 
-        private bool GetSQL(string key, Expression<Func<T, bool>>? predicate, out string value)
+        private bool GetCachedValues(ulong key, Expression predicate, in bool returnGenerateId, out string sql, ref object filter)
         {
-            if (CacheQueryString.TryGet(key, out value))
+            if (DynamicQueryString.TryGet(key, out var value))
             {
-                var valueExtractor = new ExpressionValueExtractor<T>(this);
-                valueExtractor.LoadParameterValues(predicate);
+                sql = value.Item1;
+
+                if (predicate != null)
+                {
+                    var valueExtractor = new ExpressionValueExtractor<T>(this);
+                    valueExtractor.LoadParameterValues(predicate);
+                }
+
+                //Oracle requires an extra parameter to return the generated id
+                if (!(returnGenerateId && _formatter.Provider != SqlProvider.Oracle && QueryValidators.IsInsert(sql)))
+                    InstanciateFilter(value.Item2, ref filter);
+
                 return true;
             }
 
+            sql = null;
             return false;
         }
 
-        private string WhereClause(Expression expression, string[][] aliasIdentifiers = null)
+        private string WhereClause(Expression expression, MemberInfo member = null, string[][] aliasIdentifiers = null)
         {
             return expression switch
             {
-                ConstantExpression constantExpression => HandleConstantExpression(constantExpression, aliasIdentifiers),
+                ConstantExpression constantExpression => HandleConstantExpression(constantExpression, member, aliasIdentifiers),
                 UnaryExpression unaryExpression => HandleUnaryExpression(unaryExpression, aliasIdentifiers),
                 BinaryExpression binaryExpression => HandleBinaryExpression(binaryExpression, aliasIdentifiers),
                 MemberExpression memberExpression when memberExpression.Member.Name == "MinValue" && memberExpression.Type == typeof(DateTime) => SqlMin(),
@@ -152,11 +160,13 @@ namespace Thomas.Database.Core.QueryGenerator
                                                        memberExpression.Type == typeof(DateTime) ||
                                                        memberExpression.Type == typeof(float) ||
                                                        memberExpression.Type.IsArray ||
+                                                       Nullable.GetUnderlyingType(memberExpression.Member.DeclaringType) != null ||
+                                                       (memberExpression.Member is FieldInfo fieldInfo && Nullable.GetUnderlyingType(fieldInfo.FieldType) != null) ||
                                                        (memberExpression.Type.IsGenericType &&
                                                        typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression, aliasIdentifiers),
                 NewExpression newExpression => HandleNewExpression(newExpression),
                 NewArrayExpression newArrayExpression => HandleNewArrayExpression(newArrayExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = 1",
+                MemberExpression memberExpression when memberExpression.Type == typeof(bool) || memberExpression.Type == typeof(bool?) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(_formatter.Provider == SqlProvider.PostgreSql ? "'1'" : "1")}",
                 MethodCallExpression methodCall when SqlGenerator<T>.IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains, aliasIdentifiers),
                 MethodCallExpression methodCall when SqlGenerator<T>.IsEnumerableContains(methodCall) => HandleEnumerableContains(methodCall, aliasIdentifiers),
                 MethodCallExpression methodCall when SqlGenerator<T>.IsEquals(methodCall) => HandleStringContains(methodCall, StringOperator.Equals, aliasIdentifiers),
@@ -164,103 +174,203 @@ namespace Thomas.Database.Core.QueryGenerator
                 MethodCallExpression methodCall when SqlGenerator<T>.IsEndsWith(methodCall) => HandleStringContains(methodCall, StringOperator.EndsWith, aliasIdentifiers),
                 MethodCallExpression methodCall when SqlGenerator<T>.IsBetween(methodCall) => HandleBetween(methodCall, aliasIdentifiers),
                 MethodCallExpression methodCall when SqlGenerator<T>.IsExists(methodCall) => HandleExists(methodCall),
-                LambdaExpression lambdaExpression => WhereClause(lambdaExpression.Body, aliasIdentifiers),
-                MethodCallExpression methodCall => throw new NotSupportedException(),
-                ListInitExpression listInitExpression => throw new NotSupportedException(),
-                DynamicExpression dynamicExpression => throw new NotSupportedException(),
-                ConditionalExpression conditionalExpression => throw new NotSupportedException(),
-                GotoExpression gotoExpression => throw new NotSupportedException(),
-                IndexExpression indexExpression => throw new NotSupportedException(),
-                InvocationExpression invocationExpression => throw new NotSupportedException(),
-                LabelExpression labelExpression => throw new NotSupportedException(),
-                LoopExpression loopExpression => throw new NotSupportedException(),
-                MemberInitExpression memberInitExpression => throw new NotSupportedException(),
-                SwitchExpression switchExpression => throw new NotSupportedException(),
-                TryExpression tryExpression => throw new NotSupportedException(),
-                TypeBinaryExpression typeBinaryExpression => throw new NotSupportedException(),
+                LambdaExpression lambdaExpression => WhereClause(lambdaExpression.Body, null, aliasIdentifiers),
+                MethodCallExpression _ => throw new NotSupportedException(),
+                ListInitExpression _ => throw new NotSupportedException(),
+                DynamicExpression _ => throw new NotSupportedException(),
+                ConditionalExpression _ => throw new NotSupportedException(),
+                GotoExpression _ => throw new NotSupportedException(),
+                IndexExpression _ => throw new NotSupportedException(),
+                InvocationExpression _ => throw new NotSupportedException(),
+                LabelExpression _ => throw new NotSupportedException(),
+                LoopExpression _ => throw new NotSupportedException(),
+                MemberInitExpression _ => throw new NotSupportedException(),
+                SwitchExpression _ => throw new NotSupportedException(),
+                TryExpression _ => throw new NotSupportedException(),
+                TypeBinaryExpression _ => throw new NotSupportedException(),
                 _ => throw new NotImplementedException(),
             };
         }
 
-        #region parameter handlers
-        public void AddInParam(in Type propertyType, object value, out string paramName)
-        {
-            var counter = DbParametersToBind.Count + 1;
-            paramName = $"{_formatter.BindVariable}param{counter}";
-
-            var convertedValue = TypeConversionRegistry.ConvertByType(value, propertyType, _culture, _converters);
-            DbParametersToBind.Add(paramName, new QueryParameter(convertedValue, false, propertyType));
-        }
-
-        public void AddOutParam(DbColumn column, out string paramName)
-        {
-            var counter = DbParametersToBind.Count + 1;
-            paramName = $"{_formatter.BindVariable}param{counter}";
-            DbParametersToBind.Add(paramName, new QueryParameter(null, true, column.Property.PropertyType));
-        }
-        #endregion
-
         #region Write Operations
 
-        public string GenerateUpdate<T>(in T value, Expression<Func<T, object>> predicate)
+        public string GenerateUpdate<T>(Expression<Func<T, object>> predicate, bool excludeAutogenerateColumns, ref object filter)
         {
-            var stringBuilder = new StringBuilder();
-            stringBuilder.Append($"{UPDATE} {TableName} SET ");
-
-            var columns = _table.Columns.Where(x => x.Name != _table.Key.Name).ToList();
-            for (int i = 0; i < columns.Count; i++)
+            ulong key = 0;
+            if (predicate != null)
             {
-                this.AddInParam(columns[i].Property.PropertyType, GetValue(columns[i].Property, value), out var paramName);
-                stringBuilder.Append($"{_formatter.CuratedColumnName(columns[i].Name, columns[i].DbName)} = {paramName}");
-                if (columns.Count != i + 1)
-                    stringBuilder.Append(",");
+                key = HashHelper.GenerateHash("UPDATE" + _formatter.Provider.ToString() + predicate.ToString());
+                if (GetCachedValues(key, predicate, false, out string sqlText, ref filter))
+                    return sqlText;
             }
 
-            stringBuilder.Append(WHERE);
-            stringBuilder.Append(WhereClause(predicate!.Body, GetAlias(predicate)));
+            var columns = _table.Columns.Where(x => x.Name != _table.Key.Name).Select(x => $"{x.DbName ?? x.Name} = {_formatter.BindVariable}{x.Property.Name!}").ToArray();
 
-            return stringBuilder.ToString();
+            string where = string.Empty;
+
+            if (predicate != null)
+                where = WhereClause(predicate!.Body, null, GetAlias(predicate));
+
+            var script = _formatter.GenerateUpdate(TableNameWithoutAlias, TableAlias.ToString(), where, columns);
+
+            if (predicate != null)
+                EnsureCacheItem(key, script, excludeAutogenerateColumns, ref filter);
+
+            return script;
         }
 
-        public string GenerateInsert<T>(in T value, bool returnGenerateId = false)
+        public string GenerateInsert<T>(bool returnGenerateId = false) where T : class, new()
         {
-            foreach (var column in _table.Columns.Where(x => !x.Autogenerated))
-                AddInParam(column.Property.PropertyType, GetValue(column.Property, value), out var _);
+            var values = _table.Columns.Where(x => !x.Autogenerated).Select(c => _formatter.BindVariable + c.Name).ToArray();
+            var columns = _table.Columns.Where(x => !x.Autogenerated).Select(x => x.FullDbName).ToArray();
 
-            var values = string.Join(",", DbParametersToBind.Select(x => x.Key).ToArray());
-            var columns = string.Join(',', _table.Columns.Where(x => !x.Autogenerated).Select(x => x.DbName).ToArray());
-
-            return _formatter.GenerateInsertSql(TableNameWithoutAlias, columns, values, _table.Key, this, returnGenerateId);
+            return _formatter.GenerateInsert(TableNameWithoutAlias, columns, values, _table.Key, this, returnGenerateId);
         }
 
-        public string GenerateDelete<T>(Expression<Func<T, object>> predicate)
+        public string GenerateDelete<T>(Expression<Func<T, object>> predicate, ref object filter)
         {
-            var stringBuilder = new StringBuilder();
-            stringBuilder.Append($"{DELETE} {FROM} {TableName}");
-            stringBuilder.Append(WHERE);
-            stringBuilder.Append(WhereClause(predicate!.Body, GetAlias(predicate)));
-            return stringBuilder.ToString();
+            ulong key = 0;
+
+            if (predicate != null)
+            {
+                key = HashHelper.GenerateHash("DELETE" + _formatter.Provider.ToString() + predicate.ToString());
+                if (GetCachedValues(key, predicate, false, out string sqlText, ref filter))
+                    return sqlText;
+            }
+
+            string where = null;
+
+            if (predicate != null)
+            {
+                where = WhereClause(predicate!.Body, null, GetAlias(predicate));
+            }
+
+            var script = _formatter.GenerateDelete(TableNameWithoutAlias, TableAlias.ToString(), where);
+
+            if (predicate != null)
+                EnsureCacheItem(key, script, false, ref filter);
+
+            return script;
         }
 
-        private static object GetValue<T>(PropertyInfo prop, T value)
-        {
-            var rawValue = prop.GetValue(value);
+        #endregion Write Operations
 
-            if (rawValue is null ||
-                default(DateTime).Equals(rawValue) ||
-                default(Guid).Equals(rawValue))
-                return DBNull.Value;
+        #region Cache management
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EnsureCacheItem(ulong key, string sqlText, bool excludeAutogenerateColumns, ref object filter)
+        {
+            Type? dynamicType;
+
+            if (_entity != null)
+                dynamicType = BuildTypeFromParent<T>(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()), excludeAutogenerateColumns);
             else
-                return rawValue;
+                dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()));
+
+            DynamicQueryString.Set(key, new ValueTuple<string, Type>(sqlText, dynamicType));
+
+            InstanciateFilter(dynamicType, ref filter);
         }
 
-        #endregion
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InstanciateFilter(Type type, ref object filter)
+        {
+            object[] constructorArguments = DbParametersToBind.Select(x => x.Value).ToArray();
+            if (_entity != null)
+            {
+                object[] args = new object[1 + constructorArguments.Length];
+                args[0] = _entity;
+                Array.Copy(constructorArguments, 0, args, 1, constructorArguments.Length);
+                filter = Activator.CreateInstance(type, args);
+            }
+            else
+            {
+                filter = Activator.CreateInstance(type, constructorArguments);
+            }
+        }
+
+        #endregion Cache management
+
+        #region parameter handlers
+        public void AddInParam(in Type propertyType, object value, string dbType, out string paramBindName)
+        {
+            var counter = DbParametersToBind.Count + 1;
+            var paramName = $"p{counter}";
+            paramBindName = _formatter.BindVariable + paramName;
+
+            var convertedValue = TypeConversionRegistry.ConvertByType(value, propertyType, CultureInfo.InvariantCulture, _formatter.Provider, true);
+
+            DbParametersToBind.AddLast(new DbParameterInfo(
+                paramName,
+                paramBindName,
+                0,
+                0,
+                ParameterDirection.Input,
+                null,
+                convertedValue.GetType(),
+                0,
+                convertedValue
+                ));
+        }
+
+        public void AddInParam(in PropertyInfo propertyInfo)
+        {
+            var paramBindName = _formatter.BindVariable + propertyInfo.Name;
+            DbParametersToBind.AddLast(new DbParameterInfo(
+                propertyInfo.Name,
+                paramBindName,
+                0,
+                0,
+                ParameterDirection.Input,
+                propertyInfo,
+                null,
+                0,
+                null
+                ));
+        }
+
+        public void AddInParam(in PropertyInfo propertyInfo, out string paramBindName)
+        {
+            var counter = DbParametersToBind.Count + 1;
+            paramBindName = _formatter.BindVariable + propertyInfo.Name;
+            DbParametersToBind.AddLast(new DbParameterInfo(
+                propertyInfo.Name,
+                paramBindName,
+                0,
+                0,
+                ParameterDirection.Input,
+                null,
+                propertyInfo.PropertyType,
+                0,
+                null
+                ));
+        }
+
+        public void AddOutParam(DbColumn column, out string paramBindName)
+        {
+            var counter = DbParametersToBind.Count + 1;
+            var paramName = $"p{counter}";
+            paramBindName = _formatter.BindVariable + paramName;
+            DbParametersToBind.AddLast(new DbParameterInfo(
+                paramName,
+                paramBindName,
+                0,
+                0,
+                ParameterDirection.Output,
+                null,
+                column.Property.PropertyType,
+                0,
+                null
+                ));
+        }
+
+        #endregion parameter handlers
 
         #region Handlers
 
         private string HandleExists(MethodCallExpression methodCall)
         {
-            var lambdaExpression = methodCall.Arguments[0] as LambdaExpression;
+            var lambdaExpression = (LambdaExpression)methodCall.Arguments[0];
             var internalTableAlias = GetTableAlias();
             var a = lambdaExpression.Parameters[0];
             var b = lambdaExpression.Parameters[1];
@@ -272,22 +382,22 @@ namespace Thomas.Database.Core.QueryGenerator
 
             if (a.Type == typeof(T))
             {
-                aliasIdentifier[0] = new string[] { a.Name, TableAlias, };
-                aliasIdentifier[1] = new string[] { b.Name, internalTableAlias, };
+                aliasIdentifier[0] = new string[] { a.Name, TableAlias.ToString(), };
+                aliasIdentifier[1] = new string[] { b.Name, internalTableAlias.ToString(), };
             }
             else
             {
-                aliasIdentifier[0] = new string[] { a.Name, internalTableAlias };
-                aliasIdentifier[1] = new string[] { b.Name, TableAlias };
+                aliasIdentifier[0] = new string[] { a.Name, internalTableAlias.ToString() };
+                aliasIdentifier[1] = new string[] { b.Name, TableAlias.ToString() };
             }
 
 
             if (lambdaExpression.Body != null)
             {
-                where = $" WHERE {WhereClause(lambdaExpression.Body, aliasIdentifier)}";
+                where = $"WHERE {WhereClause(lambdaExpression.Body, null, aliasIdentifier)}";
             }
 
-            return $"EXISTS (SELECT 1 FROM {tableName} {internalTableAlias}{where})";
+            return $"EXISTS (SELECT 1 FROM {tableName} {internalTableAlias} {where})";
         }
 
         private string HandleNewArrayExpression(NewArrayExpression newArrayExpression)
@@ -298,7 +408,7 @@ namespace Thomas.Database.Core.QueryGenerator
             {
                 builder.Append(WhereClause(newArrayExpression.Expressions[i]));
                 if (i < newArrayExpression.Expressions.Count - 1)
-                    builder.Append(",");
+                    builder.Append(',');
             }
 
             return builder.ToString();
@@ -306,12 +416,12 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private string HandleBetween(MethodCallExpression methodCall, string[][] aliasIdentifier = null)
         {
-            var expression = (methodCall.Arguments[0] as LambdaExpression).Body as UnaryExpression;
+            var expression = ((LambdaExpression)methodCall.Arguments[0]).Body as UnaryExpression;
 
             var minValue = WhereClause(methodCall.Arguments[1]);
             var maxValue = WhereClause(methodCall.Arguments[2]);
 
-            return $"{WhereClause(expression.Operand, aliasIdentifier)} BETWEEN {minValue} AND {maxValue}";
+            return $"{WhereClause(expression.Operand, null, aliasIdentifier)} BETWEEN {minValue} AND {maxValue}";
         }
 
         private string SqlMin() => _formatter.MinDate;
@@ -341,16 +451,16 @@ namespace Thomas.Database.Core.QueryGenerator
 
                     return $"{string.Join(",", @params.ToArray())}";
                 }
-                else
-                {
-                    AddInParam(constant.Type, constant.Value, out var paramName);
-                    return paramName;
-                }
+
+                AddInParam(constant.Type, constant.Value, null, out var paramName);
+                return paramName;
             }
-            else
+            else if (memberExpression.Expression is MemberExpression)
             {
-                return GetColumnName(memberExpression, aliasIdentifier);
+                return WhereClause(memberExpression.Expression, memberExpression.Member, aliasIdentifier);
             }
+
+            return GetColumnName(memberExpression, aliasIdentifier);
         }
 
         private IEnumerable<T> GetValues<T>(ConstantExpression expression)
@@ -363,7 +473,7 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             foreach (var value in GetValues<T>(expression))
             {
-                AddInParam(type, value, out var paramName);
+                AddInParam(type, value, null, out var paramName);
                 @params.Add(paramName);
             }
         }
@@ -375,7 +485,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 var instantiator = Expression.Lambda<Func<DateTime>>(newExpression).Compile();
                 var value = instantiator();
 
-                AddInParam(typeof(DateTime), value, out var paramName);
+                AddInParam(typeof(DateTime), value, null, out var paramName);
 
                 return paramName;
             }
@@ -383,13 +493,23 @@ namespace Thomas.Database.Core.QueryGenerator
             return "";
         }
 
-        private string HandleConstantExpression(ConstantExpression constantExpression, string[][] aliasIdentifiers = null)
+        private string HandleConstantExpression(ConstantExpression constantExpression, MemberInfo member, string[][] aliasIdentifiers = null)
         {
             if (constantExpression.Value == null)
                 return "IS NULL";
             else
             {
-                AddInParam(constantExpression.Type, constantExpression.Value, out var paramName);
+                string paramName;
+                if (member != null && member is FieldInfo fieldInfo)
+                {
+                    var value = fieldInfo.GetValue(constantExpression.Value);
+                    AddInParam(fieldInfo.FieldType, value, null, out paramName);
+                }
+                else
+                {
+                    AddInParam(constantExpression.Type, constantExpression.Value, null, out paramName);
+                }
+
                 return paramName;
             }
         }
@@ -399,10 +519,10 @@ namespace Thomas.Database.Core.QueryGenerator
             switch (expression.NodeType)
             {
                 case ExpressionType.Not:
-                    var operand = WhereClause(expression.Operand, aliasIdentifiers);
+                    var operand = WhereClause(expression.Operand, null, aliasIdentifiers);
                     return $"NOT ({operand})";
                 case ExpressionType.Convert:
-                    return WhereClause(expression.Operand, aliasIdentifiers);
+                    return WhereClause(expression.Operand, null, aliasIdentifiers);
                 default:
                     throw new NotSupportedException("Unsupported unary operator");
             }
@@ -414,12 +534,12 @@ namespace Thomas.Database.Core.QueryGenerator
             string right;
             if (expression.Left is MemberExpression && expression.Right is MemberExpression)
             {
-                left = WhereClause(expression.Left, aliasIdentifiers);
-                right = WhereClause(expression.Right, aliasIdentifiers);
+                left = WhereClause(expression.Left, null, aliasIdentifiers);
+                right = WhereClause(expression.Right, null, aliasIdentifiers);
             }
             else
             {
-                left = WhereClause(expression.Left, aliasIdentifiers);
+                left = WhereClause(expression.Left, null, aliasIdentifiers);
 
                 if (expression.Right is ConstantExpression constantExpression && constantExpression.Value == null)
                 {
@@ -429,7 +549,7 @@ namespace Thomas.Database.Core.QueryGenerator
                         return $"{left} IS NOT NULL";
                 }
 
-                right = WhereClause(expression.Right, aliasIdentifiers);
+                right = WhereClause(expression.Right, null, aliasIdentifiers);
 
                 if (expression.Left is ConstantExpression constantExpression2 && constantExpression2.Value == null)
                 {
@@ -452,17 +572,30 @@ namespace Thomas.Database.Core.QueryGenerator
                 var value = constantExpression.Value.ToString();
                 var initialOperator = @operator == StringOperator.StartsWith ? "" : "%";
                 var finalOperator = @operator == StringOperator.EndsWith ? "" : "%";
-                AddInParam(typeof(string), value, out var varName);
+                AddInParam(typeof(string), value, null, out var varName);
                 var likeSQL = _formatter.Concatenate($"'{initialOperator}'", varName, $"'{finalOperator}'");
-                return $"{column} LIKE {likeSQL}";  // Caution: Be aware of SQL injection risks here
+                return $"{column} LIKE {likeSQL}";
             }
             else if (expression.Object is MemberExpression memberExpression2
                 && expression.Arguments[0] is ConstantExpression constantExpression2
                 && @operator == StringOperator.Equals)
             {
                 var column = GetColumnName(memberExpression2, aliasIdentifiers);
-                var value = WhereClause(constantExpression2, aliasIdentifiers);
+                var value = WhereClause(constantExpression2, memberExpression2.Member, aliasIdentifiers);
                 return $"{column} = {value}";
+            }
+            else if (expression.Object is MemberExpression memberExpression3 &&
+                expression.Arguments[0] is MemberExpression memberExpression4 &&
+                memberExpression4.Member is FieldInfo fieldInfo)
+            {
+                var column = GetColumnName(memberExpression3, aliasIdentifiers);
+                var constant = memberExpression4.Expression as ConstantExpression;
+                var value = fieldInfo.GetValue(constant.Value);
+                var initialOperator = @operator == StringOperator.StartsWith ? "" : "%";
+                var finalOperator = @operator == StringOperator.EndsWith ? "" : "%";
+                AddInParam(typeof(string), value, null, out var varName);
+                var likeSQL = _formatter.Concatenate($"'{initialOperator}'", varName, $"'{finalOperator}'");
+                return $"{column} LIKE {likeSQL}";
             }
 
             throw new NotSupportedException("Unsupported method call");
@@ -472,14 +605,14 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             if (expression.Arguments.Count == 2)
             {
-                var values = WhereClause(expression.Arguments[0], aliasIdentifiers);
-                var column = WhereClause(expression.Arguments[1], aliasIdentifiers);
+                var values = WhereClause(expression.Arguments[0], null, aliasIdentifiers);
+                var column = WhereClause(expression.Arguments[1], null, aliasIdentifiers);
                 return $"{column} IN ({values})";
             }
             else if (expression.Arguments.Count == 1)
             {
-                var values = WhereClause(expression.Object, aliasIdentifiers);
-                var column = WhereClause(expression.Arguments[0], aliasIdentifiers);
+                var values = WhereClause(expression.Object, null, aliasIdentifiers);
+                var column = WhereClause(expression.Arguments[0], null, aliasIdentifiers);
                 return $"{column} IN ({values})";
             }
 
@@ -515,21 +648,26 @@ namespace Thomas.Database.Core.QueryGenerator
                      expression.Method.DeclaringType == typeof(string)
                            && expression.Method.Name == "EndsWith";
 
-        private int indexTableAlias = 0;
-        private string GetTableAlias()
+        private int indexTableAlias;
+
+        private char GetTableAlias()
         {
-            return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".Substring(indexTableAlias++, 1);
+            ReadOnlySpan<char> Alias = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            return Alias.Slice(indexTableAlias++, 1)[0];
         }
 
         private string GetColumnName(MemberExpression member, string[][] aliasIdentifiers = null)
         {
+            if (member.Expression is ConstantExpression)
+                return WhereClause(member.Expression, member.Member, aliasIdentifiers);
+
             var dbColumn = _table.Columns.First(x => x.Name == member.Member.Name);
 
             if (member.Member.ReflectedType == typeof(T))
-                return $"{TableAlias}.{_formatter.CuratedColumnName(dbColumn.Name, dbColumn.DbName)}";
+                return $"{TableAlias}.{dbColumn.DbName ?? dbColumn.Name}";
 
             var tableTempAlias = member.Expression!.ToString().Split('.')[0];
-            return $"{ReplaceIdentifier(tableTempAlias, aliasIdentifiers)}.{_formatter.CuratedColumnName(dbColumn.Name, dbColumn.DbName)}";
+            return $"{ReplaceIdentifier(tableTempAlias, aliasIdentifiers)}.{dbColumn.DbName ?? dbColumn.Name}";
         }
         private static string ReplaceIdentifier(string expression, string[][] aliasIdentifiers)
         {
@@ -539,14 +677,44 @@ namespace Thomas.Database.Core.QueryGenerator
 
             return expression;
         }
-        #endregion
+        #endregion Handlers
+
+        internal static ulong CalculateExpressionKey<T>(Expression<Func<T, bool>>? expression, SqlOperation operation, SqlProvider provider, string? key = null)
+        {
+            if (expression != null && string.IsNullOrEmpty(key))
+            {
+                var typeName = GetTypeName(expression);
+                return HashHelper.GenerateHash(operation.ToString() + provider.ToString() + expression.ToString() + typeName);
+            }
+            else if (expression == null)
+            {
+                var type = typeof(T);
+                return HashHelper.GenerateHash(operation.ToString() + provider.ToString() + type.FullName);
+            }
+
+            return HashHelper.GenerateHash(key);
+        }
+
+        private static string GetTypeName<T>(Expression<Func<T, bool>> expression)
+        {
+            return expression.Type.GetGenericArguments()[0].FullName;
+        }
     }
 
-    internal enum StringOperator
+    internal enum SqlOperation : byte
     {
-        Contains,
-        Equals,
-        StartsWith,
-        EndsWith
+        SelectList = 0,
+        SelectSingle = 1,
+        Insert = 2,
+        Update = 3,
+        Delete = 4
+    }
+
+    internal enum StringOperator : byte
+    {
+        Contains = 0,
+        Equals = 1,
+        StartsWith = 2,
+        EndsWith = 3
     }
 }

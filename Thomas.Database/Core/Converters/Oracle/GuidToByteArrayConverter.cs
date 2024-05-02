@@ -22,7 +22,7 @@ namespace Thomas.Database.Core.Converters.Oracle
 
         public object ConvertByType(object value, CultureInfo cultureInfo)
         {
-            return null;
+            return value;
         }
     }
 }

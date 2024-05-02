@@ -9,22 +9,21 @@ namespace Thomas.Database.Core.QueryGenerator
     internal class ExpressionValueExtractor<T> where T : class, new()
     {
         private readonly IParameterHandler _parameterHandler;
-        private readonly Type _typeString;
+        private readonly static Type _typeString = typeof(string);
 
         public ExpressionValueExtractor(IParameterHandler parameterHandler)
         {
             _parameterHandler = parameterHandler;
-            _typeString = typeof(string);
         }
 
-        internal bool LoadParameterValues(Expression expression)
+        internal bool LoadParameterValues(Expression expression, MemberInfo member = null)
         {
             return expression switch
             {
-                ConstantExpression constantExpression => HandleConstantExpression(constantExpression),
+                ConstantExpression constantExpression => HandleConstantExpression(constantExpression, member),
                 UnaryExpression unaryExpression => HandleUnaryExpression(unaryExpression),
                 BinaryExpression binaryExpression => HandleBinaryExpression(binaryExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(string) => true,
+                MemberExpression memberExpression when memberExpression.Type == typeof(string) => GetColumnName(memberExpression),
                 MemberExpression memberExpression when memberExpression.Type == typeof(int) ||
                                                        memberExpression.Type == typeof(short) ||
                                                        memberExpression.Type == typeof(long) ||
@@ -32,6 +31,8 @@ namespace Thomas.Database.Core.QueryGenerator
                                                        memberExpression.Type == typeof(DateTime) ||
                                                        memberExpression.Type == typeof(float) ||
                                                        memberExpression.Type.IsArray ||
+                                                       Nullable.GetUnderlyingType(memberExpression.Member.DeclaringType) != null ||
+                                                       (memberExpression.Member is FieldInfo fieldInfo && Nullable.GetUnderlyingType(fieldInfo.FieldType) != null) ||
                                                        (memberExpression.Type.IsGenericType &&
                                                        typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression),
                 NewExpression newExpression => HandleNewExpression(newExpression),
@@ -68,7 +69,7 @@ namespace Thomas.Database.Core.QueryGenerator
             {
                 var instantiator = Expression.Lambda<Func<DateTime>>(newExpression).Compile();
                 var value = instantiator();
-                _parameterHandler.AddInParam(typeof(DateTime), value, out var _);
+                _parameterHandler.AddInParam(typeof(DateTime), value, null, out var _);
             }
 
             return true;
@@ -100,14 +101,16 @@ namespace Thomas.Database.Core.QueryGenerator
                 }
                 else
                 {
-                    _parameterHandler.AddInParam(constant.Type, constant.Value, out var _);
+                    _parameterHandler.AddInParam(constant.Type, constant.Value, null, out var _);
                     return true;
                 }
             }
-            else
+            else if (memberExpression.Expression is MemberExpression)
             {
-                return true;
+                return LoadParameterValues(memberExpression.Expression, memberExpression.Member);
             }
+
+            return true;
         }
 
         private IEnumerable<T> GetValues<T>(ConstantExpression expression)
@@ -119,16 +122,26 @@ namespace Thomas.Database.Core.QueryGenerator
         private void AddArrayConstantValues<T>(Type type, ConstantExpression expression)
         {
             foreach (var value in GetValues<T>(expression))
-                _parameterHandler.AddInParam(type, value, out var _);
+                _parameterHandler.AddInParam(type, value, null, out var _);
         }
 
-        private bool HandleConstantExpression(ConstantExpression constantExpression)
+        private bool HandleConstantExpression(ConstantExpression constantExpression, MemberInfo member)
         {
             if (constantExpression.Value == null)
                 return true;
             else
             {
-                _parameterHandler.AddInParam(constantExpression.Type, constantExpression.Value, out var _);
+                string paramName;
+                if (member != null && member is FieldInfo fieldInfo)
+                {
+                    var value = fieldInfo.GetValue(constantExpression.Value);
+                    _parameterHandler.AddInParam(fieldInfo.FieldType, value, null, out paramName);
+                }
+                else
+                {
+                    _parameterHandler.AddInParam(constantExpression.Type, constantExpression.Value, null, out paramName);
+                }
+
                 return true;
             }
         }
@@ -162,20 +175,28 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private bool HandleStringContains(MethodCallExpression expression, StringOperator @operator)
         {
-            if (expression.Object is MemberExpression memberExpression
+            if (expression.Object is MemberExpression
                 && expression.Arguments[0] is ConstantExpression constantExpression)
             {
                 var value = constantExpression.Value.ToString();
-                _parameterHandler.AddInParam(in _typeString, value, out var _);
+                _parameterHandler.AddInParam(in _typeString, value, null, out var _);
                 return true;
             }
-            else if (expression.Object is MemberExpression memberExpression2
+            else if (expression.Object is MemberExpression
                 && expression.Arguments[0] is ConstantExpression constantExpression2
                 && @operator == StringOperator.Equals)
             {
                 return LoadParameterValues(constantExpression2);
             }
-
+            else if (expression.Object is MemberExpression &&
+                expression.Arguments[0] is MemberExpression memberExpression4 &&
+                memberExpression4.Member is FieldInfo fieldInfo)
+            {
+                var constant = memberExpression4.Expression as ConstantExpression;
+                var value = fieldInfo.GetValue(constant.Value);
+                _parameterHandler.AddInParam(typeof(string), value, null, out var _);
+                return true;
+            }
             throw new NotSupportedException("Unsupported method call");
         }
 
@@ -191,7 +212,7 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private bool HandleBetween(MethodCallExpression methodCall)
         {
-            var expression = (methodCall.Arguments[0] as LambdaExpression).Body as UnaryExpression;
+            var expression = ((LambdaExpression)methodCall.Arguments[0]).Body as UnaryExpression;
             var minValue = methodCall.Arguments[1] is MemberExpression memberExpression ? true : LoadParameterValues(methodCall.Arguments[1]);
             var maxValue = methodCall.Arguments[2] is MemberExpression memberExpression2 ? true : LoadParameterValues(methodCall.Arguments[2]);
             return LoadParameterValues(expression.Operand);
@@ -199,10 +220,18 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private bool HandleExists(MethodCallExpression methodCall)
         {
-            var lambdaExpression = methodCall.Arguments[0] as LambdaExpression;
+            var lambdaExpression = (LambdaExpression)methodCall.Arguments[0];
 
             if (lambdaExpression?.Body != null)
                 return LoadParameterValues(lambdaExpression.Body);
+
+            return true;
+        }
+
+        private bool GetColumnName(MemberExpression member)
+        {
+            if (member.Expression is ConstantExpression)
+                return LoadParameterValues(member.Expression, member.Member);
 
             return true;
         }

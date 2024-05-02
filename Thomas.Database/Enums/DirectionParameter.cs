@@ -1,6 +1,6 @@
 ﻿namespace Thomas.Database
 {
-    public enum ParamDirection
+    public enum ParamDirection : byte
     {
         Input = 0,
         Output,

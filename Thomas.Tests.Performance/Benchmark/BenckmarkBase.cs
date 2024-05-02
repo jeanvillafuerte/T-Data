@@ -36,9 +36,9 @@ namespace Thomas.Tests.Performance.Benchmark
             DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
 
             DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
-
+            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx) { PrepareStatements = true });
             Database = DbFactory.CreateDbContext("db");
-            Database2 = CachedDbFactory.CreateContext("db");
+            Database2 = CachedDbFactory.CreateDbContext("db");
             SetDataBase(Database, int.Parse(len));
         }
 
@@ -67,7 +67,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
                                                 END";
 
-            var result = service.ExecuteOp(tableScriptDefinition, false);
+            var result = service.ExecuteOp(tableScriptDefinition, null, noCacheMetadata: true);
 
             if (!result.Success)
             {
@@ -76,28 +76,28 @@ namespace Thomas.Tests.Performance.Benchmark
 
             var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
 
-            result = service.ExecuteOp(checkSp1, false);
+            result = service.ExecuteOp(checkSp1, null, noCacheMetadata: true);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-            result = service.ExecuteOp(checkSp2, false);
+            result = service.ExecuteOp(checkSp2, null, noCacheMetadata: true);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp1, false);
+            result = service.ExecuteOp(createSp1, null, noCacheMetadata: true);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
             var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
 
-            result = service.ExecuteOp(createSp2, false);
+            result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
@@ -111,7 +111,7 @@ namespace Thomas.Tests.Performance.Benchmark
 								SET @IDX = @IDX + 1;
 							END";
 
-            var dataResult = service.ExecuteOp(data, false);
+            var dataResult = service.ExecuteOp(data, null, noCacheMetadata: true);
 
             if (!dataResult.Success)
             {
@@ -120,7 +120,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
 
-            result = service.ExecuteOp(createIndexByAge, false);
+            result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
 
             if (!result.Success)
             {
@@ -132,7 +132,7 @@ namespace Thomas.Tests.Performance.Benchmark
         {
             if (CleanData)
             {
-                Database.Execute($"DROP TABLE {TableName}", false);
+                Database.Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
             }
         }
     }

@@ -14,8 +14,6 @@ namespace Thomas.Tests.Performance.Benchmark
 {
     public class BenchmarkConfig : ManualConfig
     {
-        public const int Iterations = 50;
-
         public BenchmarkConfig()
         {
             AddLogger(ConsoleLogger.Default);

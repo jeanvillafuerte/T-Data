@@ -3,7 +3,7 @@ using Thomas.Database.Core.FluentApi;
 
 namespace Thomas.Database.Core.QueryGenerator
 {
-    public interface ISqlFormatter
+    internal interface ISqlFormatter
     {
         SqlProvider Provider { get; }
         string BindVariable { get; }
@@ -11,9 +11,9 @@ namespace Thomas.Database.Core.QueryGenerator
         string MaxDate { get; }
         string CurrentDate { get; }
         string Concatenate(params string[] values);
-        string CuratedTableName(string name, string original = null);
-        string CuratedColumnName(string name, string original = null);
-        string GenerateInsertSql(string tableName, string columns, string values, DbColumn column, IParameterHandler parameterHandler, bool returnGenerateId = false);
+        string GenerateInsert(string tableName, string[] columns, string[] values, DbColumn column, IParameterHandler parameterHandler, bool returnGenerateId = false);
+        string GenerateUpdate(string tableName, string tableAlias, string where, string[] columns);
+        string GenerateDelete(string tableName, string tableAlias, string where);
         string FormatOperator(string left, string right, ExpressionType expression);
     }
 

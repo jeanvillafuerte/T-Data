@@ -1,27 +1,22 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
+[assembly: InternalsVisibleTo("Thomas.Cache")]
 namespace Thomas.Database.Cache
 {
-    internal class CacheQueryString
+    internal sealed class DynamicQueryString
     {
-        private static CacheQueryString instance;
-        private static readonly ConcurrentDictionary<string, string> SqlTexts = new ConcurrentDictionary<string, string>(Environment.ProcessorCount * 2, 100);
+        private static ConcurrentDictionary<ulong, ValueTuple<string, Type>> DynamicQueryStringDictionary = new ConcurrentDictionary<ulong, ValueTuple<string, Type>>(Environment.ProcessorCount * 2, 50);
 
-        public static CacheQueryString Instance
+        private DynamicQueryString() { }
+
+        internal static void Set(in ulong key, ValueTuple<string, Type> value) => DynamicQueryStringDictionary.TryAdd(key, value);
+        internal static bool TryGet(in ulong key, out ValueTuple<string, Type> meta) => DynamicQueryStringDictionary.TryGetValue(key, out meta);
+        public static void Clear()
         {
-            get
-            {
-                instance ??= new CacheQueryString();
-                return instance;
-            }
+            DynamicQueryStringDictionary.Clear();
+            DynamicQueryStringDictionary = new ConcurrentDictionary<ulong, ValueTuple<string, Type>>(Environment.ProcessorCount * 2, 50);
         }
-
-        private CacheQueryString() { }
-
-        internal static void Set(in string key, in string value) => SqlTexts.TryAdd(key, value);
-        internal static bool TryGet(in string key, out string meta) => SqlTexts.TryGetValue(key, out meta);
-        public void Clear() => SqlTexts.Clear();
-
     }
 }

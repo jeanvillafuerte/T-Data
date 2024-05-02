@@ -18,6 +18,13 @@ namespace Thomas.Database.Core.FluentApi
             return table;
         }
 
+        public static DbTable Key(this DbTable table, string keyName)
+        {
+            var column = table.Columns.First(x => x.Name == keyName);
+            table.Key = column;
+            return table;
+
+        }
         public static DbTable DbName(this DbTable table, string dbName)
         {
             table.DbName = dbName;
@@ -44,5 +51,12 @@ namespace Thomas.Database.Core.FluentApi
             dbColumn.DbName = dbName;
             return dbColumn;
         }
+
+        public static DbColumn DbType<T>(this DbColumn dbColumn, string dbType)
+        {
+            dbColumn.DbType = dbType;
+            return dbColumn;
+        }
+
     }
 }

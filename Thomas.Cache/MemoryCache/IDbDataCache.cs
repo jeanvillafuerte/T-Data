@@ -2,16 +2,16 @@
 {
     internal interface IDbDataCache
     {
-        void AddOrUpdate(string hash, IQueryResult result);
-        bool TryGet<T>(string hash, out QueryResult<T>? result);
-        void Release(string hash);
-        void Release();
+        void AddOrUpdate(ulong key, IQueryResult result);
+        bool TryGet<T>(ulong key, out QueryResult<T>? result);
+        void Clear(ulong key);
+        void Clear();
     }
 
     internal interface IDbParameterCache
     {
-        void AddOrUpdate(string hash, object result);
-        bool TryGet(string hash, out object? result);
-        void Release(string hash);
+        void AddOrUpdate(ulong key, object result);
+        bool TryGet(ulong key, out object? result);
+        void Clear(ulong key);
     }
 }

@@ -8,9 +8,9 @@ namespace Thomas.Database
         public static IDatabase CreateDbContext(string signature)
         {
             var config = DbConfigurationFactory.Get(signature);
-
             if (config == null)
                 throw new System.Exception("Database configuration not found");
+
             return new DatabaseBase(config);
         }
 

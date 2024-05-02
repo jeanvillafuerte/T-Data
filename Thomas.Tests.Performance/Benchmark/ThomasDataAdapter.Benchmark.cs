@@ -25,10 +25,9 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToList<> (unbuffered)")]
-        public void ToList()
+        public void NoPreparedToList()
         {
-            var list = Database.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 });
-            list.Consume(consumer);
+            Database.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 }).Consume(consumer);
         }
 
         [Benchmark(Description = "ToList<> (buffered)")]
@@ -41,8 +40,7 @@ namespace Thomas.Tests.Performance.Benchmark
         [Benchmark(Description = "ToList<> Expression (unbuffered)")]
         public void ToListExpression()
         {
-            var list = Database.ToList<Person>(x => x.Id == 1);
-            list.Consume(consumer);
+            Database.ToList<Person>(x => x.Id == 1).Consume(consumer);
         }
 
         [Benchmark(Description = "ToList<> Expression (buffered)")]
@@ -79,7 +77,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToTuple<>")]
-        public Tuple<IEnumerable<Person>, IEnumerable<Person>> ToTuple()
+        public Tuple<List<Person>, List<Person>> ToTuple()
         {
             return Database.ToTuple<Person, Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
@@ -111,13 +109,13 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToTuple<> T with nullables")]
-        public Tuple<IEnumerable<PersonWithNullables>, IEnumerable<PersonWithNullables>> ToTuple2()
+        public Tuple<List<PersonWithNullables>, List<PersonWithNullables>> ToTuple2()
         {
             return Database.ToTuple<PersonWithNullables, PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<>")]
-        public DbOpResult<IEnumerable<Person>> ToListOp()
+        public DbOpResult<List<Person>> ToListOp()
         {
             return Database.ToListOp<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
@@ -129,7 +127,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToListOp<>")]
-        public async Task<DbOpAsyncResult<IEnumerable<Person>>> ToListOpAsync()
+        public async Task<DbOpAsyncResult<List<Person>>> ToListOpAsync()
         {
             return await Database.ToListOpAsync<Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;", null, CancellationToken.None);
         }
@@ -141,25 +139,25 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToTupleOp<>")]
-        public DbOpResult<Tuple<IEnumerable<Person>, IEnumerable<Person>>> ToTupleOp()
+        public DbOpResult<Tuple<List<Person>, List<Person>>> ToTupleOp()
         {
             return Database.ToTupleOp<Person, Person>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<> T with nullables")]
-        public DbOpResult<IEnumerable<PersonWithNullables>> ToList2op()
+        public DbOpResult<List<PersonWithNullables>> ToList2op()
         {
             return Database.ToListOp<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "ToListOp<> T from store procedure")]
-        public DbOpResult<IEnumerable<Person>> ToList3op()
+        public DbOpResult<List<Person>> ToList3op()
         {
             return Database.ToListOp<Person>("get_persons", new { age = 5 });
         }
 
         [Benchmark(Description = "ToListOp<> T with nullables from store procedure")]
-        public DbOpResult<IEnumerable<PersonWithNullables>> ToList4op()
+        public DbOpResult<List<PersonWithNullables>> ToList4op()
         {
             return Database.ToListOp<PersonWithNullables>("get_persons", new { age = 5 });
         }
@@ -171,7 +169,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToTupleOp<> T with nullables")]
-        public DbOpResult<Tuple<IEnumerable<PersonWithNullables>, IEnumerable<PersonWithNullables>>> ToTuple2Op()
+        public DbOpResult<Tuple<List<PersonWithNullables>, List<PersonWithNullables>>> ToTuple2Op()
         {
             return Database.ToTupleOp<PersonWithNullables, PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;" + $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
@@ -217,7 +215,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToListOp<> Resilient error")]
-        public DbOpResult<IEnumerable<Person>> ToListOpError()
+        public DbOpResult<List<Person>> ToListOpError()
         {
             return Database.ToListOp<Person>($"SELECT UserName2 FROM {TableName} WHERE Id = 1;");
         }

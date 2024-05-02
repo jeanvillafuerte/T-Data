@@ -19,18 +19,15 @@ namespace Thomas.Cache.MemoryCache
 
         private DbDataCache() { }
 
-        private static ConcurrentDictionary<string, IQueryResult> CacheObject { get; set; } = new();
+        private static ConcurrentDictionary<ulong, IQueryResult> CacheObject { get; set; } = new();
 
-        public void AddOrUpdate(string hash, IQueryResult data) => CacheObject.AddOrUpdate(hash, data, (k, v) => data);
+        public void AddOrUpdate(ulong key, IQueryResult data) => CacheObject.AddOrUpdate(key, data, (k, v) => data);
 
-        public bool TryGetValue(string hash, out IQueryResult? data)
+        public static bool TryGetValue(ulong key, out IQueryResult? data) => CacheObject.TryGetValue(key, out data);
+
+        public bool TryGet<T>(ulong key, out QueryResult<T>? result)
         {
-            return CacheObject.TryGetValue(hash, out data);
-        }
-
-        public bool TryGet<T>(string hash, out QueryResult<T>? result)
-        {
-            if (CacheObject.TryGetValue(hash, out IQueryResult? data))
+            if (CacheObject.TryGetValue(key, out IQueryResult? data))
             {
                 if (data is QueryResult<T> convertedValue)
                 {
@@ -43,12 +40,9 @@ namespace Thomas.Cache.MemoryCache
             return false;
         }
 
-        public void Release(string hash) => CacheObject.TryRemove(hash, out var _);
+        public void Clear(ulong hash) => CacheObject.TryRemove(hash, out var _);
 
-        public void Release()
-        {
-            CacheObject.Clear();
-        }
+        public void Clear() => CacheObject.Clear();
     }
 
 }

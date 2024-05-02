@@ -7,7 +7,7 @@ namespace Thomas.Database.Core.Converters.Oracle
     {
         public object Convert(object value, CultureInfo cultureInfo)
         {
-            return new Guid(value as byte[]);
+            return new Guid((byte[])value);
         }
 
         public bool CanConvert(Type targetType, object value)

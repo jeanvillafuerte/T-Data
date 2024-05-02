@@ -8,7 +8,6 @@ using Thomas.Cache;
 using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Database.Configuration;
-
 using Thomas.Tests.Performance.Legacy.Setup;
 
 namespace Thomas.Tests.Performance.Legacy
@@ -26,6 +25,9 @@ namespace Thomas.Tests.Performance.Legacy
             WriteStep("Starting setup...");
             Setup(out var rows);
             WriteStep("Completed Setup...", true);
+
+            var timer = new System.Diagnostics.Stopwatch();
+            timer.Start();
 
             WriteStep("Starting tests database1...");
             RunTestsDatabase(Database1, "db1", rows);
@@ -47,6 +49,8 @@ namespace Thomas.Tests.Performance.Legacy
             DropTables();
             WriteStep("Dropped tables.");
 
+            timer.Stop();
+            WriteStep($"Total time: {timer.Elapsed.TotalSeconds} seconds.", true);
             Console.ReadKey();
         }
 
@@ -57,11 +61,12 @@ namespace Thomas.Tests.Performance.Legacy
             builder.AddInMemoryCollection().AddJsonFile("dbsettings.json", true);
 
             var configuration = builder.Build();
-
+            var db1 = "db1";
+            var db2 = "db2";
             var cnx1 = configuration["connection1"];
             var cnx2 = configuration["connection2"];
             var len = configuration["rows"];
-            TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
+            TableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             CleanData = bool.Parse(configuration["cleanData"]);
 
             IServiceCollection serviceCollection = new ServiceCollection();
@@ -70,8 +75,8 @@ namespace Thomas.Tests.Performance.Legacy
 
             DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
 
-            DbConfigurationFactory.Register(new DbSettings("db1", SqlProvider.SqlServer, cnx1));
-            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx2));
+            DbConfigurationFactory.Register(new DbSettings(db1, SqlProvider.SqlServer, cnx1));
+            DbConfigurationFactory.Register(new DbSettings(db2, SqlProvider.SqlServer, cnx2));
 
             var serviceProvider = serviceCollection.BuildServiceProvider();
             var loadDataManager = serviceProvider.GetService<IDataBaseManager>();
@@ -79,53 +84,55 @@ namespace Thomas.Tests.Performance.Legacy
             rowsGenerated = int.Parse(len);
             loadDataManager.LoadDatabases(rowsGenerated, TableName);
 
-            Database1 = DbFactory.CreateDbContext("db1");
-            Database2 = DbFactory.CreateDbContext("db2");
-            CachedResultDatabase = CachedDbFactory.CreateContext("db2");
+            Database1 = DbFactory.CreateDbContext(db1);
+            Database2 = DbFactory.CreateDbContext(db2);
+            CachedResultDatabase = CachedDbFactory.CreateDbContext(db2);
         }
 
         static void RunTestsDatabase(IDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(() => new Tests.Expression(databaseName).Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Single(databaseName).Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.List(databaseName).Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Tuple(databaseName).Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Procedures(databaseName).Execute(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Error(databaseName).Execute(database, databaseName, TableName, rows))
+                Task.Run(() => new Tests.Expression(databaseName).Execute(database, TableName, rows)),
+                Task.Run(() => new Tests.Single(databaseName).Execute(database, TableName, rows)),
+                Task.Run(() => new Tests.List(databaseName).Execute(database, TableName, rows)),
+                Task.Run(() => new Tests.Tuple(databaseName).Execute(database, TableName, rows)),
+                Task.Run(() => new Tests.Procedures(databaseName).Execute(database, TableName, rows)),
+                Task.Run(() => new Tests.Error(databaseName).Execute(database, TableName, rows))
                 );
         }
 
         static void RunTestsCachedDatabase(ICachedDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(() => new Tests.Expression(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Single(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.List(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Tuple(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Procedures(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows)),
-                Task.Run(() => new Tests.Error(databaseName).ExecuteCachedDatabase(database, databaseName, TableName, rows))
+                Task.Run(() => new Tests.Expression(databaseName).ExecuteCachedDatabase(database, TableName, rows)),
+                Task.Run(() => new Tests.Single(databaseName).ExecuteCachedDatabase(database, TableName, rows)),
+                Task.Run(() => new Tests.List(databaseName).ExecuteCachedDatabase(database, TableName, rows)),
+                Task.Run(() => new Tests.Tuple(databaseName).ExecuteCachedDatabase(database, TableName, rows)),
+                Task.Run(() => new Tests.Procedures(databaseName).ExecuteCachedDatabase(database, TableName, rows)),
+                Task.Run(() => new Tests.Error(databaseName).ExecuteCachedDatabase(database, TableName, rows))
                 );
 
-            database.Release();
+            database.Clear();
         }
 
         static void RunTestsDatabaseAsync(IDatabase database, string databaseName, int rows)
         {
             Task.WaitAll(
-                Task.Run(async () => await new Tests.Expression(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.List(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Tuple(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Procedures(databaseName).ExecuteAsync(database, databaseName, TableName, rows)),
-                Task.Run(async () => await new Tests.Error(databaseName).ExecuteAsync(database, databaseName, TableName, rows))
-                );
+                 Task.Run(() => new Tests.Expression(databaseName).ExecuteAsync(database, TableName, rows)),
+                 Task.Run(() => new Tests.Single(databaseName).ExecuteAsync(database, TableName, rows)),
+                 Task.Run(() => new Tests.List(databaseName).ExecuteAsync(database, TableName, rows)),
+                 Task.Run(() => new Tests.Tuple(databaseName).ExecuteAsync(database, TableName, rows)),
+                 Task.Run(() => new Tests.Procedures(databaseName).ExecuteAsync(database, TableName, rows)),
+                 Task.Run(() => new Tests.Error(databaseName).ExecuteAsync(database, TableName, rows))
+                 );
         }
 
         static void DropTables()
         {
             DataBaseManager.DropTable(Database1, true, TableName);
             DataBaseManager.DropTable(Database2, true, TableName);
-            CachedResultDatabase.Release();
+            CachedResultDatabase.Clear();
+            DatabaseBase.Clear();
         }
 
         static void WriteStep(string message, bool includeBlankLine = false)

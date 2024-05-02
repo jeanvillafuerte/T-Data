@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Azure.Core.Pipeline;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -8,16 +9,11 @@ using Thomas.Database;
 
 namespace Thomas.Tests.Performance.Legacy.Tests
 {
-    public abstract class TestCase
+    public abstract class TestCase(string databaseName)
     {
-        protected readonly string _databaseName;
+        protected readonly string _databaseName = databaseName;
 
-        public TestCase(string databaseName)
-        {
-            _databaseName = databaseName;
-        }
-
-        public void PerformOperation<T>(Func<T> Operation, int? expectedItems, string operationName = "")
+        public void PerformOperation(Action Operation, int? expectedItems, string operationName = "")
         {
 
             var stopWatch = new Stopwatch();
@@ -26,7 +22,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 stopWatch.Start();
 
@@ -41,7 +37,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             Console.WriteLine(builder.ToString());
         }
 
-        public async Task PerformOperationAsync<T>(Func<Task<T>> Operation, int? expectedItems, string operationName = "")
+        public void PerformOperation<T>(Func<T> Operation, int? expectedItems, string operationName = "")
         {
 
             var stopWatch = new Stopwatch();
@@ -50,14 +46,135 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 stopWatch.Start();
 
-                await Operation.Invoke();
+                Operation.Invoke();
                 var elapsed = stopWatch.ElapsedMilliseconds;
 
                 builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
+                stopWatch.Reset();
+            }
+
+            builder.AppendLine("");
+            Console.WriteLine(builder.ToString());
+        }
+
+        public void PerformOperation<T>(Func<DbOpResult<List<T>>> Operation, int? expectedItems, string operationName = "")
+        {
+
+            var stopWatch = new Stopwatch();
+
+            var builder = new StringBuilder();
+            builder.Append($"\tOperation: {operationName}");
+            builder.AppendLine("");
+
+            for (int i = 0; i < 100; i++)
+            {
+                stopWatch.Start();
+
+                var result = Operation.Invoke();
+
+                var elapsed = stopWatch.ElapsedMilliseconds;
+
+                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, result.Result?.Count ?? 0, expectedItems ?? -1, !result.Success));
+                stopWatch.Reset();
+            }
+
+            builder.AppendLine("");
+            Console.WriteLine(builder.ToString());
+        }
+
+        public void PerformOperation<T>(Func<List<T>> Operation, int? expectedItems, string operationName = "")
+        {
+
+            var stopWatch = new Stopwatch();
+
+            var builder = new StringBuilder();
+            builder.Append($"\tOperation: {operationName}");
+            builder.AppendLine("");
+
+            for (int i = 0; i < 100; i++)
+            {
+                stopWatch.Start();
+
+                var count = Operation.Invoke().Count;
+                var elapsed = stopWatch.ElapsedMilliseconds;
+
+                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
+                stopWatch.Reset();
+            }
+
+            builder.AppendLine("");
+            Console.WriteLine(builder.ToString());
+        }
+
+        public async Task PerformOperationAsync<T>(Func<Task<T>> Operation, int? expectedItems, string operationName = "", bool shouldFail = false)
+        {
+
+            var stopWatch = new Stopwatch();
+
+            var builder = new StringBuilder();
+            builder.Append($"\tOperation: {operationName}");
+            builder.AppendLine("");
+
+            for (int i = 0; i < 100; i++)
+            {
+                stopWatch.Start();
+
+                if (shouldFail)
+                {
+                    try
+                    {
+                        await Operation.Invoke();
+                    }
+                    catch (Exception) { }
+                }
+                else
+                {
+                    await Operation.Invoke();
+                }
+
+                var elapsed = stopWatch.ElapsedMilliseconds;
+
+                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
+                stopWatch.Reset();
+            }
+
+            builder.AppendLine("");
+            Console.WriteLine(builder.ToString());
+        }
+
+        public async Task PerformOperationAsync<T>(Func<Task<List<T>>> operation, int? expectedItems, string operationName = "", bool shouldFail = false)
+        {
+
+            var stopWatch = new Stopwatch();
+
+            var builder = new StringBuilder();
+            builder.Append($"\tOperation: {operationName}");
+            builder.AppendLine("");
+            for (int i = 0; i < 100; i++)
+            {
+                stopWatch.Start();
+                int count = 0;
+
+                if (shouldFail)
+                {
+                    try
+                    {
+                        count = (await operation.Invoke()).Count;
+                    }
+                    catch (Exception) { }
+                }
+                else
+                {
+                    count = (await operation.Invoke()).Count;
+                }
+
+                var elapsed = stopWatch.ElapsedMilliseconds;
+
+                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
                 stopWatch.Reset();
             }
 
@@ -74,7 +191,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 stopWatch.Start();
 
@@ -99,14 +216,14 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 stopWatch.Start();
 
                 var data = Operation.Invoke();
                 var elapsed = stopWatch.ElapsedMilliseconds;
                 builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, data.Count(), expectedItems ?? -1));
-                
+
                 stopWatch.Reset();
             }
 
@@ -123,13 +240,18 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < 100; i++)
             {
                 stopWatch.Start();
-
-                var data = await Operation.Invoke();
+                IEnumerable<T> data = null;
+                bool fail = false;
+                try
+                {
+                    data = await Operation.Invoke();
+                }
+                catch (Exception) { fail = true; }
                 var elapsed = stopWatch.ElapsedMilliseconds;
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, data.Count(), expectedItems ?? -1));
+                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, data?.Count() ?? 0, expectedItems ?? -1, fail));
 
                 stopWatch.Reset();
             }
@@ -138,11 +260,11 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             Console.WriteLine(builder.ToString());
         }
 
-        public string WriteTestResult(int iteration, string database, long ElapsedMilliseconds, string additional, int rows = -1, int expectedRows = -1)
+        public static string WriteTestResult(int iteration, string database, long ElapsedMilliseconds, string additional, int rows = -1, int expectedRows = -1, bool forceFail = false)
         {
             string expectedResult;
             if (expectedRows > -1 && rows > -1)
-                expectedResult = $" (expected: {expectedRows}) | RESULT: {(rows == expectedRows ? "OK" : "ERROR")}";
+                expectedResult = $" (expected: {expectedRows}) | RESULT: {(rows == expectedRows && !forceFail ? "OK" : "ERROR")}";
             else
                 expectedResult = " | RESULT: OK";
 

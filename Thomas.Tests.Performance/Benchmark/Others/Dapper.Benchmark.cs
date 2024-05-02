@@ -39,10 +39,8 @@ namespace Thomas.Tests.Performance.Benchmark.Others
             var _connection = new SqlConnection(StringConnection);
             _connection.Open();
 
-            var list = _connection.Query<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 }, buffered: false);
+            _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).ToList().Consume(consumer);
             _connection.Close();
-
-            list.Consume(consumer);
         }
 
         [Benchmark(Description = "Query<dynamic> (buffered)")]

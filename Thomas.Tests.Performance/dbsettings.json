@@ -1,5 +1,5 @@
 {
-  "connection": "Data Source=localhost;Initial Catalog=dbtest1;Persist Security Info=True;User ID=sa;Password=ZynR@1343a%#^;TrustServerCertificate=true",
+  "connection": "Data Source=localhost;Initial Catalog=dbtest1;Persist Security Info=True;User ID=sa;Password=ZynR@1343a%#^;TrustServerCertificate=true;Min Pool Size=2048;Max Pool Size=4096;Pooling=true",
   "rows": 10,
   "cleanData": true
 }
