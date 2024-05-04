@@ -31,7 +31,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
             PerformOperation(() =>
             {
-                return DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
+                return DbFactory.GetDbContext("db1").ExecuteTransaction((db) =>
                 {
                     var data = db.ToList<Person>($"SELECT * FROM {tableName}").ToArray();
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { data[0].Id });
@@ -44,7 +44,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
             PerformOperation(() =>
             {
-                return DbFactory.CreateDbContext("db1").ExecuteTransaction((db) =>
+                return DbFactory.GetDbContext("db1").ExecuteTransaction((db) =>
                 {
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_3' WHERE Id = @Id", new { Id = 1 });
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 2 });
@@ -78,7 +78,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
             await PerformOperationAsync(() =>
             {
-                return DbFactory.CreateDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
+                return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 2 });
@@ -91,7 +91,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             {
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(15);
-                return DbFactory.CreateDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
+                return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
                     return await db.ExecuteAsync($"WAITFOR DELAY '00:00:10'", null, CancellationToken);
 

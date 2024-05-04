@@ -15,8 +15,8 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
         public DataBaseManager()
         {
-            _database1 = DbFactory.CreateDbContext("db1");
-            _database2 = DbFactory.CreateDbContext("db2");
+            _database1 = DbFactory.GetDbContext("db1");
+            _database2 = DbFactory.GetDbContext("db2");
         }
 
         public void LoadDatabases(int rows, string tableName)

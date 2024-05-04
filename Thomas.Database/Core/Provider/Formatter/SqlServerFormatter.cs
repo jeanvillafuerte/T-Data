@@ -55,31 +55,18 @@ namespace Thomas.Database.Core.Provider.Formatter
                      .ToString();
         }
 
-        string ISqlFormatter.GenerateUpdate(string tableName, string tableAlias, string where, string[] columns)
+        readonly string ISqlFormatter.GenerateUpdate(string tableName, string[] columns, string keyDbName, string propertyKeyName)
         {
-            var stringBuilder = new StringBuilder($"UPDATE {tableAlias} SET ")
-                                    .AppendJoin(',', columns).Append($" FROM {tableName} {tableAlias}");
-
-            if (!string.IsNullOrEmpty(where))
-            {
-                stringBuilder.Append($" WHERE {where}");
-            }
-
-            return stringBuilder.ToString();
+            return new StringBuilder($"UPDATE {tableName} SET ")
+                                    .AppendJoin(',', columns)
+                                    .Append($" WHERE {keyDbName} = @{propertyKeyName}")
+                                    .ToString();
         }
 
 
-        string ISqlFormatter.GenerateDelete(string tableName, string tableAlias, string where)
+        readonly string ISqlFormatter.GenerateDelete(string tableName, string keyDbName, string propertyKeyName)
         {
-            /* sample text:
-                  DELETE A FROM Data AS A WHERE (A.Id = @p1)
-            */
-            if (where == null)
-            {
-                return $"DELETE FROM {tableName}";
-            }
-
-            return $"DELETE {tableAlias} FROM {tableName} AS {tableAlias} WHERE {where}";
+            return $"DELETE FROM {tableName} WHERE {keyDbName} = @{propertyKeyName}";
         }
 
     }

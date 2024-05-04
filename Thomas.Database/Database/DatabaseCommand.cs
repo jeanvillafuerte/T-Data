@@ -67,7 +67,17 @@ namespace Thomas.Database
             _timeout = options.ConnectionTimeout;
         }
 
-        public DatabaseCommand(in DbSettings options, in string script, in object? filter, in CommandBehavior commandBehavior = CommandBehavior.Default, in bool isTupleResult = false, in DbTransaction transaction = null, in DbCommand command = null, in bool excludeAutogenerateColumns = false, in bool noCacheMetadata = false)
+        public DatabaseCommand(
+            in DbSettings options, 
+            in string script, 
+            in object? filter, 
+            in CommandBehavior commandBehavior = CommandBehavior.Default,
+            in bool isTupleResult = false, 
+            in DbTransaction transaction = null, 
+            in DbCommand command = null, 
+            in bool excludeAutogenerateColumns = false,
+            in bool generateParameterWithKeys = false,
+            in bool noCacheMetadata = false)
         {
             _bufferSize = options.BufferSize;
             _script = script;
@@ -112,7 +122,7 @@ namespace Thomas.Database
             {
                 _commandBehavior = commandBehavior;
                 _commandType = QueryValidators.IsStoredProcedure(script) ? CommandType.StoredProcedure : CommandType.Text;
-                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in options, in _preparationQueryKey, in _commandType, filterType, in noCacheMetadata, in _excludeAutogenerateColumns, transaction == null && !isTupleResult, ref _hasOutParameters, ref _commandBehavior, ref filters);
+                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in options, in _preparationQueryKey, in _commandType, filterType, in noCacheMetadata, in _excludeAutogenerateColumns, in generateParameterWithKeys, transaction == null && !isTupleResult, ref _hasOutParameters, ref _commandBehavior, ref filters);
             }
 
             if (options.DetailErrorMessage)
@@ -159,6 +169,7 @@ namespace Thomas.Database
             return await _connection.BeginTransactionAsync(cancellationToken);
         }
 
+        //TODO: add support for other providers
         internal void AddOutputParameter(DbParameterInfo parameter)
         {
             int paramIndex = 0;

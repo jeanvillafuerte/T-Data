@@ -208,7 +208,7 @@ namespace Thomas.Database
 
         public int Execute(in string script, in object? parameters = null, in bool noCacheMetadata = false)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, noCacheMetadata);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, false, noCacheMetadata);
             command.Prepare();
             var affected = command.ExecuteNonQuery();
             command.SetValuesOutFields();
@@ -260,7 +260,7 @@ namespace Thomas.Database
             var response = new DbOpAsyncResult() { Success = true };
             try
             {
-                await using var command = new DatabaseCommand(Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, noCacheMetadata);
+                await using var command = new DatabaseCommand(Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, false, noCacheMetadata);
                 await command.PrepareAsync(cancellationToken);
                 response.RowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
                 command.SetValuesOutFields();
@@ -280,7 +280,7 @@ namespace Thomas.Database
 
         public async Task<int> ExecuteAsync(string script, object? parameters, bool noCacheMetadata, CancellationToken cancellationToken)
         {
-            await using var command = new DatabaseCommand(Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, noCacheMetadata);
+            await using var command = new DatabaseCommand(Options, in script, in parameters, CommandBehavior.Default, false, in _transaction, in _command, false, false, noCacheMetadata);
             await command.PrepareAsync(cancellationToken);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             command.SetValuesOutFields();
@@ -1036,16 +1036,6 @@ namespace Thomas.Database
         #endregion Error Handling
 
         #region Write operations
-        public int Update<T>(T entity, Expression<Func<T, object>> where, bool excludeAutogenerateColumns = true) where T : class, new()
-        {
-            var generator = new SqlGenerator<T>(Options.SQLValues, entity);
-            object filter = null;
-            var script = generator.GenerateUpdate<T>(where, excludeAutogenerateColumns, ref filter);
-            using var command = new DatabaseCommand(Options, in script, filter, CommandBehavior.Default, false, _transaction, _command, true);
-            command.Prepare();
-            return command.ExecuteNonQuery();
-        }
-
         public void Add<T>(T entity) where T : class, new()
         {
             var generator = new SqlGenerator<T>(Options.SQLValues);
@@ -1057,7 +1047,7 @@ namespace Thomas.Database
 
         public TE Add<T, TE>(T entity) where T : class, new()
         {
-            var generator = new SqlGenerator<T>(Options.SQLValues, entity);
+            var generator = new SqlGenerator<T>(Options.SQLValues);
             var script = generator.GenerateInsert<T>(true);
             using var command = new DatabaseCommand(Options, in script, entity, CommandBehavior.Default, false, _transaction, _command, true);
             command.Prepare();
@@ -1078,14 +1068,22 @@ namespace Thomas.Database
             return (TE)TypeConversionRegistry.ConvertByType(rawValue, typeof(TE), CultureInfo.InvariantCulture, Options.SqlProvider);
         }
 
-        public int Delete<T>(Expression<Func<T, object>> where) where T : class, new()
+        public void Update<T>(T entity) where T : class, new()
         {
             var generator = new SqlGenerator<T>(Options.SQLValues);
-            object filter = null;
-            var script = generator.GenerateDelete<T>(where, ref filter);
-            using var command = new DatabaseCommand(Options, in script, filter, CommandBehavior.Default, false, _transaction, _command);
+            var script = generator.GenerateUpdate();
+            using var command = new DatabaseCommand(Options, in script, entity, CommandBehavior.Default, false, _transaction, _command);
             command.Prepare();
-            return command.ExecuteNonQuery();
+            command.ExecuteNonQuery();
+        }
+
+        public void Delete<T>(T entity) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(Options.SQLValues);
+            var script = generator.GenerateDelete();
+            using var command = new DatabaseCommand(Options, in script, entity, CommandBehavior.Default, false, _transaction, _command, false, true);
+            command.Prepare();
+            command.ExecuteNonQuery();
         }
 
         #endregion Write operations

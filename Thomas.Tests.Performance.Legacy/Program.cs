@@ -84,8 +84,8 @@ namespace Thomas.Tests.Performance.Legacy
             rowsGenerated = int.Parse(len);
             loadDataManager.LoadDatabases(rowsGenerated, TableName);
 
-            Database1 = DbFactory.CreateDbContext(db1);
-            Database2 = DbFactory.CreateDbContext(db2);
+            Database1 = DbFactory.GetDbContext(db1);
+            Database2 = DbFactory.GetDbContext(db2);
             CachedResultDatabase = CachedDbFactory.CreateDbContext(db2);
         }
 

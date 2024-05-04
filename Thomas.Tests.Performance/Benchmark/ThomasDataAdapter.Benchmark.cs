@@ -25,7 +25,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToList<> (unbuffered)")]
-        public void NoPreparedToList()
+        public void ToList()
         {
             Database.ToList<Person>($"SELECT * FROM {TableName} WHERE Id = @Id", new { Id = 1 }).Consume(consumer);
         }
@@ -44,7 +44,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "ToList<> Expression (buffered)")]
-        public void ToListExpression2()
+        public void ToListExpressionCached()
         {
             var list = Database2.ToList<Person>(x => x.Id == 1);
             list.Consume(consumer);

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
@@ -62,11 +63,9 @@ namespace Thomas.Database.Core.QueryGenerator
         /// considering is an arbitrary amount of parameters, a linked list is the best option
         /// </summary>
         internal readonly LinkedList<DbParameterInfo> DbParametersToBind;
-        private readonly T _entity;
 
-        public SqlGenerator(ISqlFormatter formatter, T entity = null)
+        public SqlGenerator(ISqlFormatter formatter)
         {
-            _entity = entity;
             _formatter = formatter;
             Type = typeof(T);
             TableAlias = GetTableAlias();
@@ -194,29 +193,14 @@ namespace Thomas.Database.Core.QueryGenerator
 
         #region Write Operations
 
-        public string GenerateUpdate<T>(Expression<Func<T, object>> predicate, bool excludeAutogenerateColumns, ref object filter)
+        public string GenerateUpdate()
         {
-            ulong key = 0;
-            if (predicate != null)
-            {
-                key = HashHelper.GenerateHash("UPDATE" + _formatter.Provider.ToString() + predicate.ToString());
-                if (GetCachedValues(key, predicate, false, out string sqlText, ref filter))
-                    return sqlText;
-            }
+            if (_table.Key == null)
+                throw new InvalidOperationException($"Key was not found in {_table.DbName ?? _table.Name}");
 
             var columns = _table.Columns.Where(x => x.Name != _table.Key.Name).Select(x => $"{x.DbName ?? x.Name} = {_formatter.BindVariable}{x.Property.Name!}").ToArray();
 
-            string where = string.Empty;
-
-            if (predicate != null)
-                where = WhereClause(predicate!.Body, null, GetAlias(predicate));
-
-            var script = _formatter.GenerateUpdate(TableNameWithoutAlias, TableAlias.ToString(), where, columns);
-
-            if (predicate != null)
-                EnsureCacheItem(key, script, excludeAutogenerateColumns, ref filter);
-
-            return script;
+            return _formatter.GenerateUpdate(TableNameWithoutAlias, columns, _table.Key.DbName ?? _table.Key.Name, _table.Key.Name);
         }
 
         public string GenerateInsert<T>(bool returnGenerateId = false) where T : class, new()
@@ -227,30 +211,12 @@ namespace Thomas.Database.Core.QueryGenerator
             return _formatter.GenerateInsert(TableNameWithoutAlias, columns, values, _table.Key, this, returnGenerateId);
         }
 
-        public string GenerateDelete<T>(Expression<Func<T, object>> predicate, ref object filter)
+        public string GenerateDelete()
         {
-            ulong key = 0;
+            if (_table.Key == null)
+                throw new InvalidOperationException($"Key was not found in {_table.DbName ?? _table.Name}");
 
-            if (predicate != null)
-            {
-                key = HashHelper.GenerateHash("DELETE" + _formatter.Provider.ToString() + predicate.ToString());
-                if (GetCachedValues(key, predicate, false, out string sqlText, ref filter))
-                    return sqlText;
-            }
-
-            string where = null;
-
-            if (predicate != null)
-            {
-                where = WhereClause(predicate!.Body, null, GetAlias(predicate));
-            }
-
-            var script = _formatter.GenerateDelete(TableNameWithoutAlias, TableAlias.ToString(), where);
-
-            if (predicate != null)
-                EnsureCacheItem(key, script, false, ref filter);
-
-            return script;
+            return _formatter.GenerateDelete(TableNameWithoutAlias, _table.Key.DbName ?? _table.Key.Name, _table.Key.Name);
         }
 
         #endregion Write Operations
@@ -262,10 +228,10 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             Type? dynamicType;
 
-            if (_entity != null)
-                dynamicType = BuildTypeFromParent<T>(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()), excludeAutogenerateColumns);
-            else
-                dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()));
+            //if (_entity != null)
+            //    dynamicType = BuildTypeFromParent<T>(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()), excludeAutogenerateColumns);
+            //else
+            dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()));
 
             DynamicQueryString.Set(key, new ValueTuple<string, Type>(sqlText, dynamicType));
 
@@ -275,18 +241,7 @@ namespace Thomas.Database.Core.QueryGenerator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InstanciateFilter(Type type, ref object filter)
         {
-            object[] constructorArguments = DbParametersToBind.Select(x => x.Value).ToArray();
-            if (_entity != null)
-            {
-                object[] args = new object[1 + constructorArguments.Length];
-                args[0] = _entity;
-                Array.Copy(constructorArguments, 0, args, 1, constructorArguments.Length);
-                filter = Activator.CreateInstance(type, args);
-            }
-            else
-            {
-                filter = Activator.CreateInstance(type, constructorArguments);
-            }
+            filter = Activator.CreateInstance(type, DbParametersToBind.Select(x => x.Value).ToArray());
         }
 
         #endregion Cache management

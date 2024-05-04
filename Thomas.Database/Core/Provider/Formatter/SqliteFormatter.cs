@@ -44,44 +44,24 @@ namespace Thomas.Database.Core.Provider.Formatter
                                     .AppendJoin(',', columns)
                                     .Append(") VALUES (")
                                     .AppendJoin(',', values)
-                                    .Append(')');
+                                    .Append(");");
             if (returnGenerateId)
             {
-                return sb.Append($" RETURNING {column.DbName ?? column.Name}").ToString();
+                return sb.Append("select last_insert_rowid();").ToString();
             }
 
             return sb.ToString();
         }
 
-        readonly string ISqlFormatter.GenerateUpdate(string tableName, string tableAlias, string where, string[] columns)
+        readonly string ISqlFormatter.GenerateUpdate(string tableName, string[] columns, string keyDbName, string propertyKeyName)
         {
-            /* 
-               UPDATE Data AS A 
-               SET UserName = :UserName
-               WHERE (A.Id = :Id)
-            */
-            var stringBuilder = new StringBuilder($"UPDATE {tableName} AS {tableAlias} SET ")
-                                   .AppendJoin(',', columns);
-
-            if (!string.IsNullOrEmpty(where))
-            {
-                stringBuilder.Append($" WHERE {where}");
-            }
-
-            return stringBuilder.ToString();
+            return new StringBuilder($"UPDATE {tableName} SET ")
+                   .AppendJoin(',', columns).Append($" WHERE {keyDbName} = ${propertyKeyName}").ToString();
         }
 
-        readonly string ISqlFormatter.GenerateDelete(string tableName, string tableAlias, string where)
+        readonly string ISqlFormatter.GenerateDelete(string tableName, string keyDbName, string propertyKeyName)
         {
-            /* sample text:
-                  DELETE FROM Data AS A WHERE A.Id = 1
-            */
-            if (where == null)
-            {
-                return $"DELETE FROM {tableName}";
-            }
-
-            return $"DELETE FROM {tableName} AS {tableAlias} WHERE {where}";
+            return $"DELETE FROM {tableName} WHERE {keyDbName} = ${propertyKeyName}";
         }
     }
 }

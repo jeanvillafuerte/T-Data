@@ -141,6 +141,11 @@ namespace Thomas.Database
 
                 var getMethod = GetMethodInfo(column.Source);
 
+                if (getMethod == null && column.DataTypeName == "bit")
+                {
+                    getMethod = GetBoolean;
+                }
+
                 //byte[] To Guid - Oracle
                 if (getMethod.Name.Equals("GetBytes", StringComparison.Ordinal) && column.PropertyInfo.PropertyType.Name.Equals("Guid", StringComparison.Ordinal))
                 {
@@ -218,6 +223,9 @@ namespace Thomas.Database
                     else if (column.DataTypeName == "bit" && underlyingType == typeof(bool)) //postgresql
                     {
                         EmitConvertToNullable<T>(emitter, typeof(bool));
+                    }
+                    else if (column.DataTypeName == "bit" && propertyType == typeof(bool)) //postgresql
+                    {
                     }
                     else if (underlyingType != null)
                     {

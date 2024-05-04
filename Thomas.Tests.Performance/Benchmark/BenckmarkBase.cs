@@ -37,7 +37,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
             DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
             DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx) { PrepareStatements = true });
-            Database = DbFactory.CreateDbContext("db");
+            Database = DbFactory.GetDbContext("db");
             Database2 = CachedDbFactory.CreateDbContext("db");
             SetDataBase(Database, int.Parse(len));
         }

@@ -5,7 +5,7 @@ namespace Thomas.Database
 {
     public static class DbFactory
     {
-        public static IDatabase CreateDbContext(string signature)
+        public static IDatabase GetDbContext(string signature)
         {
             var config = DbConfigurationFactory.Get(signature);
             if (config == null)
