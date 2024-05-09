@@ -41,7 +41,7 @@ namespace Thomas.Database.Core.Provider.Formatter
             _ => throw new NotImplementedException()
         };
 
-        string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, IParameterHandler parameterHandler, bool returnGenerateId = false)
+        string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, bool returnGenerateId = false)
         {
             var stringBuilder = new StringBuilder($"INSERT INTO {tableName}(")
                                 .AppendJoin(',', columns)

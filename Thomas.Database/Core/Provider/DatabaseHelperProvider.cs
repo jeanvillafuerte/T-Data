@@ -19,8 +19,9 @@ namespace Thomas.Database.Core.Provider
 
         private static readonly Type? SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
         private static readonly Type? SqlDbCommandType = Type.GetType("Microsoft.Data.SqlClient.SqlCommand, Microsoft.Data.SqlClient")!;
-        internal static readonly Type? SqlDbParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
         private static readonly Type? SqlDbParameterCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlParameterCollection, Microsoft.Data.SqlClient")!;
+        internal static readonly Type? SqlDbParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
+        internal static readonly Type? SqlDataReader = Type.GetType("Microsoft.Data.SqlClient.SqlDataReader, Microsoft.Data.SqlClient")!;
         internal static readonly Type? SqlDbType = Type.GetType("System.Data.SqlDbType, System.Data")!;
         private static readonly MethodInfo? GetSqlParametersProperty = SqlDbCommandType.GetProperty("Parameters", SqlDbParameterCollectionType)!.GetGetMethod()!;
         private static readonly MethodInfo? AddSqlParameterMethod = SqlDbParameterCollectionType.GetMethod("Add", new[] { SqlDbParameterType })!;
@@ -76,9 +77,10 @@ namespace Thomas.Database.Core.Provider
 
         #region Oracle
 
-        internal static readonly Type? OracleConnectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleConnection, Oracle.ManagedDataAccess");
         private static readonly Type? OracleDbCommandType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleCommand, Oracle.ManagedDataAccess");
+        internal static readonly Type? OracleConnectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleConnection, Oracle.ManagedDataAccess");
         internal static readonly Type? OracleDbParameterType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameter, Oracle.ManagedDataAccess");
+        internal static readonly Type? OracleDataReader = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDataReader, Oracle.ManagedDataAccess")!;
         internal static readonly PropertyInfo? OracleValueParameterProperty = OracleDbParameterType?.GetProperty("Value");
         private static readonly Type? OracleDbParameterCollectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameterCollection, Oracle.ManagedDataAccess");
         internal static readonly Type? OracleDbType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDbType, Oracle.ManagedDataAccess");
@@ -135,10 +137,11 @@ namespace Thomas.Database.Core.Provider
 
         #region PostgreSql
 
-        internal static readonly Type? PostgresConnectionType = Type.GetType("Npgsql.NpgsqlConnection, Npgsql");
         private static readonly Type? PostgresDbCommandType = Type.GetType("Npgsql.NpgsqlCommand, Npgsql");
+        internal static readonly Type? PostgresConnectionType = Type.GetType("Npgsql.NpgsqlConnection, Npgsql");
         internal static readonly Type? PostgresDbParameterType = Type.GetType("Npgsql.NpgsqlParameter, Npgsql");
         private static readonly Type? PostgresDbParameterCollectionType = Type.GetType("Npgsql.NpgsqlParameterCollection, Npgsql");
+        internal static readonly Type? PostgresDataReader = Type.GetType("Npgsql.NpgsqlDataReader, Npgsql");
         private static readonly Type? PostgresDbType = Type.GetType("NpgsqlTypes.NpgsqlDbType, Npgsql");
 
         private static readonly MethodInfo? GetPostgresParametersProperty = PostgresDbCommandType?.GetProperty("Parameters", PostgresDbParameterCollectionType)?.GetGetMethod();
@@ -191,11 +194,12 @@ namespace Thomas.Database.Core.Provider
 
         #region Mysql
 
-        internal static readonly Type? MysqlConnectionType = Type.GetType("MySql.Data.MySqlClient.MySqlConnection, MySql.Data");
         private static readonly Type? MysqlDbCommandType = Type.GetType("MySql.Data.MySqlClient.MySqlCommand, MySql.Data");
-        internal static readonly Type? MysqlDbParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
-        private static readonly Type? MysqlDbParameterCollectionType = Type.GetType("MySql.Data.MySqlClient.MySqlParameterCollection, MySql.Data");
         private static readonly Type? MysqlDbType = Type.GetType("MySql.Data.MySqlClient.MySqlDbType, MySql.Data");
+        internal static readonly Type? MysqlConnectionType = Type.GetType("MySql.Data.MySqlClient.MySqlConnection, MySql.Data");
+        internal static readonly Type? MysqlDbParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
+        internal static readonly Type? MysqlDataReader = Type.GetType("MySql.Data.MySqlClient.MySqlDataReader, MySql.Data");
+        private static readonly Type? MysqlDbParameterCollectionType = Type.GetType("MySql.Data.MySqlClient.MySqlParameterCollection, MySql.Data");
 
         private static readonly MethodInfo? GetMysqlParametersProperty = MysqlDbCommandType?.GetProperty("Parameters", MysqlDbParameterCollectionType)!.GetGetMethod();
         private static readonly MethodInfo? AddMysqlParameterMethod = MysqlDbParameterCollectionType?.GetMethod("Add", new[] { MysqlDbParameterType });
@@ -247,9 +251,10 @@ namespace Thomas.Database.Core.Provider
 
         #region Sqlite
 
-        internal static readonly Type? SqliteConnectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite");
         private static readonly Type? SqliteDbCommandType = Type.GetType("Microsoft.Data.Sqlite.SqliteCommand, Microsoft.Data.Sqlite");
+        private static readonly Type? SqliteConnectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite");
         internal static readonly Type? SqliteDbParameterType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameter, Microsoft.Data.Sqlite");
+        internal static readonly Type? SqliteDataReader = Type.GetType("Microsoft.Data.Sqlite.SqliteDataReader, Microsoft.Data.Sqlite");
         private static readonly Type? SqliteDbParameterCollectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameterCollection, Microsoft.Data.Sqlite");
         private static readonly MethodInfo? GetSqliteParametersProperty = SqliteDbCommandType?.GetProperty("Parameters", SqliteDbParameterCollectionType)!.GetGetMethod();
         private static readonly MethodInfo? AddSqliteParameterMethod = SqliteDbParameterCollectionType?.GetMethod("Add", new[] { SqliteDbParameterType });
@@ -258,31 +263,30 @@ namespace Thomas.Database.Core.Provider
 
         #endregion Sqlite
 
-        public static Action<object, DbCommand> GetLoadCommandParametersDelegate(in Type type, bool excludeAutogenerateColumns, in bool generateParameterWithKeys, in DbSettings options, ref bool hasOutputParameters, ref string[] filters)
+        public static Action<object, DbCommand> GetLoadCommandParametersDelegate(in Type type, in LoaderConfiguration options, ref bool hasOutputParameters)
         {
             PropertyInfo[] properties;
-
-            if (generateParameterWithKeys)
+            FluentApi.DbTable? table = null;
+            if (options.GenerateParameterWithKeys)
                 properties = new[] { DbConfigurationFactory.Tables[type.FullName].Key.Property };
             else
             {
-                if (DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out FluentApi.DbTable? value))
+                if (DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out table))
                 {
-                    if (excludeAutogenerateColumns)
-                        properties = value.Columns.Where(x => !x.Autogenerated).Select(x => x.Property).ToArray();
+                    if (options.KeyAsReturnValue)
+                        properties = table.Columns.Where(x => !x.Autogenerated).Select(x => x.Property).ToArray();
                     else
-                        properties = value.Columns.Select(x => x.Property).ToArray();
+                        properties = table.Columns.Select(x => x.Property).ToArray();
                 }
                 else
                     properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
             }
 
-            filters = properties.Select(x => x.Name).ToArray();
+            Span<DbParameterInfo> parameters = new DbParameterInfo[properties.Length + (options.KeyAsReturnValue ? 1 : 0)];
 
-            Span<DbParameterInfo> parameters = new DbParameterInfo[properties.Length];
+            var dbType = GetDbType(options.Provider);
+            var dbTypes = DbTypes(options.Provider);
 
-            var dbType = GetDbType(options.SqlProvider);
-            var dbTypes = DbTypes(options.SqlProvider);
             byte counter = 0;
             foreach (var item in properties)
             {
@@ -302,19 +306,15 @@ namespace Thomas.Database.Core.Provider
 
                 int enumIntVal = 0;
 
-                if (options.SqlProvider != SqlProvider.Sqlite)
+                if (options.Provider != SqlProvider.Sqlite)
                 {
                     if (!dbTypes.ContainsKey(item.PropertyType))
-                        throw new KeyNotFoundException($"{item.PropertyType.Name} key was no found on {options.SqlProvider.ToString()} mapping");
+                        throw new KeyNotFoundException($"{item.PropertyType.Name} key was no found on {options.Provider.ToString()} mapping");
 
                     if (Enum.TryParse(dbType, dbTypes[item.PropertyType], true, out var enumVal))
-                    {
                         enumIntVal = (int)enumVal!;
-                    }
                     else
-                    {
-                        throw new NotSupportedException($"Conversion not supported from {item.PropertyType.Name} to Enum {dbTypes[item.PropertyType]} in {options.SqlProvider.ToString()} mapping");
-                    }
+                        throw new NotSupportedException($"Conversion not supported from {item.PropertyType.Name} to Enum {dbTypes[item.PropertyType]} in {options.Provider.ToString()} mapping");
                 }
 
                 parameters[counter++] = new DbParameterInfo(
@@ -331,6 +331,56 @@ namespace Thomas.Database.Core.Provider
                 hasOutputParameters = direction == ParameterDirection.Output || direction == ParameterDirection.InputOutput || hasOutputParameters;
             }
 
+            if (options.KeyAsReturnValue && table != null)
+            {
+                int enumIntVal = 0;
+
+                if (options.Provider != SqlProvider.Sqlite)
+                {
+                    if (!dbTypes.ContainsKey(table.Key.Property.PropertyType))
+                        throw new KeyNotFoundException($"{table.Key.Property.PropertyType.Name} key was no found on {options.Provider.ToString()} mapping");
+
+
+                    if (Enum.TryParse(dbType, dbTypes[table.Key.Property.PropertyType], true, out var enumVal))
+                        enumIntVal = (int)enumVal!;
+                    else
+                        throw new NotSupportedException($"Conversion not supported from {table.Key.Property.PropertyType.Name} to Enum {dbTypes[table.Key.Property.PropertyType]} in {options.Provider.ToString()} mapping");
+                }
+
+                parameters[counter++] = new DbParameterInfo(
+                    table.Key.Name,
+                    null,
+                    0,
+                    0,
+                    ParameterDirection.Output,
+                    null,
+                    null,
+                    enumIntVal,
+                    null);
+
+                hasOutputParameters = true;
+            }
+
+            if (options.AdditionalOutputParameters?.Count > 0)
+            {
+                foreach (var item in options.AdditionalOutputParameters)
+                {
+                    parameters[counter++] = new DbParameterInfo(
+                    item.Name,
+                    null,
+                    0,
+                    0,
+                    ParameterDirection.Output,
+                    null,
+                    null,
+                    item.DbType,
+                    null);
+
+                }
+
+                hasOutputParameters = true;
+            }
+
             Type[] argTypes = { typeof(object), typeof(DbCommand) };
             var method = new DynamicMethod(
                 "LoadParameters" + InternalCounters.GetNextCommandHandlerCounter().ToString(),
@@ -341,10 +391,10 @@ namespace Thomas.Database.Core.Provider
 
             var il = method.GetILGenerator();
 
-            GenerateParameters(il, parameters, options.SqlProvider);
+            GenerateParameters(il, parameters, options.Provider);
 
             //useful values for oracle command
-            if (options.SqlProvider == SqlProvider.Oracle)
+            if (options.Provider == SqlProvider.Oracle)
             {
                 il.Emit(OpCodes.Ldarg_1);
                 il.Emit(OpCodes.Castclass, OracleDbCommandType);
@@ -444,10 +494,19 @@ namespace Thomas.Database.Core.Provider
                     il.Emit(OpCodes.Ldnull);
                     il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
                     il.Emit(OpCodes.Ldarg_0);
-                    il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
 
-                    if (parameter.PropertyInfo.PropertyType.IsValueType)
-                        il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+                    if (parameter.Direction == ParameterDirection.Output)
+                    {
+                        il.Emit(OpCodes.Pop);
+                        il.Emit(OpCodes.Ldnull);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
+
+                        if (parameter.PropertyInfo.PropertyType.IsValueType)
+                            il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+                    }
 
                     il.Emit(OpCodes.Newobj, parametersConstructor);
                     il.Emit(OpCodes.Callvirt, addParameterMethod);
@@ -479,10 +538,19 @@ namespace Thomas.Database.Core.Provider
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
             il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
 
-            if (parameter.PropertyInfo.PropertyType.IsValueType)
-                il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+            if (parameter.Direction == ParameterDirection.Output)
+            {
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldnull);
+            }
+            else
+            {
+                il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
+
+                if (parameter.PropertyInfo.PropertyType.IsValueType)
+                    il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+            }
 
             il.Emit(OpCodes.Newobj, PostgresParameterConstructor);
             il.Emit(OpCodes.Callvirt, AddPostgresParameterMethod);
@@ -496,11 +564,21 @@ namespace Thomas.Database.Core.Provider
 
             il.Emit(OpCodes.Ldstr, parameter.Name);
             il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Callvirt, parameter.PropertyInfo.GetGetMethod());
-            if (parameter.PropertyInfo.PropertyType.IsValueType)
-                il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
-            il.Emit(OpCodes.Newobj, SqliteParameterConstructor);
 
+
+            if (parameter.Direction == ParameterDirection.Output)
+            {
+                il.Emit(OpCodes.Pop);
+                il.Emit(OpCodes.Ldnull);
+            }
+            else
+            {
+                il.Emit(OpCodes.Callvirt, parameter.PropertyInfo.GetGetMethod());
+                if (parameter.PropertyInfo.PropertyType.IsValueType)
+                    il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+            }
+
+            il.Emit(OpCodes.Newobj, SqliteParameterConstructor);
             il.Emit(OpCodes.Callvirt, AddSqliteParameterMethod);
             il.Emit(OpCodes.Pop);
         }
@@ -524,6 +602,24 @@ namespace Thomas.Database.Core.Provider
                 SqlProvider.Sqlite => null,
                 SqlProvider.PostgreSql => PostgresDbTypes
             };
+        }
+
+        internal readonly ref struct LoaderConfiguration
+        {
+            public readonly bool KeyAsReturnValue;
+            public readonly bool GenerateParameterWithKeys;
+            public readonly SqlProvider Provider;
+            public readonly int FetchSize;
+            public readonly List<DbParameterInfo> AdditionalOutputParameters;
+
+            public LoaderConfiguration(bool keyAsReturnValue, bool generateParameterWithKeys, List<DbParameterInfo> additionalOutputParameters, SqlProvider provider, int fetchSize)
+            {
+                KeyAsReturnValue = keyAsReturnValue;
+                GenerateParameterWithKeys = generateParameterWithKeys;
+                AdditionalOutputParameters = additionalOutputParameters;
+                Provider = provider;
+                FetchSize = fetchSize;
+            }
         }
     }
 }

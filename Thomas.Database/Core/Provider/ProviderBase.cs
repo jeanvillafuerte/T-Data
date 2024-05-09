@@ -13,7 +13,7 @@ namespace Thomas.Database.Core.Provider
 {
     internal static partial class DatabaseHelperProvider
     {
-        internal static readonly ConcurrentDictionary<ulong, CommandMetadata> CommandMetadata = new ConcurrentDictionary<ulong, CommandMetadata>(Environment.ProcessorCount * 2, 50);
+        internal static readonly ConcurrentDictionary<int, CommandMetadata> CommandMetadata = new ConcurrentDictionary<int, CommandMetadata>(Environment.ProcessorCount * 2, 50);
         internal static readonly ConcurrentDictionary<SqlProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<SqlProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

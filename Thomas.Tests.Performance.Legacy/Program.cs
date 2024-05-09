@@ -73,8 +73,6 @@ namespace Thomas.Tests.Performance.Legacy
 
             serviceCollection.AddScoped<IDataBaseManager, DataBaseManager>();
 
-            DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
-
             DbConfigurationFactory.Register(new DbSettings(db1, SqlProvider.SqlServer, cnx1));
             DbConfigurationFactory.Register(new DbSettings(db2, SqlProvider.SqlServer, cnx2));
 
@@ -132,7 +130,7 @@ namespace Thomas.Tests.Performance.Legacy
             DataBaseManager.DropTable(Database1, true, TableName);
             DataBaseManager.DropTable(Database2, true, TableName);
             CachedResultDatabase.Clear();
-            DatabaseBase.Clear();
+            DbBase.Clear();
         }
 
         static void WriteStep(string message, bool includeBlankLine = false)

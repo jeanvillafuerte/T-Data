@@ -67,10 +67,10 @@ namespace Thomas.Database
 
     public enum SqlProvider : byte
     {
-        SqlServer = 0,
-        MySql = 1,
-        PostgreSql = 2,
-        Oracle = 3,
-        Sqlite = 4
+        SqlServer = 0x1,
+        MySql = 0x2,
+        PostgreSql = 0x3,
+        Oracle = 0x4,
+        Sqlite = 0x5
     }
 }

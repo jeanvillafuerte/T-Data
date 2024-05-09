@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using Thomas.Database;
 
 namespace Thomas.Cache.MemoryCache
 {

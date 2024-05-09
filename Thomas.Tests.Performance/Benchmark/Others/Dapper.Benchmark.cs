@@ -5,6 +5,7 @@ using Dapper;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Thomas.Tests.Performance.Entities;
+using System.Collections.Generic;
 
 namespace Thomas.Tests.Performance.Benchmark.Others
 {
@@ -14,60 +15,52 @@ namespace Thomas.Tests.Performance.Benchmark.Others
     public class DapperBenckmark : BenckmarkBase
     {
         private readonly Consumer consumer = new Consumer();
-
+        //private readonly SqlConnection _connection;
         [GlobalSetup]
         public void Setup()
         {
             Start();
+            //using var _connection = new SqlConnection(StringConnection);
+            //_connection.Open();
         }
 
-        [Benchmark(Description = "QuerySingle<T>")]
-        public Person QuerySingle()
-        {
-            var _connection = new SqlConnection(StringConnection);
-            _connection.Open();
+        //[Benchmark(Description = "QuerySingle<T>")]
+        //public Person QuerySingle()
+        //{
+        //    var _connection = new SqlConnection(StringConnection);
+        //    _connection.Open();
 
-            var item = _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
-            _connection.Close();
+        //    var item = _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
+        //    _connection.Close();
 
-            return item;
-        }
+        //    return item;
+        //}
 
-        [Benchmark(Description = "Query<T> (unbuffered)")]
-        public void QueryBuffered()
-        {
-            var _connection = new SqlConnection(StringConnection);
-            _connection.Open();
+        //[Benchmark(Description = "Query<T> (unbuffered)")]
+        //public void QueryBuffered()
+        //{
+        //    var _connection = new SqlConnection(StringConnection);
+        //    _connection.Open();
 
-            _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).ToList().Consume(consumer);
-            _connection.Close();
-        }
+        //    _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).ToList().Consume(consumer);
+        //    _connection.Close();
+        //}
 
-        [Benchmark(Description = "Query<dynamic> (buffered)")]
-        public dynamic QueryBufferedDynamic()
-        {
-            var _connection = new SqlConnection(StringConnection);
-            var item = _connection.Query($"select * from {TableName} where Id = @Id", new { Id = 1 }, buffered: true).First();
-            _connection.Close();
-            return item;
-        }
+        //[Benchmark(Description = "Query<dynamic> (buffered)")]
+        //public dynamic QueryBufferedDynamic()
+        //{
+        //    var _connection = new SqlConnection(StringConnection);
+        //    var item = _connection.Query($"select * from {TableName} where Id > @Id", new { Id = 1 }, buffered: true).First();
+        //    _connection.Close();
+        //    return item;
+        //}
 
-        [Benchmark(Description = "Query<T> (unbuffered)")]
-        public Person QueryUnbuffered()
-        {
-            var _connection = new SqlConnection(StringConnection);
-            var item = _connection.Query<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 }, buffered: false).First();
-            _connection.Close();
-            return item;
-        }
-
+    
         [Benchmark(Description = "Query<T> List (unbuffered)")]
         public void QueryListUnbuffered()
         {
-            var _connection = new SqlConnection(StringConnection);
-            var list = _connection.Query<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 }, buffered: false);
-            _connection.Close();
-            list.Consume(consumer);
+            using var _connection = new SqlConnection(StringConnection);
+            _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).Consume(consumer);
         }
     }
 }

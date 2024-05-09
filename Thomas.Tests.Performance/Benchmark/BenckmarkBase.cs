@@ -5,8 +5,9 @@ using Thomas.Cache;
 using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Database.Configuration;
-using System.Data.Common;
-using Microsoft.Data.SqlClient;
+using Thomas.Tests.Performance.Entities;
+using Microsoft.EntityFrameworkCore;
+using Thomas.Database.Core.FluentApi;
 
 namespace Thomas.Tests.Performance.Benchmark
 {
@@ -33,23 +34,27 @@ namespace Thomas.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            DbProviderFactories.RegisterFactory("Microsoft.Data.SqlClient", SqlClientFactory.Instance);
-
             DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
-            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx) { PrepareStatements = true });
+            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx));
             Database = DbFactory.GetDbContext("db");
             Database2 = CachedDbFactory.CreateDbContext("db");
-            SetDataBase(Database, int.Parse(len));
+            SetDataBase(Database, int.Parse(len), out var tableName);
+
+            var tableBuilder = new TableBuilder();
+            DbTable dbTable = tableBuilder.Configure<Person>(x => x.Id);
+            dbTable.AddFieldsAsColumns<Person>().DbName(tableName);
+            DbFactory.AddDbBuilder(tableBuilder);
         }
 
-        void SetDataBase(IDatabase service, int length)
+        void SetDataBase(IDatabase service, int length, out string tableName)
         {
-            TableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
+            tableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
+            TableName = tableName;
 
-            string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
+            string tableScriptDefinition = $@"IF (OBJECT_ID('{tableName}') IS NULL)
                                                 BEGIN
 
-	                                                CREATE TABLE {TableName}
+	                                                CREATE TABLE {tableName}
 													(
 		                                                Id			INT PRIMARY KEY IDENTITY(1,1),
 		                                                UserName	VARCHAR(25),
@@ -88,14 +93,14 @@ namespace Thomas.Tests.Performance.Benchmark
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
-            var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
+            var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
 
             result = service.ExecuteOp(createSp1, null, noCacheMetadata: true);
 
             if (!result.Success)
                 throw new Exception(result.ErrorMessage);
 
-            var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
+            var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
 
             result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
 
@@ -106,7 +111,7 @@ namespace Thomas.Tests.Performance.Benchmark
 							DECLARE @IDX INT = 0
 							WHILE @IDX <= {length}
 							BEGIN
-								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
+								INSERT INTO {tableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
                                 VALUES ( REPLICATE('A', ROUND(RAND() * 25, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), '1988-01-01', ROUND(RAND() * 100, 0), REPLICATE('A', ROUND(RAND() * 300, 0)), REPLICATE('A', ROUND(RAND() * 240, 0)), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
 								SET @IDX = @IDX + 1;
 							END";
@@ -118,7 +123,7 @@ namespace Thomas.Tests.Performance.Benchmark
                 throw new Exception(dataResult.ErrorMessage);
             }
 
-            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
+            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
 
             result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
 
@@ -134,6 +139,28 @@ namespace Thomas.Tests.Performance.Benchmark
             {
                 Database.Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
             }
+        }
+    }
+
+    public class PersonContext : DbContext
+    {
+        private readonly string _stringConnection;
+
+        public PersonContext(string stringConnection)
+        {
+            _stringConnection = stringConnection;
+        }
+        public DbSet<Person> People { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            optionsBuilder.UseSqlServer(_stringConnection);
+        }
+
+        override protected void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Person>()
+                .ToTable("Person").Property(People => People.LastUpdate).IsRequired(false);
         }
     }
 }

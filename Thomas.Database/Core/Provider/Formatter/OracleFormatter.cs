@@ -38,7 +38,7 @@ namespace Thomas.Database.Core.Provider.Formatter
             _ => throw new System.NotImplementedException()
         };
 
-        readonly string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, IParameterHandler parameterHandler, bool returnGenerateId = false)
+        readonly string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, bool returnGenerateId = false)
         {
             var sb = new StringBuilder($"INSERT INTO {tableName}(")
                                         .AppendJoin(',', columns)
@@ -48,13 +48,12 @@ namespace Thomas.Database.Core.Provider.Formatter
 
             if (returnGenerateId)
             {
-                parameterHandler.AddOutParam(keyColumn, out var paramName);
-
                 return new StringBuilder("BEGIN ")
                                          .Append(sb.ToString())
                                          .Append(" RETURNING ")
                                          .Append(keyColumn.DbName ?? keyColumn.Name)
-                                         .Append($" INTO {paramName}; END;").ToString();
+                                         .Append($" INTO :{keyColumn.Name}; END;")
+                                         .ToString();
             }
 
             return sb.ToString();

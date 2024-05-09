@@ -1,14 +1,14 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
-## Simple configuration for powerful Db requests.
+## Straightforward configuration for powerful Db requests.
 
 ### Features released 3.0.0:
 
-- Support for SqlServer, Postgresql, Oracle, Mysql and Sqlite
-- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
 - Straightforward manner to match typed and anonymous types to query parameters.
 - Transaction support using lambda expressions.
 - Attributes to match parameter direction, size and precision to configure DbParameter.
+- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
+- Support for SqlServer, Postgresql, Oracle, Mysql and Sqlite
 - Optional Cache layer to boost application performance having control what will be stored, updated and removed as well as refresh throught a key identifier to allow refresh whenever you required refreshing using cached query and/or expression and parameters.
 
 ### Supported database provider libraries:
@@ -22,6 +22,8 @@
 ## Quick start
 
 ### Basic configuration in startup.cs :
+
+Benefits of persisting the configuration with its string connection you may have different versions of it for different purposes like pooling or Packet Size:
 
 ```c#
 DbConfigurationFactory.Register(new DbSettings(
@@ -55,20 +57,29 @@ DbConfigurationFactory.Register(new DbSettings {
    DbFactory.AddDbBuilder(builder);
 ```
 
-### Expressions
+### Expressions calls:
 ```c#
 public class UserRepository
 {
     public List<User> GetUsers() => DbFactory.GetDbContext("db1").ToList<User>();
+    public List<User> GetInvalidUsers() => DbFactory.GetDbContext("db1").ToList<User>(
+        user => 
+        SqlExpression.IsNull<Person>(x => x.LastName) &&
+        x.Age <= 0 && x.Age > 100 &&
+        x.Salary <= 0
+    );
+
     public int Add(User user) => DbFactory.GetDbContext("db2").Add<User, int>(user);
     public void Update(User user) => DbFactory.GetDbContext("db2").Update(user);
     public void Delete(User user) => DbFactory.GetDbContext("db2").Delete(user);
 }
 ```
-### Direct SqlText
+### Direct calls:
 ```c#
     public void DisableUser(int id) => DbFactory.GetDbContext("db2").ExecuteOp(new { id }, "disable_user");
-    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() => DbFactory.GetDbContext("db1").ToTupleOp<User, Office>("sp_process");
+    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() {
+        return DbFactory.GetDbContext("db1").ToTupleOp<User, Office>("sp_process");
+    }
 
     public bool ActiveOffice(decimal officeId)
     {
@@ -79,12 +90,22 @@ public class UserRepository
             return db.Commit();
         });
     }
+
+    //batching
+    public void Export()
+    {
+        var (dispose, data) = sqlServerContext.FetchData<Order>(script: "SELECT * FROM Order", parameters: null, batchSize: 10000);
+        foreach (var batch in data)
+        {
+            //process batch
+        }
+        dispose();
+    }
 ```
 
 ### Perfomance
 
-Excellent performance considering that you do not have to deal with database objects.
-Here a short comparation with dapper:
+Excellent performance having as a main key usability taking into account that you don't have to open and close connection anymore so makes you 
 
 ``` ini
 BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3)
@@ -92,14 +113,3 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3
 .NET SDK 8.0.101
   [Host]     : .NET 6.0.26 (6.0.2623.60508), X64 RyuJIT AVX2
   Job-GMJVPM : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-
-
-```
-| Detailed Runtime           | Type                       | Method                             | Mean         | StdDev       | Error        | Op/s        | GcMode             | Completed Work Items | Lock Contentions | Gen0   | Allocated |
-|--------------------------- |--------------------------- |----------------------------------- |-------------:|-------------:|-------------:|------------:|------------------- |---------------------:|-----------------:|-------:|----------:|
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToList<> (buffered)'              |     141.3 ns |      5.49 ns |      2.63 ns | 7,077,184.3 | Toolchain=.NET 8.0 |                    - |                - | 0.0184 |     232 B |
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToList<> Expression (buffered)'   |     641.1 ns |     12.38 ns |     12.60 ns | 1,559,918.5 | Toolchain=.NET 8.0 |                    - |                - | 0.0916 |    1163 B |
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToList<> (unbuffered)'            | 470,478.3 ns | 42,804.51 ns | 15,355.33 ns |     2,125.5 | Toolchain=.NET 8.0 |                    - |                - |      - |    8217 B |
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToList<> Expression (unbuffered)' | 480,278.6 ns | 22,123.27 ns |  9,545.55 ns |     2,082.1 | Toolchain=.NET 8.0 |                    - |                - |      - |   10746 B |
-| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<dynamic> (buffered)'        | 510,762.6 ns | 20,403.67 ns | 10,100.58 ns |     1,957.9 | Toolchain=.NET 8.0 |                    - |                - |      - |    9264 B |
-| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<T> (unbuffered)'            | 598,158.0 ns | 26,237.02 ns | 11,952.95 ns |     1,671.8 | Toolchain=.NET 8.0 |                    - |                - | 1.9531 |   29673 B |

@@ -3,7 +3,7 @@
     public enum ParamDirection : byte
     {
         Input = 0,
-        Output,
-        InputOutput
+        Output = 1,
+        InputOutput = 2
     }
 }

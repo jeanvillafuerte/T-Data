@@ -14,7 +14,7 @@ namespace Thomas.Database
             if (parameters != null)
                 JsonSerializer.Serialize(parameters, _options);
 
-            return GenerateUniqueHash($"{query}{json}");
+            return GenerateUniqueHash(query + json);
         }
 
         public static ulong GenerateUniqueHash(in ReadOnlySpan<char> span)

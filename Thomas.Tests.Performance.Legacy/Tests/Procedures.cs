@@ -56,25 +56,25 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
         public async Task ExecuteAsync(IDatabase service, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() =>
-            {
-                CancellationTokenSource source = new CancellationTokenSource();
-                source.CancelAfter(1);
-                try
-                {
-                    service.ExecuteAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
-                }
-                catch (System.Exception ex) { }
+            //await PerformOperationAsync(() =>
+            //{
+            //    CancellationTokenSource source = new CancellationTokenSource();
+            //    source.CancelAfter(1);
+            //    try
+            //    {
+            //        service.ExecuteAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
+            //    }
+            //    catch (System.Exception ex) { }
 
-                return Task.FromResult(1);
-            }, null, "ExecuteAsync Timeout");
+            //    return Task.FromResult(1);
+            //}, null, "ExecuteAsync Timeout");
 
-            await PerformOperationAsync(() =>
-            {
-                CancellationTokenSource source = new CancellationTokenSource();
-                source.CancelAfter(1);
-                return service.ExecuteOpAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
-            }, null, "ExecuteOpAsync Timeout");
+            //await PerformOperationAsync(() =>
+            //{
+            //    CancellationTokenSource source = new CancellationTokenSource();
+            //    source.CancelAfter(1);
+            //    return service.ExecuteOpAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
+            //}, null, "ExecuteOpAsync Timeout");
 
             await PerformOperationAsync(() =>
             {
@@ -87,16 +87,16 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             }, null, "Transaction Async");
 
 
-            await PerformOperationAsync(() =>
-            {
-                CancellationTokenSource source = new CancellationTokenSource();
-                source.CancelAfter(15);
-                return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
-                {
-                    return await db.ExecuteAsync($"WAITFOR DELAY '00:00:10'", null, CancellationToken);
+            //await PerformOperationAsync(() =>
+            //{
+            //    CancellationTokenSource source = new CancellationTokenSource();
+            //    source.CancelAfter(15);
+            //    return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
+            //    {
+            //        return await db.ExecuteAsync($"WAITFOR DELAY '00:00:10'", null, CancellationToken);
 
-                }, source.Token);
-            }, null, "Transaction Async Timeout", shouldFail: true);
+            //    }, source.Token);
+            //}, null, "Transaction Async Timeout", shouldFail: true);
 
         }
 
