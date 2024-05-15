@@ -8,7 +8,7 @@ namespace Thomas.Database.Configuration
 {
     public sealed class DbConfigurationFactory
     {
-        private static readonly ConcurrentDictionary<ulong, DbSettings> dictionary = new ConcurrentDictionary<ulong, DbSettings>(Environment.ProcessorCount * 2, 10);
+        private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>(Environment.ProcessorCount * 2, 10);
         internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>(Environment.ProcessorCount * 2, 10);
 
         public static void Register(in DbSettings config)

@@ -1,8 +1,6 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache;
+using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -15,23 +13,23 @@ namespace Thomas.Tests.Performance.Legacy.Tests
         {
         }
 
-        public void Execute(IDatabase service, string tableName, int expectedItems = 0)
+        public void Execute(string db, string tableName, int expectedItems = 0)
         {
             PerformOperation(() =>
             {
                 var st = new SearchTerm(id: 1);
-                return service.ExecuteOp("get_byid", st);
+                return DbFactory.GetDbContext(db).ExecuteOp("get_byid", st);
             }, null, "ExecuteOp");
 
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return service.ToListOp<Person>("get_byAge", st);
+                return DbFactory.GetDbContext(db).ToListOp<Person>("get_byAge", st);
             }, null, "ToListOp");
 
             PerformOperation(() =>
             {
-                return DbFactory.GetDbContext("db1").ExecuteTransaction((db) =>
+                return DbFactory.GetDbContext(db).ExecuteTransaction((db) =>
                 {
                     var data = db.ToList<Person>($"SELECT * FROM {tableName}").ToArray();
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { data[0].Id });
@@ -44,7 +42,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
             PerformOperation(() =>
             {
-                return DbFactory.GetDbContext("db1").ExecuteTransaction((db) =>
+                return DbFactory.GetDbContext(db).ExecuteTransaction((db) =>
                 {
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_3' WHERE Id = @Id", new { Id = 1 });
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 2 });
@@ -54,31 +52,31 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             }, null, "Transaction Rollback");
         }
 
-        public async Task ExecuteAsync(IDatabase service, string tableName, int expectedItems = 0)
+        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            //await PerformOperationAsync(() =>
-            //{
-            //    CancellationTokenSource source = new CancellationTokenSource();
-            //    source.CancelAfter(1);
-            //    try
-            //    {
-            //        service.ExecuteAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
-            //    }
-            //    catch (System.Exception ex) { }
+            await PerformOperationAsync(() =>
+            {
+                CancellationTokenSource source = new();
+                source.CancelAfter(1);
+                try
+                {
+                    DbFactory.GetDbContext(db).ExecuteAsync("WAITFOR DELAY '00:00:03'", false, source.Token);
+                }
+                catch (System.Exception ex) { }
 
-            //    return Task.FromResult(1);
-            //}, null, "ExecuteAsync Timeout");
-
-            //await PerformOperationAsync(() =>
-            //{
-            //    CancellationTokenSource source = new CancellationTokenSource();
-            //    source.CancelAfter(1);
-            //    return service.ExecuteOpAsync("WAITFOR DELAY '00:00:10'", false, source.Token);
-            //}, null, "ExecuteOpAsync Timeout");
+                return Task.FromResult(1);
+            }, null, "ExecuteAsync Timeout");
 
             await PerformOperationAsync(() =>
             {
-                return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
+                CancellationTokenSource source = new();
+                source.CancelAfter(1);
+                return DbFactory.GetDbContext(db).ExecuteOpAsync("WAITFOR DELAY '00:00:03'", false, source.Token);
+            }, null, "ExecuteOpAsync Timeout");
+
+            await PerformOperationAsync(() =>
+            {
+                return DbFactory.GetDbContext(db).ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 2 });
@@ -87,25 +85,25 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             }, null, "Transaction Async");
 
 
-            //await PerformOperationAsync(() =>
-            //{
-            //    CancellationTokenSource source = new CancellationTokenSource();
-            //    source.CancelAfter(15);
-            //    return DbFactory.GetDbContext("db2").ExecuteTransactionAsync(async (db, CancellationToken) =>
-            //    {
-            //        return await db.ExecuteAsync($"WAITFOR DELAY '00:00:10'", null, CancellationToken);
+            await PerformOperationAsync(() =>
+            {
+                CancellationTokenSource source = new();
+                source.CancelAfter(15);
+                return DbFactory.GetDbContext(db).ExecuteTransactionAsync(async (db, CancellationToken) =>
+                {
+                    return await db.ExecuteAsync($"WAITFOR DELAY '00:00:03'", null, CancellationToken);
 
-            //    }, source.Token);
-            //}, null, "Transaction Async Timeout", shouldFail: true);
+                }, source.Token);
+            }, null, "Transaction Async Timeout", shouldFail: true);
 
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string tableName, int expectedItems = 0)
+        public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return database.ToList<Person>("get_byAge", st);
+                return CachedDbFactory.GetDbContext(db).ToList<Person>("get_byAge", st);
             }, null, "ToListOp");
         }
     }

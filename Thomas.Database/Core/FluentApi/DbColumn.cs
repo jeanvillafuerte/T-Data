@@ -23,12 +23,10 @@ namespace Thomas.Database.Core.FluentApi
         public string DbType { get; set; }
         public bool RequireConversion { get; set; }
 
-        //TODO: remove them
-
-        //to specify the type of the column in the database that will read or write a large object
-        //public bool IsLargeObject { get; set; }
-        //public bool Required { get; set; }
-        //public int MaxLength { get; set; }
-        //public int MinLength { get; set; }
+        public override bool Equals(object? obj)
+        {
+            return obj is DbColumn column &&
+                   column.Name == Name;
+        }
     }
 }

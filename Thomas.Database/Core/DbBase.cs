@@ -24,6 +24,7 @@ namespace Thomas.Database
     public sealed class DbBase : IDatabase
     {
         internal readonly DbSettings Options;
+        private readonly ISqlFormatter Formatter; 
         private DbTransaction _transaction;
         private DbCommand _command;
         private bool _transactionCompleted;
@@ -31,6 +32,7 @@ namespace Thomas.Database
         internal DbBase(in DbSettings options)
         {
             Options = options;
+            Formatter = Options.SQLValues;
         }
 
         #region Block
@@ -38,6 +40,7 @@ namespace Thomas.Database
         public void ExecuteBlock(Action<IDatabase> func)
         {
             using var command = new DatabaseCommand(in Options);
+            command.OpenConnection();
             _command = command.CreateEmptyCommand();
             func(this);
         }
@@ -228,16 +231,15 @@ namespace Thomas.Database
 
         #region without result data
 
+        private static readonly DbCommandConfiguration QueryExecuteConfig = new DbCommandConfiguration(
+                                                                               commandBehavior: CommandBehavior.Default,
+                                                                               methodHandled: MethodHandled.Execute,
+                                                                               keyAsReturnValue: false,
+                                                                               generateParameterWithKeys: false);
+
         public int Execute(in string script, in object? parameters = null, in bool noCacheMetadata = false)
         {
-            var configuration = new DbCommandConfiguration(
-                                commandBehavior: CommandBehavior.Default,
-                                methodHandled: MethodHandled.Execute,
-                                keyAsReturnValue: false,
-                                generateParameterWithKeys: false,
-                                noCacheMetadata: noCacheMetadata);
-            
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in noCacheMetadata, in _transaction, in _command);
             command.Prepare();
             var affected = command.ExecuteNonQuery();
             command.SetValuesOutFields();
@@ -250,7 +252,7 @@ namespace Thomas.Database
 
             try
             {
-                response.RowsAffected = Execute(script, parameters, noCacheMetadata);
+                response.RowsAffected = Execute(in script, in parameters, in noCacheMetadata);
             }
             catch (Exception ex)
             {
@@ -264,17 +266,10 @@ namespace Thomas.Database
         public async Task<DbOpAsyncResult> ExecuteOpAsync(string script, object? parameters, CancellationToken cancellationToken)
         {
             var response = new DbOpAsyncResult() { Success = true };
-            
+
             try
             {
-                var configuration = new DbCommandConfiguration(
-                   commandBehavior: CommandBehavior.Default,
-                   methodHandled: MethodHandled.Execute,
-                   keyAsReturnValue: false,
-                   generateParameterWithKeys: false,
-                   noCacheMetadata: false);
-
-                await using var command = new DatabaseCommand(Options, in script, in parameters, configuration, in _transaction, in _command);
+                await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, false, in _transaction, in _command);
                 await command.PrepareAsync(cancellationToken);
                 response.RowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
                 command.SetValuesOutFields();
@@ -295,15 +290,10 @@ namespace Thomas.Database
         public async Task<DbOpAsyncResult> ExecuteOpAsync(string script, object? parameters, bool noCacheMetadata, CancellationToken cancellationToken)
         {
             var response = new DbOpAsyncResult() { Success = true };
-            var configuration = new DbCommandConfiguration(
-                  commandBehavior: CommandBehavior.Default,
-                  methodHandled: MethodHandled.Execute,
-                  keyAsReturnValue: false,
-                  generateParameterWithKeys: false,
-                  noCacheMetadata: noCacheMetadata);
+
             try
             {
-                await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+                await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, false, in _transaction, in _command);
                 await command.PrepareAsync(cancellationToken);
                 response.RowsAffected = await command.ExecuteNonQueryAsync(cancellationToken);
                 command.SetValuesOutFields();
@@ -323,14 +313,7 @@ namespace Thomas.Database
 
         public async Task<int> ExecuteAsync(string script, object? parameters, bool noCacheMetadata, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-                  commandBehavior: CommandBehavior.Default,
-                  methodHandled: MethodHandled.Execute,
-                  keyAsReturnValue: false,
-                  generateParameterWithKeys: false,
-                  noCacheMetadata: noCacheMetadata);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             command.SetValuesOutFields();
@@ -339,14 +322,7 @@ namespace Thomas.Database
 
         public async Task<int> ExecuteAsync(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-                 commandBehavior: CommandBehavior.Default,
-                 methodHandled: MethodHandled.Execute,
-                 keyAsReturnValue: false,
-                 generateParameterWithKeys: false,
-                 noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             command.SetValuesOutFields();
@@ -362,37 +338,36 @@ namespace Thomas.Database
 
         #region single row result
 
-        public T? ToSingle<T>(in string script, in object? parameters = null) where T : class, new()
-        {
-            DbCommandConfiguration configuration = new DbCommandConfiguration(
-                commandBehavior: CommandBehavior.SingleRow,
-                methodHandled: MethodHandled.ToSingleQueryString,
-                keyAsReturnValue: false,
-                generateParameterWithKeys: false,
-                noCacheMetadata: false);
+        private static readonly DbCommandConfiguration QuerySingleConfig = new DbCommandConfiguration(
+                                                                       commandBehavior: CommandBehavior.SingleRow,
+                                                                       methodHandled: MethodHandled.ToListQueryString,
+                                                                       keyAsReturnValue: false,
+                                                                       generateParameterWithKeys: false);
 
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+        public T ToSingle<T>(in string script, in object? parameters = null)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, false, in _transaction, in _command);
             command.Prepare();
             var item = command.ReadListItems<T>().FirstOrDefault();
             command.SetValuesOutFields();
             return item;
         }
 
-        public T? ToSingle<T>(Expression<Func<T, bool>>? where = null) where T : class, new()
+        public T ToSingle<T>(Expression<Func<T, bool>>? where = null)
         {
             var generator = new SqlGenerator<T>(Options.SQLValues);
             object filter = null;
-            var script = generator.GenerateSelectWhere(where, SqlOperation.SelectSingle, ref filter);
-            return ToSingle<T>(script, filter);
+            var script = generator.GenerateSelectWhere(in where, SqlOperation.SelectSingle, ref filter);
+            return ToSingle<T>(in script, in filter);
         }
 
-        public DbOpResult<T> ToSingleOp<T>(in string script, in object? parameters = null) where T : class, new()
+        public DbOpResult<T> ToSingleOp<T>(in string script, in object? parameters = null)
         {
             var response = new DbOpResult<T>() { Success = true };
 
             try
             {
-                response.Result = ToSingle<T>(script, parameters);
+                response.Result = ToSingle<T>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -403,27 +378,19 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<T?> ToSingleAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
+        public async Task<T> ToSingleAsync<T>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.SingleRow,
-              methodHandled: MethodHandled.ToSingleQueryString,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
             return command.ReadListItems<T>().FirstOrDefault();
         }
 
-        public async Task<T?> ToSingleAsync<T>(string script, object? parameters = null) where T : class, new()
+        public async Task<T> ToSingleAsync<T>(string script, object? parameters = null)
         {
             return await ToSingleAsync<T>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<DbOpAsyncResult<T>> ToSingleOpAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
+        public async Task<DbOpAsyncResult<T>> ToSingleOpAsync<T>(string script, object? parameters, CancellationToken cancellationToken)
         {
             var response = new DbOpAsyncResult<T>() { Success = true };
 
@@ -447,7 +414,23 @@ namespace Thomas.Database
         #endregion single row result
 
         #region one result set
-        public List<T> ToList<T>(Expression<Func<T, bool>>? where = null) where T : class, new()
+
+        private static readonly DbCommandConfiguration QueryListConfig = new DbCommandConfiguration(
+                                                                               commandBehavior: CommandBehavior.SingleResult,
+                                                                               methodHandled: MethodHandled.ToListQueryString,
+                                                                               keyAsReturnValue: false,
+                                                                               generateParameterWithKeys: false);
+
+        public List<T> ToList<T>(in string script, in object? parameters = null)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, false, in _transaction, in _command);
+            command.Prepare();
+            var result = command.ReadListItems<T>();
+            command.SetValuesOutFields();
+            return result;
+        }
+
+        public List<T> ToList<T>(Expression<Func<T, bool>>? where = null)
         {
             var generator = new SqlGenerator<T>(Options.SQLValues);
             object? filter = null;
@@ -455,12 +438,12 @@ namespace Thomas.Database
             return ToList<T>(in script, in filter);
         }
 
-        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>>? where) where T : class, new()
+        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>>? where)
         {
             return await ToListAsync<T>(where, CancellationToken.None);
         }
 
-        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken) where T : class, new()
+        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken)
         {
             var generator = new SqlGenerator<T>(Options.SQLValues);
             object filter = null;
@@ -468,7 +451,7 @@ namespace Thomas.Database
             return await ToListAsync<T>(script, filter, cancellationToken);
         }
 
-        public DbOpResult<List<T>> ToListOp<T>(in string script, in object? parameters = null) where T : class, new()
+        public DbOpResult<List<T>> ToListOp<T>(in string script, in object? parameters = null)
         {
             var response = new DbOpResult<List<T>>() { Success = true };
 
@@ -485,31 +468,9 @@ namespace Thomas.Database
             return response;
         }
 
-        public List<T> ToList<T>(in string script, in object? parameters = null) where T : class, new()
+        public async Task<List<T>> ToListAsync<T>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-               commandBehavior: CommandBehavior.SingleResult,
-               methodHandled: MethodHandled.ToListQueryString,
-               keyAsReturnValue: false,
-               generateParameterWithKeys: false,
-               noCacheMetadata: false);
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
-            command.Prepare();
-            var result = command.ReadListItems<T>();
-            command.SetValuesOutFields();
-            return result;
-        }
-
-        public async Task<List<T>> ToListAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
-        {
-            var configuration = new DbCommandConfiguration(
-               commandBehavior: CommandBehavior.SingleResult,
-               methodHandled: MethodHandled.ToListQueryString,
-               keyAsReturnValue: false,
-               generateParameterWithKeys: false,
-               noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, false, in _transaction, in _command);
 
             await command.PrepareAsync(cancellationToken);
 
@@ -520,12 +481,12 @@ namespace Thomas.Database
             return result;
         }
 
-        public async Task<List<T>> ToListAsync<T>(string script, object? parameters = null) where T : class, new()
+        public async Task<List<T>> ToListAsync<T>(string script, object? parameters = null)
         {
             return await ToListAsync<T>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<DbOpAsyncResult<List<T>>> ToListOpAsync<T>(string script, object? parameters, CancellationToken cancellationToken) where T : class, new()
+        public async Task<DbOpAsyncResult<List<T>>> ToListOpAsync<T>(string script, object? parameters, CancellationToken cancellationToken)
         {
             var response = new DbOpAsyncResult<List<T>>() { Success = true };
 
@@ -561,16 +522,9 @@ namespace Thomas.Database
         /// The action to dispose explicitly connection
         /// Enumerable of list of T streamed from database
         /// </returns>
-        public (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000) where T : class, new()
+        public (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000)
         {
-            var configuration = new DbCommandConfiguration(
-               commandBehavior: CommandBehavior.SingleResult,
-               methodHandled: MethodHandled.ToListQueryString,
-               keyAsReturnValue: false,
-               generateParameterWithKeys: false,
-               noCacheMetadata: false);
-
-            var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, false, in _transaction, in _command);
             command.Prepare();
             return (command.Dispose, command.FetchData<T>(batchSize));
         }
@@ -579,9 +533,13 @@ namespace Thomas.Database
 
         #region Multiple result set
 
+        private static readonly DbCommandConfiguration QueryTuple2Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_2,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public DbOpResult<Tuple<List<T1>, List<T2>>> ToTupleOp<T1, T2>(in string script, in object? parameters = null)
-           where T1 : class, new()
-           where T2 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>>>();
 
@@ -592,22 +550,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>> ToTuple<T1, T2>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new()
+        public Tuple<List<T1>, List<T2>> ToTuple<T1, T2>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-               commandBehavior: CommandBehavior.Default,
-               methodHandled: MethodHandled.ToTupleQueryString_2,
-               keyAsReturnValue: false,
-               generateParameterWithKeys: false,
-               noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple2Config, false, in _transaction, in _command);
             command.Prepare();
             var t1 = command.ReadListItems<T1>();
             var t2 = command.ReadListNextItems<T2>();
@@ -617,16 +568,9 @@ namespace Thomas.Database
             return new Tuple<List<T1>, List<T2>>(t1, t2);
         }
 
-        public async Task<Tuple<List<T1>, List<T2>>> ToTupleAsync<T1, T2>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>>> ToTupleAsync<T1, T2>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-               commandBehavior: CommandBehavior.Default,
-               methodHandled: MethodHandled.ToTupleQueryString_2,
-               keyAsReturnValue: false,
-               generateParameterWithKeys: false,
-               noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple2Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -638,15 +582,11 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>>> ToTupleAsync<T1, T2>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
         {
             return await ToTupleAsync<T1, T2>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> ToTupleOpAsync<T1, T2>(string script, object? parameters, CancellationToken cancellationToken)
-           where T1 : class, new()
-           where T2 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>>>();
 
@@ -667,10 +607,13 @@ namespace Thomas.Database
             return response;
         }
 
+        private static readonly DbCommandConfiguration QueryTuple3Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_3,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleOp<T1, T2, T3>(in string script, in object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>>();
 
@@ -681,22 +624,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>> ToTuple<T1, T2, T3>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new()
+        public Tuple<List<T1>, List<T2>, List<T3>> ToTuple<T1, T2, T3>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_3,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple3Config, false, in _transaction, in _command);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>();
@@ -709,9 +645,6 @@ namespace Thomas.Database
         }
 
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> ToTupleOp<T1, T2, T3>(string script, object? parameters, CancellationToken cancellationToken)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>();
 
@@ -732,16 +665,9 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleAsync<T1, T2, T3>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleAsync<T1, T2, T3>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_3,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple3Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -754,18 +680,17 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleAsync<T1, T2, T3>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
         {
             return await ToTupleAsync<T1, T2, T3>(script, parameters, CancellationToken.None);
         }
 
+        private static readonly DbCommandConfiguration QueryTuple4Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_4,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleOp<T1, T2, T3, T4>(in string script, in object? parameters)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>();
 
@@ -776,17 +701,13 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>>(in msg);
             }
 
             return response;
         }
 
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> ToTupleOp<T1, T2, T3, T4>(string script, object? parameters, CancellationToken cancellationToken)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>();
 
@@ -801,22 +722,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>> ToTuple<T1, T2, T3, T4>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new()
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>> ToTuple<T1, T2, T3, T4>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_4,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple4Config, false, in _transaction, in _command);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>();
@@ -829,16 +743,9 @@ namespace Thomas.Database
             return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>>(t1, t2, t3, t4);
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_4,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple4Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -852,20 +759,17 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
         {
             return await ToTupleAsync<T1, T2, T3, T4>(script, parameters, CancellationToken.None);
         }
 
+        private static readonly DbCommandConfiguration QueryTuple5Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_5,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> ToTupleOp<T1, T2, T3, T4, T5>(string script, object? parameters, CancellationToken cancellationToken)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>();
 
@@ -887,11 +791,6 @@ namespace Thomas.Database
         }
 
         public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleOp<T1, T2, T3, T4, T5>(in string script, in object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>();
 
@@ -902,22 +801,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>> ToTuple<T1, T2, T3, T4, T5>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new()
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>> ToTuple<T1, T2, T3, T4, T5>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_5,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, false, in _transaction, in _command);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>();
@@ -931,16 +823,9 @@ namespace Thomas.Database
             return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>(t1, t2, t3, t4, t5);
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_5,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -955,22 +840,17 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
         {
             return await ToTupleAsync<T1, T2, T3, T4, T5>(script, parameters, CancellationToken.None);
         }
 
+        private static readonly DbCommandConfiguration QueryTuple6Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_6,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>> ToTupleOp<T1, T2, T3, T4, T5, T6>(string script, object? parameters, CancellationToken cancellationToken)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
-            where T6 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>();
 
@@ -992,12 +872,6 @@ namespace Thomas.Database
         }
 
         public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleOp<T1, T2, T3, T4, T5, T6>(in string script, in object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
-            where T6 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>();
 
@@ -1008,22 +882,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new()
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_6,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, false, in _transaction, in _command);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>();
@@ -1038,16 +905,9 @@ namespace Thomas.Database
             return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_6,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1063,24 +923,17 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
-            where T6 : class, new()
         {
             return await ToTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, CancellationToken.None);
         }
 
+        private static readonly DbCommandConfiguration QueryTuple7Config = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.ToTupleQueryString_7,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(in string script, in object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
-            where T6 : class, new()
-            where T7 : class, new()
         {
             var response = new DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>();
 
@@ -1091,22 +944,15 @@ namespace Thomas.Database
             catch (Exception ex)
             {
                 var msg = ErrorDetailMessage(in script, in ex, in parameters);
-                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>>(msg);
+                response = DbOpResult.ErrorResult<DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>>(in msg);
             }
 
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object? parameters = null) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new() where T7 : class, new()
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object? parameters = null)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_7,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in configuration, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple7Config, false, in _transaction, in _command);
             command.Prepare();
 
             var t1 = command.ReadListItems<T1>();
@@ -1122,16 +968,9 @@ namespace Thomas.Database
             return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters, CancellationToken cancellationToken) where T1 : class, new() where T2 : class, new() where T3 : class, new() where T4 : class, new() where T5 : class, new() where T6 : class, new() where T7 : class, new()
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters, CancellationToken cancellationToken)
         {
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.ToTupleQueryString_7,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            await using var command = new DatabaseCommand(Options, in script, in parameters, in configuration, in _transaction, in _command);
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple7Config, false, in _transaction, in _command);
             await command.PrepareAsync(cancellationToken);
 
             var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1148,25 +987,11 @@ namespace Thomas.Database
         }
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters = null)
-            where T1 : class, new()
-            where T2 : class, new()
-            where T3 : class, new()
-            where T4 : class, new()
-            where T5 : class, new()
-            where T6 : class, new()
-            where T7 : class, new()
         {
             return await ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, CancellationToken.None);
         }
 
         public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(string script, object? parameters, CancellationToken cancellationToken)
-           where T1 : class, new()
-           where T2 : class, new()
-           where T3 : class, new()
-           where T4 : class, new()
-           where T5 : class, new()
-           where T6 : class, new()
-           where T7 : class, new()
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>();
 
@@ -1234,36 +1059,33 @@ namespace Thomas.Database
         #endregion Error Handling
 
         #region Write operations
+
+        private static readonly DbCommandConfiguration AddConfig = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.Execute,
+               keyAsReturnValue: false,
+               generateParameterWithKeys: false);
+
         public void Add<T>(T entity) where T : class, new()
         {
-            var generator = new SqlGenerator<T>(Options.SQLValues);
+            var generator = new SqlGenerator<T>(in Formatter);
             var script = generator.GenerateInsert<T>(false);
-
-            var configuration = new DbCommandConfiguration(
-              commandBehavior: CommandBehavior.Default,
-              methodHandled: MethodHandled.Execute,
-              keyAsReturnValue: false,
-              generateParameterWithKeys: false,
-              noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(Options, in script, entity, in configuration, _transaction, _command);
+            using var command = new DatabaseCommand(in Options, in script, entity, in AddConfig, false, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
 
+        private static readonly DbCommandConfiguration AddReturnIDConfig = new DbCommandConfiguration(
+               commandBehavior: CommandBehavior.Default,
+               methodHandled: MethodHandled.Execute,
+               keyAsReturnValue: true,
+               generateParameterWithKeys: false);
+
         public TE Add<T, TE>(T entity) where T : class, new()
         {
-            var generator = new SqlGenerator<T>(Options.SQLValues);
+            var generator = new SqlGenerator<T>(in Formatter);
             var script = generator.GenerateInsert<T>(true);
-
-            var configuration = new DbCommandConfiguration(
-                  commandBehavior: CommandBehavior.Default,
-                  methodHandled: MethodHandled.Execute,
-                  keyAsReturnValue: true,
-                  generateParameterWithKeys: false,
-                  noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(Options, in script, entity, in configuration, _transaction, _command);
+            using var command = new DatabaseCommand(in Options, in script, entity, in AddReturnIDConfig, false, in _transaction, in _command);
             command.Prepare();
 
             object? rawValue = null;
@@ -1278,38 +1100,35 @@ namespace Thomas.Database
                 rawValue = command.ExecuteScalar();
             }
 
-            return (TE)TypeConversionRegistry.ConvertByType(rawValue, typeof(TE), CultureInfo.InvariantCulture, Options.SqlProvider);
+            return (TE)TypeConversionRegistry.ConvertByType(rawValue, typeof(TE), in Options.SqlProvider);
         }
+
+        private static readonly DbCommandConfiguration UpdateConfig = new DbCommandConfiguration(
+              commandBehavior: CommandBehavior.Default,
+              methodHandled: MethodHandled.Execute,
+              keyAsReturnValue: false,
+              generateParameterWithKeys: false);
 
         public void Update<T>(T entity) where T : class, new()
         {
-            var generator = new SqlGenerator<T>(Options.SQLValues);
+            var generator = new SqlGenerator<T>(in Formatter);
             var script = generator.GenerateUpdate();
-
-            var configuration = new DbCommandConfiguration(
-                commandBehavior: CommandBehavior.Default,
-                methodHandled: MethodHandled.Execute,
-                keyAsReturnValue: false,
-                generateParameterWithKeys: false,
-                noCacheMetadata: false);
-
-            using var command = new DatabaseCommand(Options, in script, entity, in configuration, _transaction, _command);
+            using var command = new DatabaseCommand(in Options, in script, entity, in UpdateConfig, false, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
 
-        public void Delete<T>(T entity) where T : class, new()
-        {
-            var generator = new SqlGenerator<T>(Options.SQLValues);
-            var script = generator.GenerateDelete();
-            var configuration = new DbCommandConfiguration(
+        private static readonly DbCommandConfiguration DeleteConfig = new DbCommandConfiguration(
              commandBehavior: CommandBehavior.Default,
              methodHandled: MethodHandled.Execute,
              keyAsReturnValue: false,
-             generateParameterWithKeys: true,
-             noCacheMetadata: false);
+             generateParameterWithKeys: true);
 
-            using var command = new DatabaseCommand(Options, in script, entity, in configuration, _transaction, _command);
+        public void Delete<T>(T entity) where T : class, new()
+        {
+            var generator = new SqlGenerator<T>(in Formatter);
+            var script = generator.GenerateDelete();
+            using var command = new DatabaseCommand(in Options, in script, entity, in DeleteConfig, false, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
@@ -1321,15 +1140,15 @@ namespace Thomas.Database
             DynamicQueryString.Clear();
             DatabaseHelperProvider.CommandMetadata.Clear();
 
-            foreach (var type in CacheTypeParser.CachedTypes)
+            foreach (var type in CacheTypeHash.CachedTypes)
             {
                 var genericType = typeof(CacheTypeParser<>).MakeGenericType(type);
                 var method = genericType.GetMethod("Clear", BindingFlags.NonPublic | BindingFlags.Static);
                 method.Invoke(null, null);
             }
 
-            CacheTypeParser.CachedTypes.Clear();
-            CacheTypeParser.CachedTypes = new HashSet<Type>(10);
+            CacheTypeHash.CachedTypes.Clear();
+            CacheTypeHash.CachedTypes = new HashSet<Type>(10);
         }
     }
 

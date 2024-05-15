@@ -1,6 +1,4 @@
-﻿using System;
-using System.Diagnostics;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Cache;
 using Thomas.Database;
@@ -14,19 +12,19 @@ namespace Thomas.Tests.Performance.Legacy.Tests
         {
         }
 
-        public void Execute(IDatabase service, string tableName, int expectedItems = 0)
+        public void Execute(string db, string tableName, int expectedItems = 0)
         {
-            PerformOperation(() => service.ToListOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToListOp<> error resilient");
-            PerformOperation(() => service.ToSingleOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToSingleOp<> error resilient");
+            PerformOperation(() => DbFactory.GetDbContext(db).ToListOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToListOp<> error resilient");
+            PerformOperation(() => DbFactory.GetDbContext(db).ToSingleOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToSingleOp<> error resilient");
         }
 
-        public async Task ExecuteAsync(IDatabase service, string tableName, int expectedItems = 0)
+        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() => service.ToListOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToListOpAsync<> error resilient");
-            await PerformOperationAsync(() => service.ToSingleOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToSingleOpAsync<> error resilient");
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToListOpAsync<> error resilient");
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToSingleOpAsync<> error resilient");
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string tableName, int expectedItems = 0)
+        public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
 
         }

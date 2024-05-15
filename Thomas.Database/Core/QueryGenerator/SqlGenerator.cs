@@ -27,7 +27,7 @@ namespace Thomas.Database.Core.QueryGenerator
         void AddOutParam(DbColumn column, out string paramName);
     }
 
-    internal partial class SqlGenerator<T> : IParameterHandler where T : class, new()
+    internal partial class SqlGenerator<T> : IParameterHandler
     {
 
         private readonly char TableAlias;
@@ -64,7 +64,7 @@ namespace Thomas.Database.Core.QueryGenerator
         /// </summary>
         internal readonly LinkedList<DbParameterInfo> DbParametersToBind;
 
-        public SqlGenerator(ISqlFormatter formatter)
+        public SqlGenerator(in ISqlFormatter formatter)
         {
             _formatter = formatter;
             Type = typeof(T);
@@ -248,7 +248,7 @@ namespace Thomas.Database.Core.QueryGenerator
             var paramName = $"p{counter}";
             paramBindName = _formatter.BindVariable + paramName;
 
-            var convertedValue = TypeConversionRegistry.ConvertByType(value, propertyType, CultureInfo.InvariantCulture, _formatter.Provider, true);
+            var convertedValue = TypeConversionRegistry.ConvertByType(value, propertyType, _formatter.Provider, true);
 
             DbParametersToBind.AddLast(new DbParameterInfo(
                 paramName,

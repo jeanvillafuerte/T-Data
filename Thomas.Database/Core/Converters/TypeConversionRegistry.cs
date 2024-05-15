@@ -34,11 +34,11 @@ namespace Thomas.Database.Core.Converters
             return System.Convert.ChangeType(value, targetType, cultureInfo);
         }
 
-        public static object ConvertByType(object value, Type targetType, CultureInfo cultureInfo, SqlProvider provider, bool reduceNumericToIntegerWhenPossible = false)
+        public static object ConvertByType(object value, Type targetType, in SqlProvider provider, bool reduceNumericToIntegerWhenPossible = false)
         {
             var converter = ProviderConverters[provider].FirstOrDefault(x => x.CanConvertByType(value));
             if (converter != null)
-                return converter.ConvertByType(value, cultureInfo);
+                return converter.ConvertByType(value, CultureInfo.InvariantCulture);
 
             if (reduceNumericToIntegerWhenPossible &&
                 (value is decimal || value is double || value is float)
@@ -47,7 +47,7 @@ namespace Thomas.Database.Core.Converters
                 return intValue;
             }
 
-            return System.Convert.ChangeType(value, targetType, cultureInfo);
+            return System.Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
     }
 }

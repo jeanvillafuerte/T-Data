@@ -1,23 +1,22 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
-## Straightforward configuration for powerful Db requests.
+## Simplified setup for robust database operations.
 
 ### Features released 3.0.0:
 
-- Straightforward manner to match typed and anonymous types to query parameters.
-- Transaction support using lambda expressions.
-- Attributes to match parameter direction, size and precision to configure DbParameter.
-- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
-- Support for SqlServer, Postgresql, Oracle, Mysql and Sqlite
-- Optional Cache layer to boost application performance having control what will be stored, updated and removed as well as refresh throught a key identifier to allow refresh whenever you required refreshing using cached query and/or expression and parameters.
+- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
+- Expanded transaction support through the use of lambda expressions.
+- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
+- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
+- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
+- Full support for record types.
 
-### Supported database provider libraries:
-- Microsoft.Data.SqlClient: 2.1.7 and UP
-- Oracle.ManagedDataAccess.Core: 2.18.3 and UP
-- Npgsql: 3.2.4 and UP
-- Mysql.Data: 8.0.28 and UP
-- Microsoft.Data.Sqlite: 3.0.0 and UP
-
+### Supported database providers:
+- Microsoft.Data.SqlClient
+- Oracle.ManagedDataAccess.Core
+- Npgsql
+- Mysql.Data
+- Microsoft.Data.Sqlite
 
 ## Quick start
 
@@ -101,15 +100,33 @@ public class UserRepository
         }
         dispose();
     }
+
+    //records
+    public record User(int Id, string Name, byte[] photo);
+    public List<User> Export()
+    {
+        return sqlServerContext.ToList<User>("SELECT * FROM User"); 
+    }
 ```
 
 ### Perfomance
 
-Excellent performance having as a main key usability taking into account that you don't have to open and close connection anymore so makes you 
+Excellent performance having into account you dont have to deal with DbConnection anymore, here is a fair test were we usually dispose connection after use
+
+Note: Tested with Docker MSSQL locally
 
 ``` ini
 BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3)
 13th Gen Intel Core i9-13900H, 1 CPU, 20 logical and 14 physical cores
 .NET SDK 8.0.101
-  [Host]     : .NET 6.0.26 (6.0.2623.60508), X64 RyuJIT AVX2
-  Job-GMJVPM : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  Job-VNBJGA : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+
+
+| Detailed Runtime           | Type                       | Method                      | Mean     | StdDev   | Error    | Op/s    | GcMode             | Gen0   | Completed Work Items | Lock Contentions | Allocated |
+|--------------------------- |--------------------------- |---------------------------- |---------:|---------:|---------:|--------:|------------------- |-------:|---------------------:|-----------------:|----------:|
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | Single<>                    | 432.8 us | 22.58 us |  8.15 us | 2,310.6 | Toolchain=.NET 8.0 |      - |                    - |                - |   8.04 KB |
+| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | QuerySingle<T>              | 500.0 us | 25.82 us |  9.93 us | 2,000.1 | Toolchain=.NET 8.0 |      - |                    - |                - |  11.54 KB |
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToListRecord<> Expression' | 563.7 us | 44.90 us | 15.23 us | 1,774.0 | Toolchain=.NET 8.0 | 1.9531 |                    - |                - |  26.76 KB |
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | ToList<>                    | 572.7 us | 12.89 us | 10.83 us | 1,746.2 | Toolchain=.NET 8.0 | 1.9531 |                    - |                - |  26.47 KB |
+| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<T> (buffered)'       | 602.0 us | 38.75 us | 13.36 us | 1,661.1 | Toolchain=.NET 8.0 | 1.9531 |                    - |                - |  26.45 KB |

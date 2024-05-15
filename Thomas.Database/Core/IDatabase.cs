@@ -11,7 +11,7 @@ namespace Thomas.Database
     {
         int Execute(in string script, in object? parameters = null, in bool noCacheMetadata = false);
 
-        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000) where T : class, new();
+        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000);
 
         void ExecuteBlock(Action<IDatabase> func);
         Task ExecuteBlockAsync(Func<IDatabase, Task> func);

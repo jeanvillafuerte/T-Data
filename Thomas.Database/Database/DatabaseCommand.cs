@@ -63,7 +63,7 @@ namespace Thomas.Database
 
         public DatabaseCommand(in DbSettings options)
         {
-            _connectionString = string.Intern(options.StringConnection);
+            _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
         }
@@ -73,6 +73,7 @@ namespace Thomas.Database
             in string script,
             in object? filter,
             in DbCommandConfiguration configuration,
+            in bool noCacheMetaData,
             in DbTransaction transaction = null,
             in DbCommand command = null)
         {
@@ -112,7 +113,7 @@ namespace Thomas.Database
                 _preparationQueryKey = _operationKey;
             }
 
-            if (!configuration.NoCacheMetaData && DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            if (!noCacheMetaData && DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
             {
                 _commandType = commandMetadata.CommandType;
                 _hasOutParameters = commandMetadata.HasOutputParameters;
@@ -123,21 +124,30 @@ namespace Thomas.Database
             {
                 _commandBehavior = configuration.CommandBehavior;
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
+                var isTuple = configuration.IsTuple();
                 _commandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
-                
-                if (isStoreProcedure && _provider == SqlProvider.Oracle)
+                DbParameterInfo[] additionalOutputParameters = null;
+
+                if (isStoreProcedure && _provider == SqlProvider.Oracle && isTuple)
                 {
-                    //TODO: detect to add output cursor to selectList, row or tuple 
+                    int cursorsToAdd = (int)configuration.MethodHandled - 3;
+                    additionalOutputParameters = new DbParameterInfo[cursorsToAdd];
+
+                    for (int i = 0; i < cursorsToAdd; i++)
+                    {
+                        string name = $"p_cursor{i}";
+                        additionalOutputParameters[i] = new DbParameterInfo(in name, in name, 0, 0, ParameterDirection.Output, null, null, 121, null); // 121 -> RefCursor
+                    }
                 }
 
                 var loaderConfiguration = new LoaderConfiguration(
                     keyAsReturnValue: configuration.KeyAsReturnValue,
                     generateParameterWithKeys: configuration.GenerateParameterWithKeys,
-                    additionalOutputParameters: null,
+                    additionalOutputParameters: additionalOutputParameters?.ToList(),
                     provider: _provider,
                     fetchSize: options.FetchSize);
 
-                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, filterType, in configuration.NoCacheMetaData, transaction == null && !configuration.IsTuple(), ref _hasOutParameters, ref _commandBehavior);
+                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, filterType, in noCacheMetaData, transaction == null && !isTuple, ref _hasOutParameters, ref _commandBehavior);
             }
 
             if (options.DetailErrorMessage)
@@ -170,6 +180,12 @@ namespace Thomas.Database
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal DbCommand CreateEmptyCommand() => _connection.CreateCommand();
 
+        internal void OpenConnection()
+        {
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection.Open();
+        }
+
         internal DbTransaction BeginTransaction()
         {
             _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
@@ -182,30 +198,6 @@ namespace Thomas.Database
             _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
             _connection.OpenAsync(cancellationToken);
             return await _connection.BeginTransactionAsync(cancellationToken);
-        }
-
-        //TODO: add support for other providers
-        internal void AddOutputParameter(DbParameterInfo parameter)
-        {
-            int paramIndex = 0;
-            switch (_provider)
-            {
-                case SqlProvider.SqlServer:
-                    if (DatabaseHelperProvider.DbTypes(SqlProvider.SqlServer).TryGetValue(parameter.PropertyType, out var enumSqlTextValue) && Enum.TryParse(DatabaseHelperProvider.SqlDbType, enumSqlTextValue, true, out var enumSqlVal))
-                    {
-                        paramIndex = _command.Parameters.Add(Activator.CreateInstance(DatabaseHelperProvider.SqlDbParameterType, new object[] { parameter.Name, enumSqlVal }));
-                    }
-                    break;
-                case SqlProvider.Oracle:
-                    if (DatabaseHelperProvider.DbTypes(SqlProvider.Oracle).TryGetValue(parameter.PropertyType, out var enumOracleTextValue) && Enum.TryParse(DatabaseHelperProvider.OracleDbType, enumOracleTextValue, true, out var enumOracleValue))
-                    {
-                        paramIndex = _command.Parameters.Add(Activator.CreateInstance(DatabaseHelperProvider.OracleDbParameterType, new object[] { parameter.Name, enumOracleValue }));
-                    }
-                    break;
-
-            }
-
-            _command.Parameters[paramIndex].Direction = ParameterDirection.Output;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -293,7 +285,7 @@ namespace Thomas.Database
 
         #region reader operations
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken) where T : class, new()
+        public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken)
         {
             var list = new List<T>();
 
@@ -309,7 +301,7 @@ namespace Thomas.Database
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken) where T : class, new()
+        public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
             var list = new List<T>();
 
@@ -324,7 +316,7 @@ namespace Thomas.Database
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public List<T> ReadListItems<T>() where T : class, new()
+        public List<T> ReadListItems<T>()
         {
             var list = new List<T>();
 
@@ -337,7 +329,7 @@ namespace Thomas.Database
             return list;
         }
 
-        public IEnumerable<List<T>> FetchData<T>(int batchSize) where T : class, new()
+        public IEnumerable<List<T>> FetchData<T>(int batchSize)
         {
             var list = new List<T>(batchSize);
 
@@ -364,7 +356,7 @@ namespace Thomas.Database
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public List<T> ReadListNextItems<T>() where T : class, new()
+        public List<T> ReadListNextItems<T>()
         {
             var list = new List<T>();
 

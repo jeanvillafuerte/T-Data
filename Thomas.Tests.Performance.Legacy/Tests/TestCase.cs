@@ -1,5 +1,4 @@
-﻿using Azure.Core.Pipeline;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -22,7 +21,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
@@ -46,11 +45,18 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
-                Operation.Invoke();
+                try
+                {
+                    Operation.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
                 var elapsed = stopWatch.ElapsedMilliseconds;
 
                 builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
@@ -70,7 +76,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
@@ -95,11 +101,18 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
-
-                var count = Operation.Invoke().Count;
+                int count = 0;
+                try
+                {
+                    count = Operation.Invoke().Count;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
                 var elapsed = stopWatch.ElapsedMilliseconds;
 
                 builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
@@ -119,7 +132,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
@@ -154,7 +167,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             var builder = new StringBuilder();
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
                 int count = 0;
@@ -191,7 +204,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
@@ -216,7 +229,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
 
@@ -240,7 +253,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             builder.Append($"\tOperation: {operationName}");
             builder.AppendLine("");
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 stopWatch.Start();
                 IEnumerable<T> data = null;

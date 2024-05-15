@@ -2,11 +2,8 @@
 using System.Data.Common;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
-using System.Reflection.Emit;
 using Sigil;
-using Sigil.NonGeneric;
 using Thomas.Database.Cache;
 using Label = Sigil.Label;
 
@@ -90,9 +87,13 @@ namespace Thomas.Database
             return @delegate;
         }
 
+        //support only class with public setters and parameterless constructor 
         private static Func<DbDataReader, T> GenerateEmitterBySetters<T>(in Type typeResult, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection)
         {
-            Emit<Func<DbDataReader, T>> emitter = Emit<Func<DbDataReader, T>>.NewDynamicMethod(typeResult, $"ParseReaderRowTo{typeResult.FullName!.Replace('.', '_')}", true, true);
+            if (typeResult.GetConstructor(Type.EmptyTypes) == null)
+                throw new InvalidOperationException($"Cannot find parameterless constructor for {typeResult.Name}");
+
+            Emit<Func<DbDataReader, T>> emitter = Emit<Func<DbDataReader, T>>.NewDynamicMethod(typeResult, $"ParseReaderRowTo{typeResult.FullName!.Replace('.', '_')}Class", true, true);
 
             using Local instance = emitter.DeclareLocal<T>("objectValue", false); // Declare local variable to hold the new instance of T
 
@@ -152,11 +153,11 @@ namespace Thomas.Database
                                         .CallVirtual(GetBytes)
                                         .Pop();
 
-                    emitter.LoadLocal(instance);
-                    emitter.LoadLocal(bufferLocal);
-                    emitter.NewObject(GuidConstructorByteArray);
-                    emitter.Call(column.PropertyInfo!.GetSetMethod(true));
-                    emitter.Pop();
+                    emitter.LoadLocal(instance)
+                            .LoadLocal(bufferLocal)
+                            .NewObject(GuidConstructorByteArray)
+                            .Call(column.PropertyInfo!.GetSetMethod(true))
+                            .Pop();
 
                     if (column.AllowNull)
                     {
@@ -192,7 +193,8 @@ namespace Thomas.Database
                     }
                     else if (underlyingType == sourceType)
                     {
-                        EmitConvertToNullable<T>(emitter, sourceType);
+                        //EmitConvertToNullable<T>(emitter, sourceType);
+                        emitter.NewObject(typeof(Nullable<>).MakeGenericType(underlyingType).GetConstructor(new[] { underlyingType }));
                     }
                     else if (propertyType == typeof(Guid) && sourceType == typeof(string))
                     {
@@ -200,7 +202,8 @@ namespace Thomas.Database
                     }
                     else if (column.DataTypeName == "bit" && underlyingType == typeof(bool)) //postgresql
                     {
-                        EmitConvertToNullable<T>(emitter, typeof(bool));
+                        //EmitConvertToNullable<T>(emitter, typeof(bool));
+                        emitter.NewObject(typeof(Nullable<>).MakeGenericType(typeof(bool)).GetConstructor(new[] { typeof(bool) }));
                     }
                     else if (column.DataTypeName == "bit" && propertyType == typeof(bool)) //postgresql
                     {
@@ -243,55 +246,44 @@ namespace Thomas.Database
             if (constructor == null)
                 throw new InvalidOperationException($"Cannot find readonly record constructor for {type.Name}");
 
-            var emitter = Emit<Func<DbDataReader, T>>.NewDynamicMethod("ParseReaderRow");
-            using Local instance = emitter.DeclareLocal<T>("objectValue", false);
+            var emitter = Emit<Func<DbDataReader, T>>.NewDynamicMethod(type, $"ParseReaderRowTo{type.FullName!.Replace('.', '_')}Record", true, true);
 
-            emitter.LoadArgument(0)
-                 .DeclareLocal(type);
+            var columns = columnInfoCollection.ToArray();
+            var locals = fields.Select(f => emitter.DeclareLocal(f.FieldType)).ToList();
 
-            int index = 0;
-            foreach (var field in fields)
+            for (int i = 0; i < fields.Length; i++)
             {
-                using var columnValue = emitter.DeclareLocal(field.FieldType);
-                var column = columnInfoCollection.ToArray().FirstOrDefault(x => x.Name.Equals(field.Name, StringComparison.InvariantCultureIgnoreCase));
+                var field = fields[i];
+                var local = locals[i];
+
+                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.Name}>", StringComparison.InvariantCultureIgnoreCase));
 
                 //when column not found we need to set default value
-                if (column == null)
-                {
-                    if (field.FieldType.IsValueType)
-                        emitter.LoadConstant(field.FieldType);
-                    else
-                        emitter.LoadNull();
+                Label? notNullLabel = emitter.DefineLabel("notNull" + i);
+                Label? endLabel = emitter.DefineLabel("end" + i);
 
-                    emitter.StoreLocal(columnValue)
-                           .LoadLocal(columnValue);
-
-                    continue;
-                }
-
-                Label? notNullLabel = null;
-                Label? endLabel = null;
+                Type underlyingType = Nullable.GetUnderlyingType(field.FieldType);
 
                 if (column.AllowNull)
                 {
                     emitter.LoadArgument(0)
-                                  .LoadConstant(index)
-                                  .CallVirtual(IsDBNull);
+                                    .LoadConstant(i)
+                                    .CallVirtual(IsDBNull);
 
                     //check if not null
-                    notNullLabel = emitter.DefineLabel("notNull" + index);
-                    endLabel = emitter.DefineLabel("end" + index);
-
                     emitter.BranchIfFalse(notNullLabel);
 
-                    // If !IsDBNull returned false
-                    emitter.Branch(endLabel);
+                    //ELSE - handling default value and avoid store default value on null-able types
+                    if (underlyingType == null)
+                    {
+                        EmitDefaultValue(emitter, underlyingType, field);
+                        emitter.StoreLocal(local);
+                    }
 
-                    //If !IsDBNull returned true
+                    //if column is null then skip to end
+                    emitter.Branch(endLabel);
                     emitter.MarkLabel(notNullLabel);
                 }
-
-                emitter.LoadLocal(instance);
 
                 var getMethod = GetMethodInfo(column.Source, in provider) ?? throw new NotSupportedException($"Unsupported type {column.Source.Name}");
 
@@ -308,7 +300,7 @@ namespace Thomas.Database
 
                     // Assume the data is already in the correct position in the reader, and fill the byte array
                     emitter.LoadArgument(0)
-                                        .LoadConstant(index)
+                                        .LoadConstant(i)
                                         .LoadConstant(0L)
                                         .LoadLocal(bufferLocal)
                                         .LoadConstant(0)
@@ -316,40 +308,37 @@ namespace Thomas.Database
                                         .CallVirtual(GetBytes)
                                         .Pop();
 
-                    emitter.LoadLocal(instance);
                     emitter.LoadLocal(bufferLocal);
                     emitter.NewObject(GuidConstructorByteArray);
-                    emitter.Pop();
-                    emitter.StoreLocal(columnValue);
+
+                    emitter.StoreLocal(local);
 
                     if (column.AllowNull)
                     {
                         emitter.MarkLabel(endLabel);
                     }
 
-                    emitter.LoadLocal(columnValue);
-                    index++;
                     continue;
                 }
                 else if (column.IsLargeObject && getMethod.Name.Equals("GetBytes", StringComparison.Ordinal))
                 {
                     emitter.LoadArgument(0)
-                        .LoadConstant(index)
+                        .LoadConstant(i)
                         .LoadConstant(bufferSize > 0 ? bufferSize : 8192)
                         .Call(ReadStreamMethod);
                 }
                 else
                 {
                     emitter.LoadArgument(0)
-                                        .LoadConstant(index)
+                                        .LoadConstant(i)
                                         .CallVirtual(getMethod);
                 }
 
                 if (column.RequiredConversion)
                 {
+
                     Type propertyType = column.PropertyInfo.PropertyType;
                     Type sourceType = column.Source;
-                    Type underlyingType = Nullable.GetUnderlyingType(propertyType);
 
                     if (IsPrimitiveTypeConversion(propertyType, sourceType))
                     {
@@ -357,7 +346,8 @@ namespace Thomas.Database
                     }
                     else if (underlyingType == sourceType)
                     {
-                        EmitConvertToNullable<T>(emitter, sourceType);
+                        emitter.NewObject(typeof(Nullable<>).MakeGenericType(underlyingType).GetConstructor(new[] { underlyingType }));
+                        //EmitConvertToNullable<T>(emitter, sourceType);
                     }
                     else if (propertyType == typeof(Guid) && sourceType == typeof(string))
                     {
@@ -365,7 +355,8 @@ namespace Thomas.Database
                     }
                     else if (column.DataTypeName == "bit" && underlyingType == typeof(bool)) //postgresql
                     {
-                        EmitConvertToNullable<T>(emitter, typeof(bool));
+                        emitter.NewObject(typeof(Nullable<>).MakeGenericType(typeof(bool)).GetConstructor(new[] { typeof(bool) }));
+                        //EmitConvertToNullable<T>(emitter, typeof(bool));
                     }
                     else if (column.DataTypeName == "bit" && propertyType == typeof(bool)) //postgresql
                     {
@@ -378,24 +369,81 @@ namespace Thomas.Database
                     {
                         EmitConversionForNonNullableType(emitter, propertyType, sourceType, column);
                     }
+
                 }
 
-                emitter.StoreLocal(columnValue);
+                emitter.StoreLocal(local);
 
                 if (column.AllowNull)
                 {
                     emitter.MarkLabel(endLabel);
                 }
-
-                emitter.LoadLocal(columnValue);
-                index++;
             }
+               
+            foreach (var local in locals)
+                emitter.LoadLocal(local);
 
             return emitter.NewObject(constructor)
-                        .StoreLocal(instance)
-                        .LoadLocal(instance)
-                        .Return()
-                        .CreateDelegate();
+                    .Return()
+                    .CreateDelegate();
+        }
+
+        private static void EmitDefaultValue<T>(Emit<Func<DbDataReader, T>> emitter, Type? underlyingType, FieldInfo field)
+        {
+            if (field.FieldType.IsValueType)
+            {
+                if (field.FieldType == typeof(int) || field.FieldType == typeof(double) ||
+                    field.FieldType == typeof(float) || field.FieldType == typeof(long) ||
+                    field.FieldType == typeof(short) || field.FieldType == typeof(byte) ||
+                    field.FieldType == typeof(sbyte) ||
+                    field.FieldType == typeof(uint) || field.FieldType == typeof(ushort) ||
+                    field.FieldType == typeof(ulong))
+                {
+                    emitter.LoadConstant(0);
+                }
+                else if (field.FieldType == typeof(bool))
+                {
+                    emitter.LoadConstant(false);
+                }
+                else if (field.FieldType == typeof(decimal))
+                {
+                    // Decimal constants are created by loading the value onto the stack and then calling the constructor
+                    emitter.LoadConstant(0);     // lo
+                    emitter.LoadConstant(0);     // mid
+                    emitter.LoadConstant(0);     // hi
+                    emitter.LoadConstant(false); // isNegative
+                    emitter.LoadConstant(0);     // scale
+                    emitter.NewObject<decimal, int, int, int, bool, byte>();
+                }
+                else if (field.FieldType == typeof(Guid))
+                {
+                    emitter.LoadField(typeof(Guid).GetField("Empty"));
+                }
+                else if (field.FieldType == typeof(DateTime))
+                {
+                    emitter.LoadField(typeof(DateTime).GetField("MinValue"));
+                }
+                else if (field.FieldType == typeof(TimeSpan))
+                {
+                    emitter.LoadField(typeof(TimeSpan).GetField("Zero"));
+                }
+                else if (field.FieldType == typeof(DateOnly))
+                {
+                    emitter.LoadField(typeof(DateOnly).GetField("MinValue"));
+                }
+                else if (field.FieldType == typeof(TimeOnly))
+                {
+                    emitter.LoadField(typeof(TimeOnly).GetField("Midnight"));
+                }
+                else
+                {
+                    throw new NotSupportedException($"Unsupported type {field.FieldType.FullName}");
+                }
+            }
+            else
+            {
+                emitter.LoadNull();
+            }
         }
 
         private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader)
@@ -435,7 +483,7 @@ namespace Thomas.Database
         {
             var allFieldsInitOnly = type.GetRuntimeFields().All(x => x.Attributes.HasFlag(FieldAttributes.InitOnly));
             Type equatableType = typeof(IEquatable<>).MakeGenericType(type);
-            return allFieldsInitOnly && equatableType.IsAssignableFrom(type) && type.GetMethods().Any(x => x.Name == "<Clone>$");
+            return allFieldsInitOnly && equatableType.IsAssignableFrom(type) && (type.GetMethods().Any(x => x.Name == "<Clone>$") || type.IsValueType);
         }
 
         private static bool IsPrimitiveTypeConversion(Type propertyType, Type sourceType)
@@ -451,7 +499,8 @@ namespace Thomas.Database
             if (converterMethod != null)
             {
                 emitter.Call(converterMethod);
-                EmitConvertToNullable(emitter, targetType);
+                emitter.NewObject(typeof(Nullable<>).MakeGenericType(targetType).GetConstructor(new[] { targetType }));
+                //EmitConvertToNullable(emitter, targetType);
             }
             else
             {
@@ -473,56 +522,56 @@ namespace Thomas.Database
             }
         }
 
-        private static void EmitConvertToNullable<T>(Emit<Func<DbDataReader, T>> emitter, Type source)
-        {
-            switch (source.Name)
-            {
-                case "Boolean":
-                    emitter.NewObject(typeof(bool?).GetConstructor(new[] { typeof(bool) })!);
-                    break;
-                case "Byte":
-                    emitter.NewObject(typeof(byte?).GetConstructor(new[] { typeof(byte) })!);
-                    break;
-                case "Int16":
-                    emitter.NewObject(typeof(short?).GetConstructor(new[] { typeof(short) })!);
-                    break;
-                case "Int32":
-                    emitter.NewObject(typeof(int?).GetConstructor(new[] { typeof(int) })!);
-                    break;
-                case "Int64":
-                    emitter.NewObject(typeof(long?).GetConstructor(new[] { typeof(long) })!);
-                    break;
-                case "UInt16":
-                    emitter.NewObject(typeof(ushort?).GetConstructor(new[] { typeof(ushort) })!);
-                    break;
-                case "UInt32":
-                    emitter.NewObject(typeof(uint?).GetConstructor(new[] { typeof(uint) })!);
-                    break;
-                case "UInt64":
-                    emitter.NewObject(typeof(ulong?).GetConstructor(new[] { typeof(ulong) })!);
-                    break;
-                case "Single":
-                    emitter.NewObject(typeof(float?).GetConstructor(new[] { typeof(float) })!);
-                    break;
-                case "Double":
-                    emitter.NewObject(typeof(double?).GetConstructor(new[] { typeof(double) })!);
-                    break;
-                case "Decimal":
-                    emitter.NewObject(typeof(decimal?).GetConstructor(new[] { typeof(decimal) })!);
-                    break;
-                case "DateTime":
-                    emitter.NewObject(typeof(DateTime?).GetConstructor(new[] { typeof(DateTime) })!);
-                    break;
-                case "Guid":
-                    emitter.NewObject(typeof(Guid?).GetConstructor(new[] { typeof(Guid) })!);
-                    break;
-                case "Char":
-                    emitter.NewObject(typeof(char?).GetConstructor(new[] { typeof(char) })!);
-                    break;
-                default:
-                    throw new InvalidOperationException($"Compatible nullable type was not found for {source.Name}");
-            }
-        }
+        //private static void EmitConvertToNullable<T>(Emit<Func<DbDataReader, T>> emitter, Type source)
+        //{
+        //    switch (source.Name)
+        //    {
+        //        case "Boolean":
+        //            emitter.NewObject(typeof(bool?).GetConstructor(new[] { typeof(bool) })!);
+        //            break;
+        //        case "Byte":
+        //            emitter.NewObject(typeof(byte?).GetConstructor(new[] { typeof(byte) })!);
+        //            break;
+        //        case "Int16":
+        //            emitter.NewObject(typeof(short?).GetConstructor(new[] { typeof(short) })!);
+        //            break;
+        //        case "Int32":
+        //            emitter.NewObject(typeof(int?).GetConstructor(new[] { typeof(int) })!);
+        //            break;
+        //        case "Int64":
+        //            emitter.NewObject(typeof(long?).GetConstructor(new[] { typeof(long) })!);
+        //            break;
+        //        case "UInt16":
+        //            emitter.NewObject(typeof(ushort?).GetConstructor(new[] { typeof(ushort) })!);
+        //            break;
+        //        case "UInt32":
+        //            emitter.NewObject(typeof(uint?).GetConstructor(new[] { typeof(uint) })!);
+        //            break;
+        //        case "UInt64":
+        //            emitter.NewObject(typeof(ulong?).GetConstructor(new[] { typeof(ulong) })!);
+        //            break;
+        //        case "Single":
+        //            emitter.NewObject(typeof(float?).GetConstructor(new[] { typeof(float) })!);
+        //            break;
+        //        case "Double":
+        //            emitter.NewObject(typeof(double?).GetConstructor(new[] { typeof(double) })!);
+        //            break;
+        //        case "Decimal":
+        //            emitter.NewObject(typeof(decimal?).GetConstructor(new[] { typeof(decimal) })!);
+        //            break;
+        //        case "DateTime":
+        //            emitter.NewObject(typeof(DateTime?).GetConstructor(new[] { typeof(DateTime) })!);
+        //            break;
+        //        case "Guid":
+        //            emitter.NewObject(typeof(Guid?).GetConstructor(new[] { typeof(Guid) })!);
+        //            break;
+        //        case "Char":
+        //            emitter.NewObject(typeof(char?).GetConstructor(new[] { typeof(char) })!);
+        //            break;
+        //        default:
+        //            throw new InvalidOperationException($"Compatible nullable type was not found for {source.Name}");
+        //    }
+        //}
 
         private class PropertyTypeInfo
         {

@@ -1,7 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using Microsoft.EntityFrameworkCore;
 using System.ComponentModel;
 using System.Linq;
+using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Benchmark.Others
 {
@@ -11,18 +13,28 @@ namespace Thomas.Tests.Performance.Benchmark.Others
     public class EntityFrameworkBenckmark : BenckmarkBase
     {
         private readonly Consumer consumer = new Consumer();
-
+        
         [GlobalSetup]
         public void Setup()
         {
             Start();
         }
 
-        [Benchmark(Description = "ToList (unbuffered)")]
+        [Benchmark(Description = "ToList<T>")]
         public void QueryListUnbuffered()
         {
-            using var context = new PersonContext(StringConnection);
-            context.People.Where(x => x.Id > 0).ToList().Consume(consumer);
+            new PersonContext(StringConnection).People.ToList().Consume(consumer);
         }
+
+        [Benchmark(Description = "SqlQueryRaw<T>")]
+        public void SqlQueryRaw()
+        {
+            new PersonContext(StringConnection).Database.SqlQueryRaw<Person>($"SELECT * FROM {TableName}").Consume(consumer);
+        }
+    }
+
+    class Filter
+    {
+        public int Id { get; set; }
     }
 }

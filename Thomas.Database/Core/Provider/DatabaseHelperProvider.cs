@@ -281,7 +281,7 @@ namespace Thomas.Database.Core.Provider
                 else
                     properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
             }
-
+            
             Span<DbParameterInfo> parameters = new DbParameterInfo[properties.Length + (options.KeyAsReturnValue ? 1 : 0)];
 
             var dbType = GetDbType(options.Provider);
@@ -604,7 +604,7 @@ namespace Thomas.Database.Core.Provider
             };
         }
 
-        internal readonly ref struct LoaderConfiguration
+        internal readonly struct LoaderConfiguration
         {
             public readonly bool KeyAsReturnValue;
             public readonly bool GenerateParameterWithKeys;

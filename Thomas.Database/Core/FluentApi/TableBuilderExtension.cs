@@ -35,8 +35,8 @@ namespace Thomas.Database.Core.FluentApi
         {
             var memberExpression = TableBuilder.EnsureSelectedMember(expression);
             var columnName = memberExpression.Member.Name;
-            var index = table.Columns.FindIndex(x => x.Name == columnName);
-            table.Columns.RemoveAt(index);
+            var node = table.Columns.Find(new DbColumn { Name = columnName });
+            table.Columns.Remove(node);
             return table;
         }
 

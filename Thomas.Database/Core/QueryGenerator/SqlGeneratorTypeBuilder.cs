@@ -6,7 +6,7 @@ using Thomas.Database.Core.Provider;
 namespace Thomas.Database.Core.QueryGenerator
 {
     //Reduce memory footprint by using a single type for all generated types
-    internal partial class SqlGenerator<T> : IParameterHandler where T : class, new()
+    internal partial class SqlGenerator<T> : IParameterHandler
     {
         internal static Type BuildType(ReadOnlySpan<DbParameterInfo> dbParametersToBind)
         {

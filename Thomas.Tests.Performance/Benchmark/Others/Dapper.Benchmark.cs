@@ -5,7 +5,6 @@ using Dapper;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using Thomas.Tests.Performance.Entities;
-using System.Collections.Generic;
 
 namespace Thomas.Tests.Performance.Benchmark.Others
 {
@@ -15,48 +14,37 @@ namespace Thomas.Tests.Performance.Benchmark.Others
     public class DapperBenckmark : BenckmarkBase
     {
         private readonly Consumer consumer = new Consumer();
-        //private readonly SqlConnection _connection;
+     
         [GlobalSetup]
         public void Setup()
         {
             Start();
-            //using var _connection = new SqlConnection(StringConnection);
-            //_connection.Open();
         }
 
-        //[Benchmark(Description = "QuerySingle<T>")]
-        //public Person QuerySingle()
-        //{
-        //    var _connection = new SqlConnection(StringConnection);
-        //    _connection.Open();
+        [Benchmark(Description = "QuerySingle<T>")]
+        public Person QuerySingle()
+        {
+            using var _connection = new SqlConnection(StringConnection);
+            return _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
+        }
 
-        //    var item = _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
-        //    _connection.Close();
+        [Benchmark(Description = "Query<T> (buffered)")]
+        public void QueryBuffered()
+        {
+            using var _connection = new SqlConnection(StringConnection);
+            _connection.Query<Person>($"SELECT * FROM {TableName}").Consume(consumer);
+        }
 
-        //    return item;
-        //}
+        [Benchmark(Description = "Query<dynamic> (buffered)")]
+        public dynamic QueryBufferedDynamic()
+        {
+            var _connection = new SqlConnection(StringConnection);
+            var item = _connection.Query($"select * from {TableName} where Id > @Id", new { Id = 1 }, buffered: true).First();
+            _connection.Close();
+            return item;
+        }
 
-        //[Benchmark(Description = "Query<T> (unbuffered)")]
-        //public void QueryBuffered()
-        //{
-        //    var _connection = new SqlConnection(StringConnection);
-        //    _connection.Open();
-
-        //    _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).ToList().Consume(consumer);
-        //    _connection.Close();
-        //}
-
-        //[Benchmark(Description = "Query<dynamic> (buffered)")]
-        //public dynamic QueryBufferedDynamic()
-        //{
-        //    var _connection = new SqlConnection(StringConnection);
-        //    var item = _connection.Query($"select * from {TableName} where Id > @Id", new { Id = 1 }, buffered: true).First();
-        //    _connection.Close();
-        //    return item;
-        //}
-
-    
-        [Benchmark(Description = "Query<T> List (unbuffered)")]
+        [Benchmark(Description = "Query<T> (unbuffered)")]
         public void QueryListUnbuffered()
         {
             using var _connection = new SqlConnection(StringConnection);

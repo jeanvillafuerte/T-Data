@@ -11,7 +11,7 @@ namespace Thomas.Cache.MemoryCache
         Expression? Where { get; set; }
     }
 
-    internal class QueryResult<T> : IQueryResult
+    internal sealed class QueryResult<T> : IQueryResult
     {
         public string Query { get; set; }
         public object? Params { get; set; }

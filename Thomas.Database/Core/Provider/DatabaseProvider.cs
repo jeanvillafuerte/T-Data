@@ -29,7 +29,7 @@ namespace Thomas.Database.Core.Provider
                 return null;
             }
 
-            Action<object, DbCommand>? loadParametersDelegate = DatabaseHelperProvider.GetLoadCommandParametersDelegate(in type, in options, ref hasOutputParams);
+            Action<object, DbCommand>? loadParametersDelegate = GetLoadCommandParametersDelegate(in type, in options, ref hasOutputParams);
 
             if (!hasOutputParams && canCloseConnection)
                 commandBehavior |= CommandBehavior.CloseConnection;

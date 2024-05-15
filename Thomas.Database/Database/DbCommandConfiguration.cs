@@ -8,18 +8,16 @@ namespace Thomas.Database.Database
         public readonly MethodHandled MethodHandled;
         public readonly bool KeyAsReturnValue;
         public readonly bool GenerateParameterWithKeys;
-        public readonly bool NoCacheMetaData;
 
-        public DbCommandConfiguration(CommandBehavior commandBehavior, MethodHandled methodHandled, bool keyAsReturnValue, bool generateParameterWithKeys, bool noCacheMetadata)
+        public DbCommandConfiguration(CommandBehavior commandBehavior, MethodHandled methodHandled, bool keyAsReturnValue, bool generateParameterWithKeys)
         {
             CommandBehavior = commandBehavior;
             MethodHandled = methodHandled;
             KeyAsReturnValue = keyAsReturnValue;
             GenerateParameterWithKeys = generateParameterWithKeys;
-            NoCacheMetaData = noCacheMetadata;
         }
 
-        internal readonly bool IsTuple()
+        readonly internal bool IsTuple()
         {
             return MethodHandled == MethodHandled.ToTupleQueryString_2 ||
                     MethodHandled == MethodHandled.ToTupleQueryString_3 ||
@@ -36,7 +34,6 @@ namespace Thomas.Database.Database
             hash = (hash * 23) + MethodHandled.GetHashCode();
             hash = (hash * 23) + KeyAsReturnValue.GetHashCode();
             hash = (hash * 23) + GenerateParameterWithKeys.GetHashCode();
-            hash = (hash * 23) + NoCacheMetaData.GetHashCode();
             return hash;
         }
     }

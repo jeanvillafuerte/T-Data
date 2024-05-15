@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace Thomas.Database.Core.QueryGenerator
 {
-    internal class ExpressionValueExtractor<T> where T : class, new()
+    internal class ExpressionValueExtractor<T> 
     {
         private readonly IParameterHandler _parameterHandler;
         private readonly static Type _typeString = typeof(string);

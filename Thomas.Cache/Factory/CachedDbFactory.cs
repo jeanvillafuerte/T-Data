@@ -6,7 +6,7 @@ namespace Thomas.Cache.Factory
 {
     public static class CachedDbFactory
     {
-        public static ICachedDatabase CreateDbContext(string signature)
+        public static ICachedDatabase GetDbContext(string signature)
         {
             var config = DbConfigurationFactory.Get(signature);
             var database = new DbBase(config);

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Thomas.Cache.Helpers;
 using Thomas.Cache.MemoryCache;
 using Thomas.Database;
@@ -138,25 +137,6 @@ namespace Thomas.Cache
             return result.Data;
         }
 
-        //public List<T> ToList<T, TFilter>(string script, ref TFilter parameters, bool refresh = false, string? key = null) where T : class, new()
-        //{
-        //    var k = !string.IsNullOrEmpty(key) ? HashHelper.GenerateHash(key) : HashHelper.GenerateHash(script, parameters);
-
-        //    var fromCache = _cache.TryGet(k, out QueryResult<List<T>>? result);
-
-        //    if (!fromCache || refresh)
-        //    {
-        //        var data = _database.ToList<T>(script, parameters);
-        //        result = new QueryResult<List<T>>(MethodHandled.ToListQueryString, script, parameters, data);
-        //        _cache.AddOrUpdate(k, result);
-        //    }
-        //    else
-        //    {
-        //        parameters = (TFilter)result.Params;
-        //    }
-
-        //    return result.Data;
-        //}
         #endregion
 
         #region Tuple

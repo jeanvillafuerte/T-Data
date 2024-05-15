@@ -14,8 +14,6 @@ namespace Thomas.Tests.Performance.Benchmark
     [BenchmarkCategory("ORM")]
     public class BenckmarkBase
     {
-        protected IDatabase Database;
-        protected ICachedDatabase Database2;
         protected string TableName;
         protected bool CleanData;
         protected string StringConnection;
@@ -35,26 +33,25 @@ namespace Thomas.Tests.Performance.Benchmark
             CleanData = bool.Parse(configuration["cleanData"]);
 
             DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
-            DbConfigurationFactory.Register(new DbSettings("db2", SqlProvider.SqlServer, cnx));
-            Database = DbFactory.GetDbContext("db");
-            Database2 = CachedDbFactory.CreateDbContext("db");
-            SetDataBase(Database, int.Parse(len), out var tableName);
+            SetDataBase(int.Parse(len), out var tableName);
 
             var tableBuilder = new TableBuilder();
-            DbTable dbTable = tableBuilder.Configure<Person>(x => x.Id);
-            dbTable.AddFieldsAsColumns<Person>().DbName(tableName);
+            tableBuilder.Configure<Person>(x => x.Id).AddFieldsAsColumns<Person>().DbName(tableName);
+            tableBuilder.Configure<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
             DbFactory.AddDbBuilder(tableBuilder);
         }
 
-        void SetDataBase(IDatabase service, int length, out string tableName)
+        void SetDataBase(int length, out string tableName)
         {
-            tableName = $"Person_{DateTime.Now.ToString("yyyyMMddhhmmss")}";
+            tableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             TableName = tableName;
 
-            string tableScriptDefinition = $@"IF (OBJECT_ID('{tableName}') IS NULL)
+            DbFactory.GetDbContext("db").ExecuteBlock((service) =>
+            {
+                string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
                                                 BEGIN
 
-	                                                CREATE TABLE {tableName}
+	                                                CREATE TABLE {TableName}
 													(
 		                                                Id			INT PRIMARY KEY IDENTITY(1,1),
 		                                                UserName	VARCHAR(25),
@@ -72,72 +69,73 @@ namespace Thomas.Tests.Performance.Benchmark
 
                                                 END";
 
-            var result = service.ExecuteOp(tableScriptDefinition, null, noCacheMetadata: true);
+                var result = service.ExecuteOp(tableScriptDefinition, null, noCacheMetadata: true);
 
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
+                if (!result.Success)
+                {
+                    throw new Exception(result.ErrorMessage);
+                }
 
-            var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
+                var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
 
-            result = service.ExecuteOp(checkSp1, null, noCacheMetadata: true);
+                result = service.ExecuteOp(checkSp1, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
+                var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-            result = service.ExecuteOp(checkSp2, null, noCacheMetadata: true);
+                result = service.ExecuteOp(checkSp2, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
+                var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp1, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createSp1, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
+                var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
 
-            result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            string data = $@"SET NOCOUNT ON
+                string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX <= {length}
 							BEGIN
-								INSERT INTO {tableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
+								INSERT INTO {TableName} (UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate)
                                 VALUES ( REPLICATE('A', ROUND(RAND() * 25, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), REPLICATE('A', ROUND(RAND() * 500, 0)), '1988-01-01', ROUND(RAND() * 100, 0), REPLICATE('A', ROUND(RAND() * 300, 0)), REPLICATE('A', ROUND(RAND() * 240, 0)), ROUND(RAND() * 10000, 2), NEWID(), ROUND(RAND(), 0), DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()))
 								SET @IDX = @IDX + 1;
 							END";
 
-            var dataResult = service.ExecuteOp(data, null, noCacheMetadata: true);
+                var dataResult = service.ExecuteOp(data, null, noCacheMetadata: true);
 
-            if (!dataResult.Success)
-            {
-                throw new Exception(dataResult.ErrorMessage);
-            }
+                if (!dataResult.Success)
+                {
+                    throw new Exception(dataResult.ErrorMessage);
+                }
 
-            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
+                var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
 
-            result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
 
-            if (!result.Success)
-            {
-                Console.WriteLine(result.ErrorMessage);
-            }
+                if (!result.Success)
+                {
+                    Console.WriteLine(result.ErrorMessage);
+                }
+            });
         }
 
         protected void Clean()
         {
             if (CleanData)
             {
-                Database.Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
+                DbFactory.GetDbContext("db").Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
             }
         }
     }
@@ -159,8 +157,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
         override protected void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Person>()
-                .ToTable("Person").Property(People => People.LastUpdate).IsRequired(false);
+            modelBuilder.Entity<Person>().ToTable("Person");
         }
     }
 }

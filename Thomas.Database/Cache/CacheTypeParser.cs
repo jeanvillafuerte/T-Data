@@ -5,12 +5,12 @@ using System.Data.Common;
 
 namespace Thomas.Database.Cache
 {
-    internal abstract class CacheTypeParser
+    internal abstract class CacheTypeHash
     {
         internal static HashSet<Type> CachedTypes = new HashSet<Type>(10);
     }
 
-    internal sealed class CacheTypeParser<T> : CacheTypeParser
+    internal sealed class CacheTypeParser<T> : CacheTypeHash
     {
         internal static ConcurrentDictionary<int, Func<DbDataReader, T>> TypeParserDictionary = new ConcurrentDictionary<int, Func<DbDataReader, T>>(Environment.ProcessorCount * 2, 10);
 

@@ -4,7 +4,7 @@ using System.Data.Common;
 
 namespace Thomas.Database.Core.Provider
 {
-    internal readonly struct CommandMetadata
+    internal sealed class CommandMetadata
     {
         public readonly Action<object, DbCommand> ParserDelegate;
         public readonly bool HasOutputParameters;

@@ -9,11 +9,6 @@ namespace Thomas.Database.Core.FluentApi
         public string DbName { get; set; }
 
         public DbColumn Key { get; set; }
-        public List<DbColumn> Columns { get; }
-
-        public DbTable()
-        {
-            Columns = new List<DbColumn>();
-        }
+        public LinkedList<DbColumn> Columns { get; set; }
     }
 }

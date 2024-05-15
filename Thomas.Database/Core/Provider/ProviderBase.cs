@@ -92,7 +92,6 @@ namespace Thomas.Database.Core.Provider
                 var il = method.GetILGenerator();
 
                 il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Call, typeof(string).GetMethod("Intern", BindingFlags.Static | BindingFlags.Public));
                 il.Emit(OpCodes.Newobj, constructorInfo);
                 il.Emit(OpCodes.Ret);
 

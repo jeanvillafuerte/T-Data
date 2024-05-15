@@ -34,17 +34,16 @@ namespace Thomas.Database.Core.FluentApi
                 Name = tableType.Name!,
                 Key = keyColumn
             };
-            table.Columns.Add(keyColumn);
+            table.Columns = new LinkedList<DbColumn>(new[] { keyColumn });
             Tables.Add(tableType.FullName!, table);
             return table;
         }
 
         internal static void AddColumns<T>(DbTable table, string key, Type type)
         {
-            ReadOnlySpan<PropertyInfo> properties = type.GetProperties().Where(x => string.IsNullOrEmpty(key) || x.Name != key).ToArray();
-            foreach (var property in properties)
+            foreach (var property in (ReadOnlySpan<PropertyInfo>)type.GetProperties().Where(x => string.IsNullOrEmpty(key) || x.Name != key).ToArray())
             {
-                table.Columns.Add(new DbColumn { Name = property.Name, Property = property });
+                table.Columns.AddLast(new DbColumn { Name = property.Name, Property = property });
             }
         }
 
