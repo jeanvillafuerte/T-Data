@@ -3,39 +3,43 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Text.RegularExpressions;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Database.Cache.Metadata;
-using Thomas.Database.Exceptions;
+using Thomas.Database.Core.Provider;
+using Thomas.Database.Database;
+using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
 
 namespace Thomas.Database
 {
-    //Preset and Execute database command
-    internal sealed class DatabaseCommand : IDisposable
+    internal partial class DatabaseCommand : IDisposable, IAsyncDisposable
     {
-        private static readonly Regex storeProcedureNameRegex = new Regex(@"^(?!EXEC)(?:\[?\w+\]?$|^\[?\w+\]?\.\[?\w+\]?$|\[?\w+\]?\.\[?\w+\]?.\[?\w+\]?)$", RegexOptions.Compiled);
-
-        private readonly IDatabaseProvider? _provider;
-        private readonly DbSettings _options;
-        private readonly string? _script;
-        private readonly string? _metadataKey;
-        private readonly string? _metadataInputKey;
-        private readonly object? _searchTerm;
-        private readonly bool _isStoreProcedure;
-
-        private DbDataReader? _reader;
+        private readonly CommandType _commandType;
+        private readonly string _script;
+        private readonly string _connectionString;
+        private readonly SqlProvider _provider;
+        private readonly int _timeout;
+        private readonly object? _filter;
+        private readonly int _preparationQueryKey;
+        private readonly int _operationKey;
+        private readonly Action<object, DbCommand> _actionParameterLoader;
+        private readonly bool _hasOutParameters;
+        private readonly CommandBehavior _commandBehavior;
         private DbCommand? _command;
+        private readonly int _bufferSize;
+        private readonly bool _prepareStatements;
+        private DbDataReader? _reader;
 
+        //object to share in transaction context
         private DbConnection? _connection;
-        private DbTransaction? _transaction;
+        private readonly DbTransaction? _transaction;
 
         // output parameters
         public IEnumerable<IDbDataParameter> OutParameters
         {
             get
             {
-
                 if (_command.Parameters == null || _command.Parameters.Count == 0)
                 {
                     yield break;
@@ -53,340 +57,356 @@ namespace Thomas.Database
             }
         }
 
-        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options)
+        public DatabaseCommand()
         {
-            _provider = provider;
-            _options = options;
         }
 
-        public DatabaseCommand(in IDatabaseProvider provider, in DbSettings options, in string script, in object? searchTerm, in DbTransaction transaction = null, in DbCommand command = null)
+        public DatabaseCommand(in DbSettings options)
         {
-            _provider = provider;
-            _options = options;
-            _script = script;
-            _searchTerm = searchTerm;
-            _transaction = transaction;
-            _command = command;
-            _connection = transaction?.Connection;
+            _connectionString = options.StringConnection;
+            _provider = options.SqlProvider;
+            _timeout = options.ConnectionTimeout;
+        }
 
-            if (script != null)
+        public DatabaseCommand(
+            in DbSettings options,
+            in string script,
+            in object? filter,
+            in DbCommandConfiguration configuration,
+            in bool noCacheMetaData,
+            in DbTransaction transaction = null,
+            in DbCommand command = null)
+        {
+            
+            _bufferSize = options.BufferSize;
+            _script = script;
+            _connectionString = options.StringConnection;
+            _provider = options.SqlProvider;
+            _timeout = options.ConnectionTimeout;
+            _prepareStatements = options.PrepareStatements;
+            _filter = filter;
+            _command = command;
+
+            if (transaction != null)
             {
-                if (_searchTerm != null)
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+            }
+
+            _operationKey = 17;
+            unchecked
+            {
+                _operationKey = (_operationKey * 23) + _script.GetHashCode();
+                _operationKey = (_operationKey * 23) + _provider.GetHashCode();
+                _operationKey = (_operationKey * 23) + configuration.GetHashCode();
+            }
+
+            Type? filterType = null;
+            if (_filter != null)
+            {
+                filterType = filter.GetType();
+                _preparationQueryKey = (_operationKey * 23) + filterType.GetHashCode();
+            }
+            else
+            {
+                _preparationQueryKey = _operationKey;
+            }
+
+            if (!noCacheMetaData && DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            {
+                _commandType = commandMetadata.CommandType;
+                _hasOutParameters = commandMetadata.HasOutputParameters;
+                _commandBehavior = commandMetadata.CommandBehavior;
+                _actionParameterLoader = commandMetadata.ParserDelegate;
+            }
+            else
+            {
+                _commandBehavior = configuration.CommandBehavior;
+                var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
+                var isTuple = configuration.IsTuple();
+                _commandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
+                DbParameterInfo[] additionalOutputParameters = null;
+
+                if (isStoreProcedure && _provider == SqlProvider.Oracle && isTuple)
                 {
-                    _metadataInputKey = HashHelper.GenerateHash(script, in searchTerm);
+                    int cursorsToAdd = (int)configuration.MethodHandled - 3;
+                    additionalOutputParameters = new DbParameterInfo[cursorsToAdd];
+
+                    for (int i = 0; i < cursorsToAdd; i++)
+                    {
+                        string name = $"p_cursor{i}";
+                        additionalOutputParameters[i] = new DbParameterInfo(in name, in name, 0, 0, ParameterDirection.Output, null, null, 121, null); // 121 -> RefCursor
+                    }
                 }
 
-                _isStoreProcedure = storeProcedureNameRegex.Matches(script).Count > 0;
-                _metadataKey = HashHelper.GenerateUniqueHash(script);
+                var loaderConfiguration = new LoaderConfiguration(
+                    keyAsReturnValue: configuration.KeyAsReturnValue,
+                    generateParameterWithKeys: configuration.GenerateParameterWithKeys,
+                    additionalOutputParameters: additionalOutputParameters?.ToList(),
+                    provider: _provider,
+                    fetchSize: options.FetchSize);
+
+                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, filterType, in noCacheMetaData, transaction == null && !isTuple, ref _hasOutParameters, ref _commandBehavior);
             }
+
+            if (options.DetailErrorMessage)
+                EnsureRequest();
         }
 
-        internal DbCommand CreateEmptyCommand()
+        void EnsureRequest()
         {
-            return _connection.CreateCommand();
+            if (string.IsNullOrEmpty(_script))
+                throw new InvalidOperationException("The script was no provided");
+
+            //unsupported operations
+            if (_commandType == CommandType.StoredProcedure && _provider == SqlProvider.Sqlite)
+                throw new InvalidOperationException("SQLite does not support stored procedures");
+
+            //validate parameters
+            if (_filter == null && QueryValidators.IsDML(_script) && QueryValidators.ScriptExpectParameterMatch(_script))
+                throw new InvalidOperationException("DML script expects parameters, but no parameters were provided");
+
+            if (_filter != null && QueryValidators.IsDDL(_script))
+                throw new InvalidOperationException("DDL scripts does not support parameters");
+
+            if (_filter != null && QueryValidators.IsDCL(_script))
+                throw new InvalidOperationException("DCL scripts does not support parameters");
+
+            if (_filter != null && QueryValidators.IsAnonymousBlock(_script))
+                throw new InvalidOperationException("Anonymous block does not support parameters");
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal DbCommand CreateEmptyCommand() => _connection.CreateCommand();
+
+        internal void OpenConnection()
+        {
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection.Open();
         }
 
         internal DbTransaction BeginTransaction()
         {
-            _connection = _provider.CreateConnection(in _options.StringConnection);
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
             _connection.Open();
             return _connection.BeginTransaction();
         }
 
+        internal async Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
+        {
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection.OpenAsync(cancellationToken);
+            return await _connection.BeginTransactionAsync(cancellationToken);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Prepare()
         {
             if (_connection == null)
             {
-                _connection = _provider.CreateConnection(in _options.StringConnection);
-                _command = _provider.CreateCommand(in _connection, in _script, in _isStoreProcedure);
-
-                if (_metadataInputKey != null)
-                {
-                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
-
-                    foreach (var parameter in parameters)
-                    {
-                        _command.Parameters.Add(parameter);
-                    }
-                }
-
+                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
                 _connection.Open();
-
-                _command.Prepare();
             }
             else
             {
                 _command.CommandText = _script;
-                _command.CommandTimeout = _options.ConnectionTimeout;
+                _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
-
-                if (_isStoreProcedure)
-                    _command.CommandType = CommandType.StoredProcedure;
-
-                if (_metadataInputKey != null)
-                {
-                    var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
-                    _command.Parameters.Clear();
-
-                    foreach (var parameter in parameters)
-                    {
-                        _command.Parameters.Add(parameter);
-                    }
-                }
-
-                _command.Prepare();
+                _command.CommandTimeout = _timeout;
             }
+
+            _actionParameterLoader?.Invoke(_filter, _command);
+
+            if (_commandType == CommandType.Text && _prepareStatements)
+                _command.Prepare();
         }
 
         /// <summary>
-        /// responsible for preparing the command to be executed and opening the connection and returning the parameters of the command
+        /// Prepare the command to be executed, opening the connection and load the parameters
         /// </summary>
-        /// <param name="script">script or store procedure name</param>
-        /// <param name="isStoreProcedure">flagged is script provided is a store procedure</param>
-        /// <param name="searchTerm">search term object</param>
+        /// <param name="cancellationToken">cancellation token</param>
         /// <returns>Parameters of the command</returns>
         public async Task PrepareAsync(CancellationToken cancellationToken)
         {
-            _connection = _provider.CreateConnection(in _options.StringConnection);
-            _command = _provider.CreateCommand(_connection, in _script, in _isStoreProcedure);
-
-            if (_metadataInputKey != null)
+            if (_connection == null)
             {
-                var parameters = _provider.GetParams(_metadataInputKey, _searchTerm);
-                foreach (var parameter in parameters)
-                {
-                    _command.Parameters.Add(parameter);
-                }
+                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
+                await _connection.OpenAsync(cancellationToken);
+            }
+            else
+            {
+                _command.CommandText = _script;
+                _command.CommandType = _commandType;
+                _command.Transaction = _transaction;
+                _command.CommandTimeout = _timeout;
             }
 
-            await _connection.OpenAsync(cancellationToken);
-            await _command.PrepareAsync(cancellationToken);
+            _actionParameterLoader?.Invoke(_filter, _command);
+
+            if (_commandType == CommandType.Text && _prepareStatements)
+                await _command.PrepareAsync(cancellationToken);
         }
 
-        /// <summary>
-        /// Get the columns of the result set
-        /// </summary>
-        /// <param name="reader">Data reader</param>
-        /// <returns>Column names array</returns>
-        /// <exception cref="Exception"></exception>
-        private static string[] GetColumns(in DbDataReader reader)
-        {
-            var count = reader.FieldCount;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public object? ExecuteScalar() => _command.ExecuteScalar();
 
-            if (count == 0)
-                throw new EmptyDataReaderException("Missing fields on result set");
-
-            var cols = new string[count];
-
-            for (int i = 0; i < count; i++)
-            {
-                cols[i] = reader.GetName(i);
-            }
-
-            return cols;
-        }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken) => await _command.ExecuteNonQueryAsync(cancellationToken);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void NextResult() => _reader.NextResult();
 
         public void SetValuesOutFields()
         {
-            if (_reader != null)
-                NextResult();
-
-            if (OutParameters.Any())
+            if (_hasOutParameters)
             {
-                foreach (var item in OutParameters)
-                    item.Value = _command.Parameters[item.ParameterName].Value;
+                if (_reader != null)
+                    NextResult();
 
-                _provider.LoadParameterValues(OutParameters, in _searchTerm, in _metadataInputKey);
-            }
-        }
+                ReadOnlySpan<IDbDataParameter> parameters = OutParameters.ToArray();
 
-        private IEnumerable<MetadataPropertyInfo> GetProperties<T>(in string[] columns)
-        {
-            MetadataPropertyInfo[]? props = null;
+                foreach (var item in parameters)
+                    item.Value = _command!.Parameters[item.ParameterName].Value;
 
-            if (CacheResultInfo.TryGet(in _metadataKey, ref props))
-                return props!;
-
-            props = new MetadataPropertyInfo[columns.Length];
-
-            var properties = typeof(T).GetProperties();
-
-            int realProperties = 0;
-
-            for (int i = 0; i < columns.Length; i++)
-            {
-                foreach (var property in properties)
+                foreach (var parameter in parameters)
                 {
-                    if (property.Name.Equals(columns[i], StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        props[i] = new MetadataPropertyInfo(in property);
-                        realProperties++;
-                        break;
-                    }
+                    var value = parameter.Value;
+                    var property = _filter!.GetType().GetProperty(parameter.ParameterName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.IgnoreCase);
+                    property?.SetValue(_filter, value);
                 }
             }
-
-            if (columns.Length > realProperties)
-            {
-                Array.Resize(ref props, realProperties);
-            }
-
-            CacheResultInfo.Set(in _metadataKey, in props);
-
-            return props;
         }
 
         #region reader operations
-        public async Task<IEnumerable<T>> ReadListItemsAsync<T>(CommandBehavior behavior, CancellationToken cancellationToken) where T : class, new()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken)
         {
             var list = new List<T>();
 
-            await foreach (var item in ReadItemsAsync<T>(behavior, cancellationToken))
-            {
-                list.Add(item);
-            }
+            _reader = await _command.ExecuteReaderAsync(_commandBehavior | CommandBehavior.SequentialAccess, cancellationToken);
 
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+
+            while (await _reader.ReadAsync(cancellationToken))
+                list.Add(parser(_reader));
+
+            parser = null;
             return list;
         }
 
-        private async IAsyncEnumerable<T> ReadItemsAsync<T>(CommandBehavior behavior, CancellationToken cancellationToken) where T : class, new()
-        {
-            _reader = await _command.ExecuteReaderAsync(behavior, cancellationToken);
-
-            var columns = GetColumns(in _reader);
-            var properties = GetProperties<T>(in columns).ToArray();
-
-            while (await _reader.ReadAsync(cancellationToken))
-            {
-                T item = new T();
-                object[] values = new object[columns.Length];
-                _reader.GetValues(values);
-
-                for (int j = 0; j < columns.Length; j++)
-                {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
-                }
-
-                yield return item;
-            }
-        }
-
-        public async Task<IEnumerable<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken) where T : class, new()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
             var list = new List<T>();
 
-            await foreach (var item in ReadNextItemsAsync<T>(cancellationToken))
-            {
-                list.Add(item);
-            }
+            await _reader.NextResultAsync(cancellationToken);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
 
+            while (await _reader.ReadAsync(cancellationToken))
+                list.Add(parser(_reader));
+
+            parser = null;
             return list;
         }
 
-        private async IAsyncEnumerable<T> ReadNextItemsAsync<T>(CancellationToken cancellationToken) where T : class, new()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public List<T> ReadListItems<T>()
         {
-            await _reader.NextResultAsync();
-            var columns = GetColumns(in _reader);
-            var properties = GetProperties<T>(in columns).ToArray();
+            var list = new List<T>();
 
-            while (await _reader.ReadAsync(cancellationToken))
-            {
-                T item = new T();
-                object[] values = new object[columns.Length];
-
-                _reader.GetValues(values);
-
-                for (int j = 0; j < columns.Length; j++)
-                {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
-                }
-
-                yield return item;
-            }
-        }
-
-        public IEnumerable<T> ReadListItems<T>(CommandBehavior behavior) where T : class, new()
-        {
-            var values = new List<T>();
-
-            foreach (var item in ReadItems<T>(behavior))
-            {
-                values.Add(item);
-            }
-
-            return values;
-        }
-
-        private IEnumerable<T> ReadItems<T>(CommandBehavior behavior) where T : class, new()
-        {
-            _reader = _command.ExecuteReader(behavior);
-
-            var columns = GetColumns(in _reader);
-            var properties = GetProperties<T>(in columns).ToArray();
+            _reader = _command!.ExecuteReader(_commandBehavior | CommandBehavior.SequentialAccess);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
 
             while (_reader.Read())
-            {
-                T item = new T();
-                object[] values = new object[columns.Length];
-                _reader.GetValues(values);
+                list.Add(parser(_reader));
 
-                for (int j = 0; j < columns.Length; j++)
-                {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
-                }
-
-                yield return item;
-            }
-        }
-
-        public IEnumerable<T> ReadListNextItems<T>() where T : class, new()
-        {
-            var list = new List<T>();
-            foreach (var item in ReadNextItems<T>())
-            {
-                list.Add(item);
-            }
             return list;
         }
 
-        private IEnumerable<T> ReadNextItems<T>() where T : class, new()
+        public IEnumerable<List<T>> FetchData<T>(int batchSize)
         {
+            var list = new List<T>(batchSize);
+
+            _reader = _command!.ExecuteReader(_commandBehavior | CommandBehavior.SequentialAccess);
+
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+
+            int counter = 0;
+            while (_reader.Read())
+            {
+                counter++;
+                list.Add(parser(_reader));
+
+                if (counter == batchSize)
+                {
+                    yield return list;
+                    list.Clear();
+                    counter = 0;
+                }
+            }
+
+            if (counter > 0)
+                yield return list;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public List<T> ReadListNextItems<T>()
+        {
+            var list = new List<T>();
+
             _reader.NextResult();
-            var columns = GetColumns(in _reader);
-            var properties = GetProperties<T>(in columns).ToArray();
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
 
             while (_reader.Read())
-            {
-                T item = new T();
-                object[] values = new object[columns.Length];
-                _reader.GetValues(values);
+                list.Add(parser(_reader));
 
-                for (int j = 0; j < columns.Length; j++)
-                {
-                    properties[j].SetValue(item, in values[j], _options.CultureInfo);
-                }
-
-                yield return item;
-            }
+            parser = null;
+            return list;
         }
 
-        #endregion
+        #endregion reader operations
+
         public void Dispose()
         {
-            _reader?.Dispose();
+            if (_reader != null)
+            {
+                _reader.Dispose();
+                _reader = null;
+            }
 
             if (_transaction == null)
             {
-                _command?.Dispose();
+                if (_command != null)
+                    _command?.Dispose();
+
                 _connection?.Dispose();
             }
         }
-    }
 
+        public async ValueTask DisposeAsync()
+        {
+            if (_reader != null)
+            {
+                await _reader.DisposeAsync();
+                _reader = null;
+            }
+
+            if (_transaction == null)
+            {
+                if (_command != null)
+                    await _command.DisposeAsync();
+
+                if (_connection != null)
+                    await _connection.DisposeAsync();
+            }
+
+            GC.SuppressFinalize(this);
+        }
+    }
 }

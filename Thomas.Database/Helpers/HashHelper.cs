@@ -7,26 +7,34 @@ namespace Thomas.Database
     {
         static JsonSerializerOptions _options = new JsonSerializerOptions() { DefaultBufferSize = 1024, PropertyNamingPolicy = null, WriteIndented = false, MaxDepth = 3, ReadCommentHandling = JsonCommentHandling.Disallow };
 
-        public static string GenerateHash(string query, in object parameters)
+        public static int GenerateHash(string query, in object parameters)
         {
             string json = string.Empty;
 
             if (parameters != null)
                 JsonSerializer.Serialize(parameters, _options);
 
-            return GenerateUniqueHash($"{query}{json}");
+            return GenerateUniqueHash(query + json);
         }
 
-        public static string GenerateUniqueHash(ReadOnlySpan<char> span)
+        public static int GenerateUniqueHash(in ReadOnlySpan<char> span)
         {
-            ulong hash = 5381;
+            return GenerateHash(span);
+        }
 
-            foreach (char c in span)
+        public static int GenerateHash(in ReadOnlySpan<char> span)
+        {
+            unchecked
             {
-                hash = ((hash << 5) + hash) + c;
-            }
+                int hash = 27;
 
-            return $"{hash:x}";
+                foreach (char c in span)
+                {
+                    hash = (hash * 13) + c;
+                }
+
+                return hash;
+            }
         }
 
     }

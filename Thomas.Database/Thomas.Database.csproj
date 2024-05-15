@@ -4,7 +4,7 @@
     <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
     <Authors>Jean Villafuerte</Authors>
     <Product>ThomasDataAdapter</Product>
-    <Description>ThomasDataAdapter base.</Description>
+    <Description>ThomasDataAdapter.</Description>
     <Copyright>2021 © Jean Villafuerte</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
@@ -14,21 +14,21 @@
     <Platforms>AnyCPU;x64</Platforms>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <Version>2.1.0</Version>
+    <Version>3.0.0</Version>
     <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>ThomasIco.png</PackageIcon>
-    <LangVersion>8.0</LangVersion>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>False</AllowUnsafeBlocks>
-    <PackageReleaseNotes>Features released 2.0.0:
+    <PackageReleaseNotes>Features released 3.0.0:
 
-- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
-- Straightforward way to match typed and anonymous types to query parameters.
-- Attributes to match parameter direction and size to configure DbParameter.
-- Optional Cache layer to boost application performance having control what will be stored, updated and removed.</PackageReleaseNotes>
+- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
+- Expanded transaction support through the use of lambda expressions.
+- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
+- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
+- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
+- Full support for record types.</PackageReleaseNotes>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Title>ThomasDataAdapter</Title>
+    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -60,8 +60,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Roslynator.Analyzers" Version="4.12.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.CodeFixes" Version="4.12.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Sigil" Version="5.0.0" />
     <PackageReference Include="System.Data.Common" Version="4.3.0" />
     <PackageReference Include="System.Linq.Expressions" Version="4.3.0" />
   </ItemGroup>

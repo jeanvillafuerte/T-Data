@@ -1,100 +1,35 @@
-﻿using System;
-using System.Diagnostics;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache;
+using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
 namespace Thomas.Tests.Performance.Legacy.Tests
 {
-    public class Single : TestCase, ITestCase
+    public class Single : TestCase
     {
-        private Stopwatch _stopWatch;
-
-        public Single()
+        public Single(string databaseName) : base(databaseName)
         {
-            _stopWatch = new Stopwatch();
         }
 
-        public void Execute(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        public void Execute(string db, string tableName, int expectedItems = 0)
         {
-            _stopWatch.Reset();
-
-            for (int i = 0; i < 10; i++)
-            {
-                _stopWatch.Start();
-
-                var data = service.ToSingle<Person>($@"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}");
-
-                WriteTestResult(i + 1, "ToSingle<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, user name: {data.UserName}");
-
-                _stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
-
-            for (int i = 0; i < 10; i++)
-            {
-                _stopWatch.Start();
-
-                var data = service.ToSingleOp<Person>($@"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}");
-
-                WriteTestResult(i + 1, "ToSingleOp<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, user name: {data.Result.UserName}");
-
-                _stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
+            var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
+            PerformOperation(() => DbFactory.GetDbContext(db).ToSingle<Person>(query), null, "ToSingle<>");
+            PerformOperation(() => DbFactory.GetDbContext(db).ToSingleOp<Person>(query), null, "ToSingleOp<>");
         }
 
-        public async Task ExecuteAsync(IDatabase service, string databaseName, string tableName, int expectedItems = 0)
+        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            _stopWatch.Reset();
-
-            for (int i = 0; i < 10; i++)
-            {
-                _stopWatch.Start();
-
-                var data = await service.ToSingleAsync<Person>($@"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, CancellationToken.None);
-
-                WriteTestResult(i + 1, "ToSingle<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, user name: {data.UserName}");
-
-                _stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
-
-            for (int i = 0; i < 10; i++)
-            {
-                _stopWatch.Start();
-
-                var data = await service.ToSingleOpAsync<Person>($@"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, CancellationToken.None);
-
-                WriteTestResult(i + 1, "ToSingleOp<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, user name: {data.Result.UserName}");
-
-                _stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
+            var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleAsync<Person>(query, null, CancellationToken.None), null, "ToSingleAsync<>");
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>(query, null, CancellationToken.None), null, "ToSingleOpAsync<>");
         }
 
-        public void ExecuteCachedDatabase(ICachedDatabase database, string databaseName, string tableName, int expectedItems = 0)
+        public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
-            _stopWatch.Reset();
-
-            for (int i = 0; i < 10; i++)
-            {
-                _stopWatch.Start();
-
-                var data = database.ToSingle<Person>($@"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}");
-
-                WriteTestResult(i + 1, "ToSingle<>", databaseName, _stopWatch.ElapsedMilliseconds, $"by query, user name: {data.UserName}");
-
-                _stopWatch.Reset();
-            }
-
-            Console.WriteLine("");
+            var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
+            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToSingle<Person>(query), null, "ToSingle<>");
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Thomas.Database.SqlServer
     using System.Linq;
     using Thomas.Database.Cache.Metadata;
 
-    internal sealed class SqlProvider : IDatabaseProvider
+    /*internal sealed class SqlProvider : IDatabaseProvider
     {
         private static readonly ImmutableDictionary<string, SqlDbType> DbTypes = ImmutableDictionary.CreateRange(new[]
             {
@@ -89,6 +89,29 @@ namespace Thomas.Database.SqlServer
 
         }
 
+        public IEnumerable<IDbDataParameter> GetRawParams(object searchTerm)
+        {
+            var props = searchTerm.GetType().GetProperties();
+            var dataParameters = props.Select(y =>
+            {
+                var name = $"@{y.Name.ToLower()}";
+                var dbType = GetSqlDbType(y.PropertyType.Name);
+                return new MetadataParameters<SqlDbType>(in y, in name, in dbType);
+            }).ToArray();
+
+            foreach (var parameter in dataParameters)
+            {
+                yield return new SqlParameter()
+                {
+                    ParameterName = parameter.DbParameterName,
+                    Value = parameter.GetValue(in searchTerm),
+                    Direction = parameter.Direction,
+                    Size = parameter.Size,
+                    SqlDbType = parameter.DbType
+                };
+            }
+        }
+
         public IEnumerable<dynamic> GetParams(string metadataKey)
         {
             MetadataParameters<SqlDbType>[] dataParameters = null;
@@ -122,5 +145,6 @@ namespace Thomas.Database.SqlServer
             }
         }
 
-    }
+        public object CreateParameter(string key, object value) => new SqlParameter() {ParameterName = key, Value = value };
+    }*/
 }

@@ -3,31 +3,19 @@ using Thomas.Database;
 
 namespace Thomas.Tests.Performance.Legacy.Setup
 {
-    public interface IDataBaseManager
+    public static class DataBaseManager
     {
-        void LoadDatabases(int rows, string tableName);
-    }
-
-    public class DataBaseManager : IDataBaseManager
-    {
-        private readonly IDatabase _database1;
-        private readonly IDatabase _database2;
-
-        public DataBaseManager()
+        public static void LoadDatabases(int rows, string tableName)
         {
-            _database1 = DbFactory.CreateDbContext("db1");
-            _database2 = DbFactory.CreateDbContext("db2");
+            SeedDataBase("db1", rows, tableName);
+            SeedDataBase("db2", rows, tableName);
         }
 
-        public void LoadDatabases(int rows, string tableName)
+        static void SeedDataBase(string db, int rows, string tableName)
         {
-            SeedDataBase(_database1, rows, tableName);
-            SeedDataBase(_database2, rows, tableName);
-        }
-
-        void SeedDataBase(IDatabase service, int rows, string tableName)
-        {
-            string tableScriptDefinition = $@"IF (OBJECT_ID('{tableName}') IS NULL)
+            DbFactory.GetDbContext(db).ExecuteBlock((service) =>
+            {
+                string tableScriptDefinition = $@"IF (OBJECT_ID('{tableName}') IS NULL)
                                                 BEGIN
 
 	                                                CREATE TABLE {tableName}
@@ -48,56 +36,56 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
                                                 END";
 
-            var result = service.ExecuteOp(tableScriptDefinition);
+                var result = service.ExecuteOp(tableScriptDefinition, null, noCacheMetadata: true);
 
-            if (!result.Success)
-            {
-                throw new Exception(result.ErrorMessage);
-            }
+                if (!result.Success)
+                {
+                    throw new Exception(result.ErrorMessage);
+                }
 
-            var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_{tableName}]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_{tableName}] AS' END ";
+                var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_{tableName}]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_{tableName}] AS' END ";
 
-            result = service.ExecuteOp(checkSp1);
+                result = service.ExecuteOp(checkSp1, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
+                var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-            result = service.ExecuteOp(checkSp2);
+                result = service.ExecuteOp(checkSp2, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var checkSp3 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byAge]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byAge] AS' END ";
+                var checkSp3 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byAge]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byAge] AS' END ";
 
-            result = service.ExecuteOp(checkSp3);
+                result = service.ExecuteOp(checkSp3, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var createSp = $"ALTER PROCEDURE get_{tableName}(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
+                var createSp = $"ALTER PROCEDURE get_{tableName}(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp);
+                result = service.ExecuteOp(createSp, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
+                var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
 
-            result = service.ExecuteOp(createSp2);
+                result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            var createSp3 = $"ALTER PROCEDURE get_byAge(@age INT, @total INT OUTPUT) AS SELECT * FROM {tableName} WHERE Age = @age SELECT @total = COUNT(1) FROM {tableName} WHERE Age = @age";
+                var createSp3 = $"ALTER PROCEDURE get_byAge(@age INT, @total INT OUTPUT) AS SELECT * FROM {tableName} WHERE Age = @age SELECT @total = COUNT(1) FROM {tableName} WHERE Age = @age";
 
-            result = service.ExecuteOp(createSp3);
+                result = service.ExecuteOp(createSp3);
 
-            if (!result.Success)
-                throw new Exception(result.ErrorMessage);
+                if (!result.Success)
+                    throw new Exception(result.ErrorMessage);
 
-            string data = $@"SET NOCOUNT ON
+                string data = $@"SET NOCOUNT ON
 							DECLARE @IDX INT = 0
 							WHILE @IDX < {rows}
 							BEGIN
@@ -106,28 +94,29 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 								SET @IDX = @IDX + 1;
 							END";
 
-            var dataResult = service.ExecuteOp(data);
+                var dataResult = service.ExecuteOp(data, null, noCacheMetadata: true);
 
-            if (!dataResult.Success)
-            {
-                throw new Exception(dataResult.ErrorMessage);
-            }
+                if (!dataResult.Success)
+                {
+                    throw new Exception(dataResult.ErrorMessage);
+                }
 
-            var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
+                var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
 
-            result = service.ExecuteOp(createIndexByAge);
+                result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
 
-            if (!result.Success)
-            {
-                Console.WriteLine($"Error : {result.ErrorMessage}");
-            }
+                if (!result.Success)
+                {
+                    Console.WriteLine($"Error : {result.ErrorMessage}");
+                }
+            });
         }
 
         public static void DropTable(IDatabase service, bool clean, string tableName)
         {
             if (clean)
             {
-                service.Execute($"DROP TABLE {tableName}");
+                service.Execute($"DROP TABLE {tableName}", null, noCacheMetadata: true);
             }
         }
     }

@@ -6,7 +6,7 @@ namespace Thomas.Tests.Performance.Column
 {
     public class GcModeColumn : IColumn
     {
-        public static GcModeColumn Default => new GcModeColumn();
+        public static GcModeColumn Default => new();
 
         public string Id => "GcMode";
         public string ColumnName => "GcMode";

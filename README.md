@@ -1,117 +1,151 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
->It Works matching class fields againts result set returned by database query. There are simple configurations for applications that need fast response time without must deal with database DbConnections and DbCommands.
+## Simplified setup for robust database operations.
 
-Features released 2.1.0:
+### 🌟 Join Us in Shaping the Future of ThomasDataAdapter! 🌟
+Join us in refining a library designed to streamline database interactions effortlessly. Your insights, tests, and small enhancements can make a big difference. Feel free to fix bugs and suggest features.
 
-- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
-- Straightforward manner to match typed and anonymous types to query parameters.
-- Transaction support using lambda expressions.
-- Attributes to match parameter direction and size to configure DbParameter.
-- Optional Cache layer to boost application performance having control what will be stored, updated and removed.
-- Cache refresh throught a key identifier to allow refresh whenever you want update the cached data without use original query.
+### 🎯 Features:
 
+- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
+- Expanded transaction support through the use of lambda expressions.
+- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
+- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
+- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
+- Full support for record types.
 
-## Nuget : https://www.nuget.org/packages/ThomasDataAdapter.SqlServer/
-#
-## Basic configuration in startup.cs :
+### Supported database providers
+- Microsoft.Data.SqlClient
+- Oracle.ManagedDataAccess.Core
+- Npgsql
+- Mysql.Data
+- Microsoft.Data.Sqlite
+
+## 🚀 Quick start
+
+### Basic configuration in startup.cs
+
+Benefits of persisting the configuration with its string connection you may have different versions of it for different purposes like pooling or Packet Size:
 
 ```c#
-using Thomas.Database.SqlServer;
-.
-.
-.
-SqlServerFactory.AddDb(new DbSettings 
-{
-    Signature = "mssqldb1",
-    StringConnection = @"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}"
-});
+DbConfigurationFactory.Register(new DbSettings(
+    signature: "db1",
+    provider: SqlProvider.SqlServer,
+    stringConnection: $"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}"
+));
+
+DbConfigurationFactory.Register(new DbSettings(
+    signature: "db2",
+    provider: SqlProvider.Sqlite,
+    stringConnection: $"Data Source={filePath}"
+));
 ```
 
-## Custom configuration :
+### Custom configuration
 
 ```c#
-using Thomas.Database.SqlServer;
-.
-.
-.
-SqlServerFactory.AddDb(new DbSettings { 
-    Signature = "mssqldb1",
-    StringConnection = @"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}",
+DbConfigurationFactory.Register(new DbSettings { 
+    Signature = "db1",
+    StringConnection = $"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}",
     DetailErrorMessage = true,
     ConnectionTimeout = 300,
     SensitiveDataLog = true
  });
 ```
-
-## How to use it?
+### Expression configuration
 ```c#
-public class UserOffice
+   var builder = new TableBuilder();
+   builder.Configure<User>(key: x => x.Id).AddFieldsAsColumns<User>().DbName("system_user");
+   DbFactory.AddDbBuilder(builder);
+```
+
+### Expressions calls
+```c#
+public class UserRepository
 {
-    private readonly IThomasDb _db;
+    public List<User> GetUsers() => DbFactory.GetDbContext("db1").ToList<User>();
+    public List<User> GetInvalidUsers() => DbFactory.GetDbContext("db1").ToList<User>(
+        user => 
+        SqlExpression.IsNull<Person>(x => x.LastName) &&
+        x.Age <= 0 && x.Age > 100 &&
+        x.Salary <= 0
+    );
 
-    public User()
-    {
-        _db =  DbFactory.CreateDbContext("mssqldb1");
+    public int Add(User user) => DbFactory.GetDbContext("db2").Add<User, int>(user);
+    public void Update(User user) => DbFactory.GetDbContext("db2").Update(user);
+    public void Delete(User user) => DbFactory.GetDbContext("db2").Delete(user);
+}
+```
+### Direct calls
+```c#
+    public void DisableUser(int id) => DbFactory.GetDbContext("db2").ExecuteOp(new { id }, "disable_user");
+    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() {
+        return DbFactory.GetDbContext("db1").ToTupleOp<User, Office>("sp_process");
     }
-
-    public IEnumerable<User> GetUsers() => _db.ToList<User>("dbo.GetPeople");
-    public void SaveUser(User person) =>_db.Execute(person, "dbo.Save");
-    public void UpdateUser(string id, int age) => _db.ExecuteOp(new { id = id, age = age}, "dbo.Update");
-    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() => _db.ToTupleOp<User, Office>("dbo.Process");
 
     public bool ActiveOffice(decimal officeId)
     {
-        return _db.ExecuteTransaction((db) =>
+        return DbFactory.GetDbContext("db2").ExecuteTransaction((db) =>
         {
-            db.Execute($"UPDATE User SET Active = 1 WHERE OfficeId = @OfficeId", new { OfficeId = officeId });
-            db.Execute($"UPDATE Office SET Active = 1 WHERE OfficeId = @OfficeId", new { OfficeId = officeId });
+            db.Execute("UPDATE User SET Active = 1 WHERE OfficeId = $officeId", new { officeId });
+            db.Execute("UPDATE Office SET Active = 1 WHERE OfficeId = $officeId", new { officeId });
             return db.Commit();
         });
     }
-}
+
+    //batching
+    public void Export()
+    {
+        var (dispose, data) = sqlServerContext.FetchData<Order>(script: "SELECT * FROM Order", parameters: null, batchSize: 10000);
+        foreach (var batch in data)
+        {
+            //process batch
+        }
+        dispose();
+    }
+
+    //records
+    public record User(int Id, string Name, byte[] photo);
+    public List<User> Export()
+    {
+        return sqlServerContext.ToList<User>("SELECT * FROM User"); 
+    }
 ```
 
-### Options to configure:
+### Perfomance
 
-* **Culture**: Default 'en-US' (resource : https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid/a9eac961-e77d-41a6-90a5-ce1a8b0cdb9c)
-* **StringConnection**: This can be combine optionally with User and Password.
-* **DetailErrorMessage**: Default false, return detail information when errors ocurrs and also parameters values.
-* **HideSensibleDataValue**:  Default false, hide sensible data value in error message and log.
-* **ConnectionTimeout** : Default 0, time out for database request.
+Experience really good performance without the hassle of managing DbConnection. Here's a fair test where we consistently dispose of connections after each use.
 
-## Perfomance
-
-The benchmark is in project **Thomas.Tests.Performance**
-
-```bash
-dotnet run -p .\Thomas.Tests.Performance\ -c Release -f net5.0 -- -f * --join
-```
+Note: Tested with Docker MSSQL locally
 
 ``` ini
-
-BenchmarkDotNet=v0.13.0, OS=Windows 10.0.19042.1466 (20H2/October2020Update)
-Intel Core i7-8550U CPU 1.80GHz (Kaby Lake R), 1 CPU, 8 logical and 4 physical cores
-.NET SDK=5.0.404
-  [Host]     : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
-  ShortRun   : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
-  Job-QAXZEQ : .NET Core 3.1.22 (CoreCLR 4.700.21.56803, CoreFX 4.700.21.57101), X64 RyuJIT
-
-Namespace=Thomas.Tests.Performance.Benchmark  Type=ThomasDataAdapterBenckmark
+BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3)
+13th Gen Intel Core i9-13900H, 1 CPU, 20 logical and 14 physical cores
+.NET SDK 8.0.101
+  [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  Job-VNBJGA : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 
 
+| Detailed Runtime           | Type                       | Method                      | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
+|--------------------------- |--------------------------- |---------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | Single<>                    | 432.8 us | 22.58 us |  8.15 us | 2,310.6 |      - |   8.04 KB |
+| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | QuerySingle<T>              | 500.0 us | 25.82 us |  9.93 us | 2,000.1 |      - |  11.54 KB |
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToListRecord<> Expression' | 563.7 us | 44.90 us | 15.23 us | 1,774.0 | 1.9531 |  26.76 KB |
+| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | ToList<>                    | 572.7 us | 12.89 us | 10.83 us | 1,746.2 | 1.9531 |  26.47 KB |
+| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<T> (buffered)'       | 602.0 us | 38.75 us | 13.36 us | 1,661.1 | 1.9531 |  26.45 KB |
 ```
-| Detailed Runtime                         | Type                       | Method                       | Mean           | StdDev       | Error        | Op/s        | GcMode             | Completed Work Items | Lock Contentions | Gen0   | Allocated |
-|----------------------------------------- |--------------------------- |----------------------------- |---------------:|-------------:|-------------:|------------:|------------------- |---------------------:|-----------------:|-------:|----------:|
-| .NET 8.0.1 (8.0.123.58001)               | ThomasDataAdapterBenckmark | 'ToList<> (buffered)'        |       881.0 ns |     24.99 ns |     17.42 ns | 1,135,053.3 | Toolchain=.NET 8.0 |                    - |                - | 0.0343 |     440 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | ThomasDataAdapterBenckmark | 'ToList<> (buffered)'        |     1,066.4 ns |      0.00 ns |           NA |   937,747.7 | ShortRun           |               0.0000 |                - | 0.0488 |     624 B |
-| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> List (unbuffered)' |   558,085.4 ns | 24,088.59 ns | 10,974.18 ns |     1,791.8 | Toolchain=.NET 8.0 |                    - |                - |      - |    8481 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> List (unbuffered)' |   561,390.1 ns |      0.00 ns |           NA |     1,781.3 | ShortRun           |               0.0013 |                - | 0.6250 |    8168 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | ThomasDataAdapterBenckmark | 'ToList<> (unbuffered)'      |   562,313.2 ns |      0.00 ns |           NA |     1,778.4 | ShortRun           |               0.0013 |                - | 0.6250 |   10760 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<dynamic> (buffered)'  |   567,313.9 ns |      0.00 ns |           NA |     1,762.7 | ShortRun           |               0.0013 |                - | 0.6250 |    8384 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> (unbuffered)'      |   570,249.6 ns |      0.00 ns |           NA |     1,753.6 | ShortRun           |               0.0013 |                - | 0.6250 |    8096 B |
-| .NET 8.0.1 (8.0.123.58001)               | ThomasDataAdapterBenckmark | 'ToList<> (unbuffered)'      |   592,551.6 ns | 22,874.55 ns | 11,727.99 ns |     1,687.6 | Toolchain=.NET 8.0 |                    - |                - |      - |   10161 B |
-| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<dynamic> (buffered)'  |   593,874.5 ns | 29,064.91 ns | 11,758.83 ns |     1,683.9 | Toolchain=.NET 8.0 |                    - |                - |      - |    8577 B |
-| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> (unbuffered)'      |   632,908.2 ns | 32,045.51 ns | 12,589.98 ns |     1,580.0 | Toolchain=.NET 8.0 |                    - |                - |      - |    8025 B |
-| .NET Core 3.1.32 (CoreCLR 4.700.22.55902 | DapperBenckmark            | 'Query<T> (unbuffered)'      | 1,000,659.2 ns |      0.00 ns |           NA |       999.3 | ShortRun           |               0.0025 |                - |      - |    8464 B |
-| .NET 8.0.1 (8.0.123.58001)               | DapperBenckmark            | 'Query<T> (unbuffered)'      | 1,032,863.4 ns | 30,836.70 ns | 20,192.91 ns |       968.2 | Toolchain=.NET 8.0 |                    - |                - |      - |    8249 B |
+
+### Considerations
+Library's purpose is to make easy DB interactions with a simple configuration and match columns with fields. Obviously it doesn't attempt to solve every problem.
+There are some considerations at development time:
+
+- Ensure that the specific database provider library is installed in your project, as it will be accessed via reflection by this library.
+- Compatible with .NET Core versions 6 and 8.
+- Configuration for CRUD functions is required using TableBuilder.
+ 
+### Limitations
+Be aware of the following limitations:
+
+- Currently limited to specific DB library providers, with plans to expand support in the future.
+- Utilizes [Sigil](https://github.com/kevin-montrose/Sigil) a powerful reflection.emit ILGenerator. However, I consider remove it.
+- Does not support .NET Framework.

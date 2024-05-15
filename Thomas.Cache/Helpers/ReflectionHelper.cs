@@ -46,17 +46,6 @@ namespace Thomas.Cache.Helpers
                     return genericArguments[0];
             }
 
-            //foreach (Type interfaceType in type.GetInterfaces())
-            //{
-            //    if (interfaceType.IsGenericType && interfaceType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-            //    {
-            //        Type[] genericArguments = interfaceType.GetGenericArguments();
-
-            //        if (genericArguments.Length == 1)
-            //            return genericArguments[0];
-            //    }
-            //}
-
             return null;
         }
     }
