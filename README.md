@@ -136,7 +136,7 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3
 ```
 
 ### Considerations
-Library purpose is make easy DB interactions with a simple configuration and match column-field and doesn't attempt to solve every problem.
+Library's purpose is to make easy DB interactions with a simple configuration and match columns with fields. Obviously it doesn't attempt to solve every problem.
 There are some considerations at development time:
 
 - Ensure that the specific database provider library is installed in your project, as it will be accessed via reflection by this library.
