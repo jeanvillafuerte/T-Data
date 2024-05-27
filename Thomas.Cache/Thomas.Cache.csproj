@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net472;netstandard2.0;net5.0;net6.0;net7.0;net8.0</TargetFrameworks>
+    <LangVersion>8.0</LangVersion>
     <!--<ImplicitUsings>enable</ImplicitUsings>-->
     <Nullable>enable</Nullable>
     <Title>ThomasDataAdapter Cache Layer</Title>
@@ -12,13 +13,15 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
     <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
-    <PackageReleaseNotes>Features released 2.0.0:
+    <PackageReleaseNotes>Features released 3.0.0:
 
-- Set a unique signature for each database settings that must instantiate statically a database context whenever you want.
-- Straightforward way to match typed and anonymous types to query parameters.
-- Attributes to match parameter direction and size to configure DbParameter.
-- Optional Cache layer to boost application performance having control what will be stored, updated and removed.</PackageReleaseNotes>
-    <Version>1.1.0</Version>
+- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
+- Expanded transaction support through the use of lambda expressions.
+- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
+- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
+- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
+- Full support for record types.</PackageReleaseNotes>
+    <Version>2.0.0</Version>
     <Copyright>2024 © Jean Villafuerte</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>

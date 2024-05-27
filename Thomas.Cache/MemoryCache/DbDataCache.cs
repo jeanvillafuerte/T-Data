@@ -19,7 +19,7 @@ namespace Thomas.Cache.MemoryCache
 
         private DbDataCache() { }
 
-        private static ConcurrentDictionary<int, IQueryResult> CacheObject { get; set; } = new();
+        private static ConcurrentDictionary<int, IQueryResult> CacheObject { get; set; } = new ConcurrentDictionary<int, IQueryResult>();
         
         public void AddOrUpdate(int key, IQueryResult data)
         {

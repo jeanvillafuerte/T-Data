@@ -17,6 +17,11 @@ namespace Thomas.Database.Database
             GenerateParameterWithKeys = generateParameterWithKeys;
         }
 
+        readonly internal bool IsExecuteNonQuery()
+        {
+            return MethodHandled == MethodHandled.Execute;
+        }
+
         readonly internal bool IsTuple()
         {
             return MethodHandled == MethodHandled.ToTupleQueryString_2 ||
@@ -26,6 +31,8 @@ namespace Thomas.Database.Database
                     MethodHandled == MethodHandled.ToTupleQueryString_6 ||
                     MethodHandled == MethodHandled.ToTupleQueryString_7;
         }
+
+        readonly internal bool EligibleForAddOracleCursors() => IsTuple() || MethodHandled == MethodHandled.ToListQueryString || MethodHandled == MethodHandled.ToSingleQueryString;
 
         public override int GetHashCode()
         {

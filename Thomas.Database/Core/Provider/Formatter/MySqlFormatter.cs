@@ -14,12 +14,12 @@ namespace Thomas.Database.Core.Provider.Formatter
         readonly string ISqlFormatter.MaxDate => "STR_TO_DATE('12/31/9999', '%m/%d/%Y')";
         readonly string ISqlFormatter.CurrentDate => "CURDATE()";
 
-        string ISqlFormatter.Concatenate(params string[] values)
+        readonly string ISqlFormatter.Concatenate(params string[] values)
         {
             return $"CONCAT({string.Join(",", values)})";
         }
 
-        string ISqlFormatter.FormatOperator(string left, string right, ExpressionType expression) => expression switch
+        readonly string ISqlFormatter.FormatOperator(string left, string right, ExpressionType expression) => expression switch
         {
             ExpressionType.AndAlso => $"({left} AND {right})",
             ExpressionType.And => $"({left} AND {right})",
@@ -41,7 +41,7 @@ namespace Thomas.Database.Core.Provider.Formatter
             _ => throw new NotImplementedException()
         };
 
-        string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, bool returnGenerateId = false)
+        readonly string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, bool returnGenerateId = false)
         {
             var stringBuilder = new StringBuilder($"INSERT INTO {tableName}(")
                                 .AppendJoin(',', columns)

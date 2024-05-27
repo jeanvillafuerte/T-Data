@@ -1,6 +1,6 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache.Factory;
+using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 

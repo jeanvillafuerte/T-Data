@@ -3,11 +3,9 @@ using System.Data.Common;
 using System.Data;
 using System.Reflection;
 using Thomas.Database.Attributes;
-using Thomas.Database.Exceptions;
 using System.Collections.Concurrent;
 using System.Reflection.Emit;
 using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 
 namespace Thomas.Database.Core.Provider
 {
@@ -16,41 +14,22 @@ namespace Thomas.Database.Core.Provider
         internal static readonly ConcurrentDictionary<int, CommandMetadata> CommandMetadata = new ConcurrentDictionary<int, CommandMetadata>(Environment.ProcessorCount * 2, 50);
         internal static readonly ConcurrentDictionary<SqlProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<SqlProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ParameterDirection GetParameterDireccion(PropertyInfo property)
+        static DbParameterAttribute GetDbParameterAttribute(in PropertyInfo property)
         {
             foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterDirectionAttribute attr)
-                    return GetDirection(attr.Direction);
+                if (attribute is DbParameterAttribute attr)
+                {
+                    attr.Size = property.PropertyType == typeof(decimal) && attr.Size == 0 ? (byte)18 : attr.Size;
+                    attr.Precision = property.PropertyType == typeof(decimal) && attr.Precision == 0  ? (byte)6 : attr.Precision;
+                    return attr;
+                }
 
-            return ParameterDirection.Input;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ParameterDirection GetDirection(ParamDirection direction) => direction switch
-        {
-            ParamDirection.Input => ParameterDirection.Input,
-            ParamDirection.InputOutput => ParameterDirection.InputOutput,
-            ParamDirection.Output => ParameterDirection.Output,
-            _ => throw new UnknownParameterDirectionException()
-        };
-
-        static int? GetParameterSize(PropertyInfo property)
-        {
-            foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterSizeAttribute attr)
-                    return attr.Size;
-
-            return null;
-        }
-
-        static int? GetParameterPrecision(PropertyInfo property)
-        {
-            foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterPrecisionAttribute attr)
-                    return attr.Precision;
-
-            return null;
+            return new DbParameterAttribute {
+                Direction = ParameterDirection.Input,
+                Size = property.PropertyType == typeof(decimal) ? (byte)18 : (byte)0,
+                Precision = property.PropertyType == typeof(decimal) ? (byte)6 : (byte)0,
+                Name = property.Name
+            };
         }
 
         internal static void LoadConnectionDelegate(SqlProvider provider)

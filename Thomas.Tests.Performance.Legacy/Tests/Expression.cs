@@ -1,5 +1,5 @@
 ﻿using System.Threading.Tasks;
-using Thomas.Cache.Factory;
+using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Database.Core.FluentApi;
 using Thomas.Tests.Performance.Entities;

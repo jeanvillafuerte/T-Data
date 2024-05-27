@@ -46,7 +46,7 @@ namespace Thomas.Cache
             }
             else
             {
-                _operationKey = (_operationKey * 23) + identifier!.GetHashCode();
+                _operationKey = HashHelper.GenerateHash(identifier);
             }
 
             return _operationKey;
@@ -275,7 +275,7 @@ namespace Thomas.Cache
 
         public void Refresh(string key, bool throwErrorIfNotFound = false)
         {
-            var calculatedHash = key.GetHashCode();
+            var calculatedHash = HashHelper.GenerateHash(key);
             if (DbDataCache.TryGetValue(calculatedHash, out IQueryResult item))
             {
                 Type genericType = item.GetType().GetGenericArguments()[0];
@@ -289,13 +289,13 @@ namespace Thomas.Cache
                         methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
                         break;
                     case MethodHandled.ToListQueryString:
-                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) });
+                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) }, null);
                         break;
                     case MethodHandled.ToSingleExpression:
                         methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
                         break;
                     case MethodHandled.ToSingleQueryString:
-                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) });
+                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) }, null);
                         break;
                     case MethodHandled.ToTupleQueryString_2:
                     case MethodHandled.ToTupleQueryString_3:
@@ -303,7 +303,7 @@ namespace Thomas.Cache
                     case MethodHandled.ToTupleQueryString_5:
                     case MethodHandled.ToTupleQueryString_6:
                     case MethodHandled.ToTupleQueryString_7:
-                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) });
+                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) }, null);
                         break;
                     default:
                         break;
@@ -332,7 +332,7 @@ namespace Thomas.Cache
             }
         }
 
-        #endregion
+#endregion
 
 
     }

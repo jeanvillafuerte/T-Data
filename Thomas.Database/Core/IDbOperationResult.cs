@@ -5,7 +5,7 @@ namespace Thomas.Database.Core
 {
     public interface IDbOperationResult
     {
-        DbOpResult ExecuteOp(in string script, in object? parameters = null, in bool noCacheMetadata = false);
+        DbOpResult ExecuteOp(in string script, in object? parameters = null);
         DbOpResult<T> ToSingleOp<T>(in string script, in object? parameters = null);
         DbOpResult<List<T>> ToListOp<T>(in string script, in object? parameters = null);
         DbOpResult<Tuple<List<T1>, List<T2>>> ToTupleOp<T1, T2>(in string script, in object? parameters = null);

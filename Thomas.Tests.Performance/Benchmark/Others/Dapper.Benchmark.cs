@@ -9,7 +9,9 @@ using Thomas.Tests.Performance.Entities;
 namespace Thomas.Tests.Performance.Benchmark.Others
 {
     [Description("Dapper")]
+#if NETCOREAPP3_0_OR_GREATER
     [ThreadingDiagnoser]
+#endif
     [MemoryDiagnoser]
     public class DapperBenckmark : BenckmarkBase
     {
@@ -28,14 +30,16 @@ namespace Thomas.Tests.Performance.Benchmark.Others
             return _connection.QuerySingle<Person>($"select * from {TableName} where Id = @Id", new { Id = 1 });
         }
 
-        [Benchmark(Description = "Query<T> (buffered)")]
+        [Benchmark(Description = "Query<T>")]
         public void QueryBuffered()
         {
-            using var _connection = new SqlConnection(StringConnection);
-            _connection.Query<Person>($"SELECT * FROM {TableName}").Consume(consumer);
+            using (var _connection = new SqlConnection(StringConnection))
+            {
+                _connection.Query<Person>($"SELECT * FROM {TableName}").Consume(consumer);
+            }
         }
 
-        [Benchmark(Description = "Query<dynamic> (buffered)")]
+        [Benchmark(Description = "Query<dynamic>")]
         public dynamic QueryBufferedDynamic()
         {
             var _connection = new SqlConnection(StringConnection);
@@ -44,11 +48,5 @@ namespace Thomas.Tests.Performance.Benchmark.Others
             return item;
         }
 
-        [Benchmark(Description = "Query<T> (unbuffered)")]
-        public void QueryListUnbuffered()
-        {
-            using var _connection = new SqlConnection(StringConnection);
-            _connection.Query<Person>($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: false).Consume(consumer);
-        }
     }
 }

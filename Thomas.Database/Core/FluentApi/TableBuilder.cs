@@ -41,7 +41,7 @@ namespace Thomas.Database.Core.FluentApi
 
         internal static void AddColumns<T>(DbTable table, string key, Type type)
         {
-            foreach (var property in (ReadOnlySpan<PropertyInfo>)type.GetProperties().Where(x => string.IsNullOrEmpty(key) || x.Name != key).ToArray())
+            foreach (var property in type.GetProperties().Where(x => string.IsNullOrEmpty(key) || x.Name != key).ToArray())
             {
                 table.Columns.AddLast(new DbColumn { Name = property.Name, Property = property });
             }

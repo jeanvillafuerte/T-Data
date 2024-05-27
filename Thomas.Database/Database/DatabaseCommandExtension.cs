@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using Sigil;
 using Thomas.Database.Cache;
+using Thomas.Database.Core.Provider;
 using Label = Sigil.Label;
 
 namespace Thomas.Database
@@ -50,7 +53,7 @@ namespace Thomas.Database
         private static readonly ConstructorInfo GuidConstructorByteArray = typeof(Guid).GetConstructor(new Type[] { typeof(byte[]) })!;
         private static readonly ConstructorInfo GuidConstructorString = typeof(Guid).GetConstructor(new Type[] { typeof(string) })!;
 
-        private static readonly Type DataReaderType = Type.GetType("System.Data.Common.DbDataReader, System.Data.Common")!;
+        private static readonly Type DataReaderType = typeof(DbDataReader); //Type.GetType("System.Data.Common.DbDataReader, System.Data.Common")!;
         private static readonly MethodInfo IsDBNull = DataReaderType.GetMethod("IsDBNull")!;
         private static readonly MethodInfo GetInt16 = DataReaderType.GetMethod("GetInt16")!;
         private static readonly MethodInfo GetInt32 = DataReaderType.GetMethod("GetInt32")!;
@@ -66,7 +69,7 @@ namespace Thomas.Database
         private static readonly MethodInfo GetChar = DataReaderType.GetMethod("GetChar")!;
         private static readonly MethodInfo GetBytes = DataReaderType.GetMethod("GetBytes")!;
 
-        private static Func<DbDataReader, T> GetParserTypeDelegate<T>(in DbDataReader reader, in int queryKey, in SqlProvider provider, in int bufferSize = 0)
+        private static Func<DbDataReader, T> GetParserTypeDelegate<T>(in DbDataReader reader, in int queryKey, in int preparationQueryKey, in SqlProvider provider, in int bufferSize = 0)
         {
             var typeResult = typeof(T);
             var key = (queryKey * 23) + typeResult.GetHashCode();
@@ -74,7 +77,16 @@ namespace Thomas.Database
             if (CacheTypeParser<T>.TryGet(in key, out Func<DbDataReader, T> parser))
                 return parser;
 
-            Span<PropertyTypeInfo> columnInfoCollection = GetColumnMap(typeResult, reader);
+            //TODO: use columns register from DbTableConfig when is a configured type
+            var columnInfoCollection = GetColumnMap(typeResult, reader);
+
+            //if no large object then remove sequential access for next executions
+#if NETFRAMEWORK
+            if (!columnInfoCollection.Any(x => x.IsLargeObject))
+#else
+            if (!columnInfoCollection.ToArray().Any(x => x.IsLargeObject))
+#endif
+                DatabaseProvider.RemoveSequentialAccess(preparationQueryKey);
 
             Func<DbDataReader, T> @delegate = null;
 
@@ -88,7 +100,11 @@ namespace Thomas.Database
         }
 
         //support only class with public setters and parameterless constructor 
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
         private static Func<DbDataReader, T> GenerateEmitterBySetters<T>(in Type typeResult, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection)
+#else
+        private static Func<DbDataReader, T> GenerateEmitterBySetters<T>(in Type typeResult, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection)
+#endif
         {
             if (typeResult.GetConstructor(Type.EmptyTypes) == null)
                 throw new InvalidOperationException($"Cannot find parameterless constructor for {typeResult.Name}");
@@ -238,7 +254,11 @@ namespace Thomas.Database
             return emitter.LoadLocal(instance).Return().CreateDelegate();
         }
 
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
         private static Func<DbDataReader, T> GenerateEmitterForReadonlyRecord<T>(in Type type, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection)
+#else
+        private static Func<DbDataReader, T> GenerateEmitterForReadonlyRecord<T>(in Type type, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection)
+#endif
         {
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).ToArray();
             var constructor = type.GetConstructor(fields.Select(x => x.FieldType).ToArray());
@@ -256,8 +276,11 @@ namespace Thomas.Database
                 var field = fields[i];
                 var local = locals[i];
 
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.Name}>", StringComparison.InvariantCultureIgnoreCase));
-
+#else
+                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.Name}>"));
+#endif
                 //when column not found we need to set default value
                 Label? notNullLabel = emitter.DefineLabel("notNull" + i);
                 Label? endLabel = emitter.DefineLabel("end" + i);
@@ -427,6 +450,7 @@ namespace Thomas.Database
                 {
                     emitter.LoadField(typeof(TimeSpan).GetField("Zero"));
                 }
+#if NET6_0_OR_GREATER
                 else if (field.FieldType == typeof(DateOnly))
                 {
                     emitter.LoadField(typeof(DateOnly).GetField("MinValue"));
@@ -435,6 +459,7 @@ namespace Thomas.Database
                 {
                     emitter.LoadField(typeof(TimeOnly).GetField("Midnight"));
                 }
+#endif
                 else
                 {
                     throw new NotSupportedException($"Unsupported type {field.FieldType.FullName}");
@@ -446,37 +471,41 @@ namespace Thomas.Database
             }
         }
 
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
         private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader)
+#else
+        private static PropertyTypeInfo[] GetColumnMap(Type type, DbDataReader reader)
+#endif
         {
-            ReadOnlySpan<PropertyInfo> properties = type.GetProperties();
-            ReadOnlySpan<DbColumn> columnSchema = reader.GetColumnSchema().ToArray();
-            Span<PropertyTypeInfo> columnInfoCollection = new PropertyTypeInfo[properties.Length];
-
-            //TODO: use configurate db name to match with column name
-            byte counter = 0;
-            foreach (var property in properties)
+            var table = reader.GetSchemaTable();
+            var columnSchema = new LinkedList<PropertyTypeInfo>();
+            int counter = 0;
+            foreach (DataRow row in table.Rows)
             {
-                for (int i = 0; i < columnSchema.Length; i++)
-                {
-                    if (columnSchema[i].ColumnName.Equals(property.Name, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var dataType = columnSchema[i].DataType;
-                        columnInfoCollection[counter++] = new PropertyTypeInfo
-                        {
-                            DataTypeName = columnSchema[i].DataTypeName,
-                            Source = dataType,
-                            PropertyInfo = property,
-                            Name = property.Name,
-                            RequiredConversion = !columnSchema[i].DataType.Equals(property.PropertyType),
-                            IsLargeObject = columnSchema[i].IsLong == true || columnSchema[i].DataTypeName == "BLOB" || columnSchema[i].DataTypeName == "CLOB",
-                            AllowNull = true,
-                        };
-                        break;
-                    }
-                }
-            }
+                var columnName = row["ColumnName"].ToString();
+                var property = type.GetProperty(columnName);
 
-            return columnInfoCollection;
+                if (property == null)
+                    continue;
+
+                var dataType = (Type)row["DataType"];
+                var dataTypeName = row["DataTypeName"].ToString();
+                columnSchema.AddLast(new PropertyTypeInfo
+                {
+                    DataTypeName = dataTypeName,
+                    Source = dataType,
+                    PropertyInfo = property,
+                    Name = row["ColumnName"].ToString(),
+                    RequiredConversion = !dataType.Equals(property.PropertyType),
+                    IsLargeObject = (bool)row["IsLong"] || dataTypeName == "BLOB" || dataTypeName == "CLOB",
+                    AllowNull = !bool.TryParse(row["AllowDBNull"].ToString(), out var allowNull) || allowNull,
+                });
+            }
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+            return columnSchema.ToArray().AsSpan();
+#else
+            return columnSchema.ToArray();
+#endif
         }
 
         private static bool IsReadonlyRecordType(in Type type)
@@ -522,57 +551,6 @@ namespace Thomas.Database
             }
         }
 
-        //private static void EmitConvertToNullable<T>(Emit<Func<DbDataReader, T>> emitter, Type source)
-        //{
-        //    switch (source.Name)
-        //    {
-        //        case "Boolean":
-        //            emitter.NewObject(typeof(bool?).GetConstructor(new[] { typeof(bool) })!);
-        //            break;
-        //        case "Byte":
-        //            emitter.NewObject(typeof(byte?).GetConstructor(new[] { typeof(byte) })!);
-        //            break;
-        //        case "Int16":
-        //            emitter.NewObject(typeof(short?).GetConstructor(new[] { typeof(short) })!);
-        //            break;
-        //        case "Int32":
-        //            emitter.NewObject(typeof(int?).GetConstructor(new[] { typeof(int) })!);
-        //            break;
-        //        case "Int64":
-        //            emitter.NewObject(typeof(long?).GetConstructor(new[] { typeof(long) })!);
-        //            break;
-        //        case "UInt16":
-        //            emitter.NewObject(typeof(ushort?).GetConstructor(new[] { typeof(ushort) })!);
-        //            break;
-        //        case "UInt32":
-        //            emitter.NewObject(typeof(uint?).GetConstructor(new[] { typeof(uint) })!);
-        //            break;
-        //        case "UInt64":
-        //            emitter.NewObject(typeof(ulong?).GetConstructor(new[] { typeof(ulong) })!);
-        //            break;
-        //        case "Single":
-        //            emitter.NewObject(typeof(float?).GetConstructor(new[] { typeof(float) })!);
-        //            break;
-        //        case "Double":
-        //            emitter.NewObject(typeof(double?).GetConstructor(new[] { typeof(double) })!);
-        //            break;
-        //        case "Decimal":
-        //            emitter.NewObject(typeof(decimal?).GetConstructor(new[] { typeof(decimal) })!);
-        //            break;
-        //        case "DateTime":
-        //            emitter.NewObject(typeof(DateTime?).GetConstructor(new[] { typeof(DateTime) })!);
-        //            break;
-        //        case "Guid":
-        //            emitter.NewObject(typeof(Guid?).GetConstructor(new[] { typeof(Guid) })!);
-        //            break;
-        //        case "Char":
-        //            emitter.NewObject(typeof(char?).GetConstructor(new[] { typeof(char) })!);
-        //            break;
-        //        default:
-        //            throw new InvalidOperationException($"Compatible nullable type was not found for {source.Name}");
-        //    }
-        //}
-
         private class PropertyTypeInfo
         {
             public Type Source { get; set; }
@@ -584,7 +562,7 @@ namespace Thomas.Database
             public string DataTypeName { get; set; }
         }
 
-        #endregion delegate builder
+#endregion delegate builder
 
         #region specific readers
         private static byte[] ReadStream(DbDataReader reader, int index, int bufferSize) //default 8KB

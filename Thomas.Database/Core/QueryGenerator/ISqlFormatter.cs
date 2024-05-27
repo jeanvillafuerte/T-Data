@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using Thomas.Database.Configuration;
 using Thomas.Database.Core.FluentApi;
 
 namespace Thomas.Database.Core.QueryGenerator

@@ -8,7 +8,11 @@ namespace Thomas.Database.Core.QueryGenerator
     //Reduce memory footprint by using a single type for all generated types
     internal partial class SqlGenerator<T> : IParameterHandler
     {
+#if NETCOREAPP
         internal static Type BuildType(ReadOnlySpan<DbParameterInfo> dbParametersToBind)
+#else
+        internal static Type BuildType(DbParameterInfo[] dbParametersToBind)
+#endif
         {
             var assemblyName = new AssemblyName("ThomasInternalAssembly");
             AssemblyBuilder ab = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);

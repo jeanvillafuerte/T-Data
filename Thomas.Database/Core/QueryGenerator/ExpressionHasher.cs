@@ -11,10 +11,13 @@ namespace Thomas.Database.Helpers
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int GetHashCode<T>(Expression<Func<T, bool>> expr, SqlProvider provider, bool includeValues = true)
         {
-            int hash = 17;
-            hash = (hash * 23) + provider.GetHashCode();
-            hash = (hash * 23) + expr.Body.NodeType.GetHashCode();
-            return GetHashCode(expr.Body, hash, includeValues, provider);
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 23) + provider.GetHashCode();
+                hash = (hash * 23) + expr.Body.NodeType.GetHashCode();
+                return GetHashCode(expr.Body, hash, includeValues, provider);
+            }
         }
 
         private static int GetHashCode(Expression expr, int hash, bool includeValues, SqlProvider provider, MemberInfo member = null)
@@ -43,7 +46,7 @@ namespace Thomas.Database.Helpers
                     var instantiator = Expression.Lambda<Func<DateTime>>(newExpression).Compile();
                     var value = instantiator();
 
-                    return (hash * 23) + (int)value.Ticks;
+                    return (hash * 23) + int.Parse(value.ToString("yyyyMMddmmss"));
                 }
 
                 return (hash * 23) + newExpression.Type.GetHashCode();

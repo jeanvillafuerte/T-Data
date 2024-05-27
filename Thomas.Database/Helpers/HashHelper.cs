@@ -1,34 +1,21 @@
 ﻿using System;
-using System.Text.Json;
 
 namespace Thomas.Database
 {
     public static class HashHelper
     {
-        static JsonSerializerOptions _options = new JsonSerializerOptions() { DefaultBufferSize = 1024, PropertyNamingPolicy = null, WriteIndented = false, MaxDepth = 3, ReadCommentHandling = JsonCommentHandling.Disallow };
 
-        public static int GenerateHash(string query, in object parameters)
-        {
-            string json = string.Empty;
-
-            if (parameters != null)
-                JsonSerializer.Serialize(parameters, _options);
-
-            return GenerateUniqueHash(query + json);
-        }
-
-        public static int GenerateUniqueHash(in ReadOnlySpan<char> span)
-        {
-            return GenerateHash(span);
-        }
-
-        public static int GenerateHash(in ReadOnlySpan<char> span)
+#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+        public static int GenerateHash(in ReadOnlySpan<char> input)
+#else
+        public static int GenerateHash(string input)
+#endif
         {
             unchecked
             {
                 int hash = 27;
 
-                foreach (char c in span)
+                foreach (char c in input)
                 {
                     hash = (hash * 13) + c;
                 }
@@ -36,6 +23,5 @@ namespace Thomas.Database
                 return hash;
             }
         }
-
     }
 }

@@ -30,7 +30,7 @@ namespace Thomas.Database.Core.QueryGenerator
     internal partial class SqlGenerator<T> : IParameterHandler
     {
 
-        private readonly char TableAlias;
+        private readonly string TableAlias;
         private readonly Type Type;
         private string DbSchema
         {
@@ -72,7 +72,7 @@ namespace Thomas.Database.Core.QueryGenerator
 
             if (!DbConfigurationFactory.Tables.TryGetValue(Type.FullName!, out _table))
             {
-                var dbTable = new DbTable { Name = Type.Name! };
+                var dbTable = new DbTable { Name = Type.Name!, Columns = new LinkedList<DbColumn>() };
                 dbTable.AddFieldsAsColumns<T>();
                 DbConfigurationFactory.Tables.TryAdd(Type.FullName!, dbTable);
                 _table = dbTable;
@@ -85,7 +85,7 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             string[][] aliasIdentifiers = new string[1][];
             var tableIdentifier = predicate!.Parameters[0]!.Name;
-            aliasIdentifiers[0] = new string[] { tableIdentifier!, TableAlias.ToString() };
+            aliasIdentifiers[0] = new string[] { tableIdentifier!, TableAlias };
             return aliasIdentifiers;
         }
 
@@ -228,7 +228,11 @@ namespace Thomas.Database.Core.QueryGenerator
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureCacheItem(int key, string sqlText, ref object filter)
         {
+#if NETFRAMEWORK || NETSTANDARD
+            var dynamicType = BuildType(DbParametersToBind.ToArray());
+#else
             var dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()));
+#endif
             DynamicQueryString.Set(key, new ValueTuple<string, Type>(sqlText, dynamicType));
             InstanciateFilter(dynamicType, ref filter);
         }
@@ -239,7 +243,7 @@ namespace Thomas.Database.Core.QueryGenerator
             filter = Activator.CreateInstance(type, DbParametersToBind.Select(x => x.Value).ToArray());
         }
 
-        #endregion Cache management
+#endregion Cache management
 
         #region parameter handlers
         public void AddInParam(in Type propertyType, object value, string dbType, out string paramBindName)
@@ -332,13 +336,13 @@ namespace Thomas.Database.Core.QueryGenerator
 
             if (a.Type == typeof(T))
             {
-                aliasIdentifier[0] = new string[] { a.Name, TableAlias.ToString(), };
-                aliasIdentifier[1] = new string[] { b.Name, internalTableAlias.ToString(), };
+                aliasIdentifier[0] = new string[] { a.Name, TableAlias, };
+                aliasIdentifier[1] = new string[] { b.Name, internalTableAlias, };
             }
             else
             {
-                aliasIdentifier[0] = new string[] { a.Name, internalTableAlias.ToString() };
-                aliasIdentifier[1] = new string[] { b.Name, TableAlias.ToString() };
+                aliasIdentifier[0] = new string[] { a.Name, internalTableAlias };
+                aliasIdentifier[1] = new string[] { b.Name, TableAlias };
             }
 
 
@@ -600,10 +604,13 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private int indexTableAlias;
 
-        private char GetTableAlias()
+        private string GetTableAlias()
         {
-            ReadOnlySpan<char> Alias = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            return Alias.Slice(indexTableAlias++, 1)[0];
+#if NETCOREAPP
+            return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".AsSpan().Slice(indexTableAlias++, 1).ToString();
+#else
+            return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".Substring(indexTableAlias++, 1);
+#endif
         }
 
         private string GetColumnName(MemberExpression member, string[][] aliasIdentifiers = null)

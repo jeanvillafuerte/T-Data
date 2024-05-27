@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Data;
 using Thomas.Database;
 using Thomas.Database.Attributes;
 
@@ -48,8 +49,7 @@ namespace Thomas.Tests.Performance.Entities
 
         public int Id { get; set; }
 
-        [ParameterDirection(ParamDirection.Output)]
-        [ParameterSize(25)]
+        [DbParameter(direction: ParameterDirection.Output, size: 25)]
         public string UserName { get; set; }
     }
 
@@ -63,7 +63,7 @@ namespace Thomas.Tests.Performance.Entities
 
         public int Age { get; set; }
 
-        [ParameterDirection(ParamDirection.Output)]
+        [DbParameter(direction: ParameterDirection.Output)]
         public int Total { get; set; }
     }
 
@@ -83,6 +83,7 @@ namespace Thomas.Tests.Performance.Entities
         public DateTime? LastUpdate { get; set; } // 3 bytes
     }
 
+#if NETCOREAPP
     public record PersonRecord
     {
         public int Id { get; set; } // 4 bytes
@@ -112,5 +113,5 @@ namespace Thomas.Tests.Performance.Entities
         Guid UniqueId,
         bool State,
         DateTime? LastUpdate);
-
+#endif
 }

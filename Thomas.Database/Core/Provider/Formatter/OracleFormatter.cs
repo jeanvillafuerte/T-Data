@@ -40,23 +40,25 @@ namespace Thomas.Database.Core.Provider.Formatter
 
         readonly string ISqlFormatter.GenerateInsert(string tableName, string[] columns, string[] values, DbColumn keyColumn, bool returnGenerateId = false)
         {
-            var sb = new StringBuilder($"INSERT INTO {tableName}(")
-                                        .AppendJoin(',', columns)
-                                        .Append(") VALUES (")
-                                        .AppendJoin(',', values)
-                                        .Append(')');
-
             if (returnGenerateId)
             {
                 return new StringBuilder("BEGIN ")
-                                         .Append(sb.ToString())
-                                         .Append(" RETURNING ")
-                                         .Append(keyColumn.DbName ?? keyColumn.Name)
-                                         .Append($" INTO :{keyColumn.Name}; END;")
-                                         .ToString();
+                                        .Append($"INSERT INTO {tableName}(")
+                                        .AppendJoin(',', columns)
+                                        .Append(") VALUES (")
+                                        .AppendJoin(',', values)
+                                        .Append(')')
+                                        .Append(" RETURNING ")
+                                        .Append(keyColumn.DbName ?? keyColumn.Name)
+                                        .Append($" INTO :{keyColumn.Name}; END;")
+                                        .ToString();
             }
 
-            return sb.ToString();
+            return new StringBuilder($"INSERT INTO {tableName}(")
+                                        .AppendJoin(',', columns)
+                                        .Append(") VALUES (")
+                                        .AppendJoin(',', values)
+                                        .Append(')').ToString();
         }
 
         readonly string ISqlFormatter.GenerateUpdate(string tableName, string[] columns, string keyDbName, string propertyKeyName)

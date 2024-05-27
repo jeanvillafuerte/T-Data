@@ -2,7 +2,6 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Thomas.Cache;
-using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Database.Configuration;
 using Thomas.Tests.Performance.Legacy.Setup;
@@ -113,8 +112,8 @@ namespace Thomas.Tests.Performance.Legacy
 
         static void DropTables()
         {
-            DbFactory.GetDbContext("db1").Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
-            DbFactory.GetDbContext("db2").Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
+            DbFactory.GetDbContext("db1", buffered: false).Execute($"DROP TABLE {TableName}", null);
+            DbFactory.GetDbContext("db2", buffered: false).Execute($"DROP TABLE {TableName}", null);
             CachedResultDatabase.Clear();
             DbBase.Clear();
         }

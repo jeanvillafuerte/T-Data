@@ -1,6 +1,6 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache.Factory;
+using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -43,7 +43,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(100);
                 return DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, source.Token);
-            }, null, "ToListOpAsync<> Cancelled");
+            }, null, "ToListOpAsync<> Cancelled", true);
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

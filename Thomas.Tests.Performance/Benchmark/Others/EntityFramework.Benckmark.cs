@@ -1,9 +1,10 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿#if NETCOREAPP
+using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using Microsoft.EntityFrameworkCore;
 using System.ComponentModel;
 using System.Linq;
 using Thomas.Tests.Performance.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Thomas.Tests.Performance.Benchmark.Others
 {
@@ -38,3 +39,4 @@ namespace Thomas.Tests.Performance.Benchmark.Others
         public int Id { get; set; }
     }
 }
+#endif
