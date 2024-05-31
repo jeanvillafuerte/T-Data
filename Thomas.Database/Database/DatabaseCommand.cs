@@ -25,17 +25,16 @@ namespace Thomas.Database
         private readonly object? _filter;
         private readonly int _preparationQueryKey;
         private readonly int _operationKey;
-        private readonly Action<object, DbCommand> _actionParameterLoader;
+        private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
         private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
-        private DbCommand? _command;
         private readonly int _bufferSize;
-        private readonly bool _prepareStatements;
         private readonly DbCommandConfiguration _configuration;
         private DbDataReader? _reader;
 
         //object to share in transaction context
-        private DbConnection? _connection;
+        private DbCommand _command;
+        private DbConnection _connection;
         private readonly DbTransaction? _transaction;
 
         // output parameters
@@ -86,16 +85,8 @@ namespace Thomas.Database
             _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
-            _prepareStatements = options.PrepareStatements;
             _filter = filter;
             _command = command;
-
-            if (transaction != null)
-            {
-                _transaction = transaction;
-                _connection = _command.Connection;
-                _command.Parameters.Clear();
-            }
 
             _operationKey = 17;
             unchecked
@@ -103,6 +94,18 @@ namespace Thomas.Database
                 _operationKey = (_operationKey * 23) + _script.GetHashCode();
                 _operationKey = (_operationKey * 23) + _provider.GetHashCode();
                 _operationKey = (_operationKey * 23) + configuration.GetHashCode();
+            }
+
+            if (transaction != null)
+            {
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+
+                unchecked
+                {
+                    _operationKey = (_operationKey * 23) + _transaction.GetType().GetHashCode();
+                }
             }
 
             Type? filterType = null;
@@ -116,11 +119,11 @@ namespace Thomas.Database
                 _preparationQueryKey = _operationKey;
             }
 
-            if (buffered && DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
             {
                 _commandType = commandMetadata.CommandType;
                 _commandBehavior = commandMetadata.CommandBehavior;
-                _actionParameterLoader = commandMetadata.LoadParametersDelegate;
+                _commandSetupDelegate = commandMetadata.LoadParametersDelegate;
                 _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
             }
             else
@@ -147,12 +150,17 @@ namespace Thomas.Database
                 var loaderConfiguration = new LoaderConfiguration(
                     keyAsReturnValue: in configuration.KeyAsReturnValue,
                     generateParameterWithKeys: in configuration.GenerateParameterWithKeys,
+                    prepareStatements: options.PrepareStatements,
                     additionalOracleRefCursors: additionalOutputParameters?.ToList(),
                     provider: in _provider,
                     fetchSize: options.FetchSize,
-                    isExecuteNonQuery: configuration.IsExecuteNonQuery());
+                    isExecuteNonQuery: configuration.MethodHandled == MethodHandled.Execute,
+                    query: in _script,
+                    timeout: options.ConnectionTimeout,
+                    commandType: in _commandType,
+                    isTransactionOperation: transaction != null);
 
-                (_actionParameterLoader, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
+                (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
             }
 
             if (options.DetailErrorMessage)
@@ -210,15 +218,13 @@ namespace Thomas.Database
         }
 
 
-        //TODO: create a SetupCommand where load parameters, setup oracle additional parameters and generate command from concrete provider to avoid call from DbConnection avoid overhead
-        //script, timeout and command type should be set in the constructor if possible or take a look in the performance
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Prepare()
         {
             if (_connection == null)
             {
-                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
-                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
+                _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
+                _connection = _command.Connection;
                 _connection.Open();
             }
             else
@@ -227,13 +233,8 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
+                _commandSetupDelegate(_filter, null, null, _command);
             }
-
-            if (_actionParameterLoader != null)
-                _actionParameterLoader(_filter, _command);
-
-            if (_prepareStatements && _commandType == CommandType.Text)
-                _command.Prepare();
         }
 
         /// <summary>
@@ -245,8 +246,8 @@ namespace Thomas.Database
         {
             if (_connection == null)
             {
-                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
-                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
+                _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
+                _connection = _command.Connection;
                 await _connection.OpenAsync(cancellationToken);
             }
             else
@@ -255,16 +256,8 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
+                _commandSetupDelegate(_filter, null, null, _command);
             }
-
-            _actionParameterLoader?.Invoke(_filter, _command);
-
-            if (_commandType == CommandType.Text && _prepareStatements)
-#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-                await _command.PrepareAsync(cancellationToken);
-#else
-                _command.Prepare();
-#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -37,23 +37,28 @@ namespace Thomas.Database.Core.Provider
             if (!ConnectionCache.TryGetValue(provider, out var connection))
             {
                 ConstructorInfo constructorInfo = null;
-
+                Type connectionType = null;
                 switch (provider)
                 {
                     case SqlProvider.SqlServer:
                         constructorInfo = SqlServerConnectionConstructor;
+                        connectionType = SqlServerConnectionType;
                         break;
                     case SqlProvider.MySql:
                         constructorInfo = MysqlConnectionConstructor;
+                        connectionType = MysqlConnectionType;
                         break;
                     case SqlProvider.PostgreSql:
                         constructorInfo = PostgresConnectionConstructor;
+                        connectionType = PostgresConnectionType;
                         break;
                     case SqlProvider.Oracle:
                         constructorInfo = OracleConnectionConstructor;
+                        connectionType = OracleConnectionType;
                         break;
                     case SqlProvider.Sqlite:
                         constructorInfo = SqliteConnectionConstructor;
+                        connectionType = SqliteConnectionType;
                         break;
                 }
 
@@ -64,9 +69,9 @@ namespace Thomas.Database.Core.Provider
 
                 var method = new DynamicMethod(
                     $"Get{provider}Connection",
-                    typeof(DbConnection),
+                    connectionType,
                     argTypes,
-                    typeof(DbConnection).Module);
+                    connectionType.Module);
 
                 var il = method.GetILGenerator();
 
@@ -74,7 +79,7 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Newobj, constructorInfo);
                 il.Emit(OpCodes.Ret);
 
-                Type actionType = Expression.GetFuncType(new[] { typeof(string), typeof(DbConnection) });
+                Type actionType = Expression.GetFuncType(new[] { typeof(string), connectionType });
                 ConnectionCache.TryAdd(provider, (Func<string, DbConnection>)method.CreateDelegate(actionType)!);
             }
         }

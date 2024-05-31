@@ -77,8 +77,7 @@ namespace Thomas.Database
             if (CacheTypeParser<T>.TryGet(in key, out Func<DbDataReader, T> parser))
                 return parser;
 
-            //TODO: use columns register from DbTableConfig when is a configured type
-            var columnInfoCollection = GetColumnMap(typeResult, reader);
+            var columnInfoCollection = GetColumnMap(in typeResult, in reader, in provider);
 
             //if no large object then remove sequential access for next executions
 #if NETFRAMEWORK
@@ -86,7 +85,7 @@ namespace Thomas.Database
 #else
             if (!columnInfoCollection.ToArray().Any(x => x.IsLargeObject))
 #endif
-                DatabaseProvider.RemoveSequentialAccess(preparationQueryKey);
+                DatabaseProvider.RemoveSequentialAccess(in preparationQueryKey);
 
             Func<DbDataReader, T> @delegate = null;
 
@@ -472,9 +471,9 @@ namespace Thomas.Database
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader)
+        private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader, in SqlProvider provider)
 #else
-        private static PropertyTypeInfo[] GetColumnMap(Type type, DbDataReader reader)
+        private static PropertyTypeInfo[] GetColumnMap(in Type type, in DbDataReader reader, in SqlProvider provider)
 #endif
         {
             var table = reader.GetSchemaTable();
@@ -483,21 +482,22 @@ namespace Thomas.Database
             foreach (DataRow row in table.Rows)
             {
                 var columnName = row["ColumnName"].ToString();
-                var property = type.GetProperty(columnName);
+                var property = type.GetProperty(columnName, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
 
                 if (property == null)
                     continue;
 
                 var dataType = (Type)row["DataType"];
-                var dataTypeName = row["DataTypeName"].ToString();
+                var isLob = provider == SqlProvider.Oracle && bool.TryParse(row["IsValueLob"].ToString(), out var isValueLob) && isValueLob;
+                var dataTypeName = provider == SqlProvider.MySql || provider == SqlProvider.Oracle ? null : row["DataTypeName"].ToString();
                 columnSchema.AddLast(new PropertyTypeInfo
                 {
                     DataTypeName = dataTypeName,
                     Source = dataType,
                     PropertyInfo = property,
-                    Name = row["ColumnName"].ToString(),
+                    Name = columnName,
                     RequiredConversion = !dataType.Equals(property.PropertyType),
-                    IsLargeObject = (bool)row["IsLong"] || dataTypeName == "BLOB" || dataTypeName == "CLOB",
+                    IsLargeObject = isLob || (bool.TryParse(row["IsLong"].ToString(), out var isLong) && isLong),
                     AllowNull = !bool.TryParse(row["AllowDBNull"].ToString(), out var allowNull) || allowNull,
                 });
             }

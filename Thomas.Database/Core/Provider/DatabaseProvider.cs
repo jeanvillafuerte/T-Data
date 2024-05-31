@@ -20,19 +20,12 @@ namespace Thomas.Database.Core.Provider
             return getConnectionAction!(stringConnection);
         }
 
-        public static (Action<object, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetadata(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
+        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetadata(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
         {
-            commandBehavior |= CommandBehavior.SequentialAccess;
+            if (!options.IsExecuteNonQuery)
+                commandBehavior |= CommandBehavior.SequentialAccess;
 
-            if (type == null && options.AdditionalOracleRefCursors == null)
-            {
-                if (buffered)
-                    DatabaseHelperProvider.CommandMetadata.TryAdd(key, new CommandMetadata(null, null, in commandBehavior, in commandType));
-
-                return (null, null);
-            }
-
-            var loadParametersDelegate = GetLoadCommandParametersDelegate(in type, in options, out var hasOutputParams, out var parameters);
+            var loadParametersDelegate = GetSetupCommandDelegate(in type, in options, out var hasOutputParams, out var parameters);
 
             Action<object, DbCommand, DbDataReader> loadOutParameterDelegate = null;
             if (hasOutputParams)
