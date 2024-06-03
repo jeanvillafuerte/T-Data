@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +21,7 @@ namespace Thomas.Database
         private readonly string _connectionString;
         private readonly SqlProvider _provider;
         private readonly int _timeout;
-        private readonly object? _filter;
+        private readonly object _filter;
         private readonly int _preparationQueryKey;
         private readonly int _operationKey;
         private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
@@ -30,12 +29,12 @@ namespace Thomas.Database
         private readonly CommandBehavior _commandBehavior;
         private readonly int _bufferSize;
         private readonly DbCommandConfiguration _configuration;
-        private DbDataReader? _reader;
+        private DbDataReader _reader;
 
         //object to share in transaction context
         private DbCommand _command;
         private DbConnection _connection;
-        private readonly DbTransaction? _transaction;
+        private readonly DbTransaction _transaction;
 
         // output parameters
         public IEnumerable<IDbDataParameter> OutParameters
@@ -73,7 +72,7 @@ namespace Thomas.Database
         public DatabaseCommand(
             in DbSettings options,
             in string script,
-            in object? filter,
+            in object filter,
             in DbCommandConfiguration configuration,
             in bool buffered,
             in DbTransaction transaction = null,
@@ -108,7 +107,7 @@ namespace Thomas.Database
                 }
             }
 
-            Type? filterType = null;
+            Type filterType = null;
             if (_filter != null)
             {
                 filterType = filter.GetType();
@@ -150,7 +149,6 @@ namespace Thomas.Database
                 var loaderConfiguration = new LoaderConfiguration(
                     keyAsReturnValue: in configuration.KeyAsReturnValue,
                     generateParameterWithKeys: in configuration.GenerateParameterWithKeys,
-                    prepareStatements: options.PrepareStatements,
                     additionalOracleRefCursors: additionalOutputParameters?.ToList(),
                     provider: in _provider,
                     fetchSize: options.FetchSize,
@@ -158,9 +156,10 @@ namespace Thomas.Database
                     query: in _script,
                     timeout: options.ConnectionTimeout,
                     commandType: in _commandType,
-                    isTransactionOperation: transaction != null);
+                    isTransactionOperation: transaction != null,
+                    prepareStatements: options.PrepareStatements);
 
-                (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
+                (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
             }
 
             if (options.DetailErrorMessage)
@@ -217,7 +216,6 @@ namespace Thomas.Database
 #endif
         }
 
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Prepare()
         {
@@ -261,7 +259,7 @@ namespace Thomas.Database
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object? ExecuteScalar() => _command.ExecuteScalar();
+        public object ExecuteScalar() => _command.ExecuteScalar();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
@@ -283,11 +281,11 @@ namespace Thomas.Database
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken)
         {
-            var list = new List<T>();
-
             _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
             var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+
+            var list = new List<T>();
 
             while (await _reader.ReadAsync(cancellationToken))
                 list.Add(parser(_reader));
@@ -300,25 +298,26 @@ namespace Thomas.Database
         {
             if (await _reader.NextResultAsync(cancellationToken))
             {
-                var list = new List<T>();
                 var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
 
+                var list = new List<T>();
                 while (await _reader.ReadAsync(cancellationToken))
                     list.Add(parser(_reader));
 
                 return list;
             }
-            
+
             return Enumerable.Empty<T>().ToList();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<T> ReadListItems<T>()
         {
-            var list = new List<T>();
-
             _reader = _command!.ExecuteReader(_commandBehavior);
+
             var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+
+            var list = new List<T>();
 
             while (_reader.Read())
                 list.Add(parser(_reader));
@@ -328,13 +327,14 @@ namespace Thomas.Database
 
         public IEnumerable<List<T>> FetchData<T>(int batchSize)
         {
-            var list = new List<T>(batchSize);
-
             _reader = _command!.ExecuteReader(_commandBehavior);
 
             var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
 
             int counter = 0;
+
+            var list = new List<T>(batchSize);
+
             while (_reader.Read())
             {
                 counter++;
@@ -357,9 +357,9 @@ namespace Thomas.Database
         {
             if (_reader.NextResult())
             {
-                var list = new List<T>();
-
                 var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+
+                var list = new List<T>();
 
                 while (_reader.Read())
                     list.Add(parser(_reader));
@@ -407,9 +407,9 @@ namespace Thomas.Database
                     await _connection.DisposeAsync();
             }
 #else
-            Dispose();
+            await Task.Run(() => Dispose());
 #endif
-            GC.SuppressFinalize(this);
         }
+
     }
 }

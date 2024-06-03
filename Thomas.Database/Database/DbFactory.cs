@@ -11,7 +11,7 @@ namespace Thomas.Database
             if (config == null)
                 throw new System.Exception("Database configuration not found");
 
-            return new DbBase(in config,in buffered);
+            return new DbBase(in config, in buffered);
         }
 
         public static void AddDbBuilder(TableBuilder builder) => DbConfigurationFactory.AddTableBuilder(in builder);

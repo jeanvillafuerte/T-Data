@@ -10,7 +10,6 @@ using System.Reflection.Emit;
 using System.Text;
 using System.Xml;
 using Thomas.Database.Configuration;
-using Thomas.Database.Core.Provider.Formatter;
 
 namespace Thomas.Database.Core.Provider
 {
@@ -18,17 +17,17 @@ namespace Thomas.Database.Core.Provider
     {
         #region SqlServer
 
-        internal static readonly Type? SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
-        internal static readonly Type? SqlServerCommandType = Type.GetType("Microsoft.Data.SqlClient.SqlCommand, Microsoft.Data.SqlClient")!;
-        private static readonly Type? SqlDbParameterCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlParameterCollection, Microsoft.Data.SqlClient")!;
-        internal static readonly Type? SqlDbParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
-        internal static readonly Type? SqlDataReader = Type.GetType("Microsoft.Data.SqlClient.SqlDataReader, Microsoft.Data.SqlClient")!;
-        internal static readonly Type? SqlDbType = typeof(SqlDbType);
-        private static readonly MethodInfo? GetSqlParametersProperty = SqlServerCommandType?.GetProperty("Parameters", SqlDbParameterCollectionType)!.GetGetMethod()!;
-        private static readonly MethodInfo? AddSqlParameterMethod = SqlDbParameterCollectionType?.GetMethod("Add", new[] { SqlDbParameterType })!;
-        internal static readonly ConstructorInfo? SqlServerConnectionConstructor = SqlServerConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo? SqlServerCommandConstructor = SqlServerCommandType?.GetConstructor(new Type[] { typeof(string), SqlServerConnectionType })!;
-        private static readonly ConstructorInfo? SqlParameterConstructor = SqlDbParameterType?.GetConstructor(new[] { typeof(string), SqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        internal static readonly Type SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlServerCommandType = Type.GetType("Microsoft.Data.SqlClient.SqlCommand, Microsoft.Data.SqlClient")!;
+        private static readonly Type SqlDbParameterCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlParameterCollection, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlDbParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlDataReader = Type.GetType("Microsoft.Data.SqlClient.SqlDataReader, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlDbType = typeof(SqlDbType);
+        private static readonly MethodInfo GetSqlParametersProperty = SqlServerCommandType?.GetProperty("Parameters", SqlDbParameterCollectionType)!.GetGetMethod()!;
+        private static readonly MethodInfo AddSqlParameterMethod = SqlDbParameterCollectionType?.GetMethod("Add", new[] { SqlDbParameterType })!;
+        internal static readonly ConstructorInfo SqlServerConnectionConstructor = SqlServerConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
+        internal static readonly ConstructorInfo SqlServerCommandConstructor = SqlServerCommandType?.GetConstructor(new Type[] { typeof(string), SqlServerConnectionType })!;
+        private static readonly ConstructorInfo SqlParameterConstructor = SqlDbParameterType?.GetConstructor(new[] { typeof(string), SqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
 
         private static readonly IReadOnlyDictionary<Type, string> SqlTypes = new Dictionary<Type, string>
         {
@@ -80,22 +79,22 @@ namespace Thomas.Database.Core.Provider
 
         #region Oracle
 
-        private static readonly Type? OracleDbCommandType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleCommand, Oracle.ManagedDataAccess");
-        internal static readonly Type? OracleConnectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleConnection, Oracle.ManagedDataAccess");
-        internal static readonly Type? OracleDbParameterType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameter, Oracle.ManagedDataAccess");
-        internal static readonly Type? OracleDataReader = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDataReader, Oracle.ManagedDataAccess")!;
-        internal static readonly PropertyInfo? OracleValueParameterProperty = OracleDbParameterType?.GetProperty("Value");
-        private static readonly Type? OracleDbParameterCollectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameterCollection, Oracle.ManagedDataAccess");
-        internal static readonly Type? OracleDbType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDbType, Oracle.ManagedDataAccess");
+        private static readonly Type OracleDbCommandType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleCommand, Oracle.ManagedDataAccess");
+        internal static readonly Type OracleConnectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleConnection, Oracle.ManagedDataAccess");
+        internal static readonly Type OracleDbParameterType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameter, Oracle.ManagedDataAccess");
+        internal static readonly Type OracleDataReader = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDataReader, Oracle.ManagedDataAccess")!;
+        internal static readonly PropertyInfo OracleValueParameterProperty = OracleDbParameterType?.GetProperty("Value");
+        private static readonly Type OracleDbParameterCollectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameterCollection, Oracle.ManagedDataAccess");
+        internal static readonly Type OracleDbType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDbType, Oracle.ManagedDataAccess");
 
-        private static readonly MethodInfo? GetOracleParametersProperty = OracleDbCommandType?.GetProperty("Parameters", OracleDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo? AddOracleParameterMethod = OracleDbParameterCollectionType?.GetMethod("Add", new[] { OracleDbParameterType });
-        internal static readonly ConstructorInfo? OracleConnectionConstructor = OracleConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo? OracleCommandConstructor = OracleDbCommandType?.GetConstructor(new Type[] { typeof(string), OracleConnectionType })!;
-        internal static readonly ConstructorInfo? OracleParameterConstructor = OracleDbParameterType?.GetConstructor(new[] { typeof(string), OracleDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
-        private static readonly MethodInfo? OracleDbCommandBindByName = OracleDbCommandType?.GetProperty("BindByName", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
-        private static readonly MethodInfo? OracleDbCommandInitialLONGFetchSize = OracleDbCommandType?.GetProperty("InitialLONGFetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
-        private static readonly MethodInfo? OracleDbCommandFetchSize = OracleDbCommandType?.GetProperty("FetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
+        private static readonly MethodInfo GetOracleParametersProperty = OracleDbCommandType?.GetProperty("Parameters", OracleDbParameterCollectionType)!.GetGetMethod();
+        private static readonly MethodInfo AddOracleParameterMethod = OracleDbParameterCollectionType?.GetMethod("Add", new[] { OracleDbParameterType });
+        internal static readonly ConstructorInfo OracleConnectionConstructor = OracleConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
+        internal static readonly ConstructorInfo OracleCommandConstructor = OracleDbCommandType?.GetConstructor(new Type[] { typeof(string), OracleConnectionType })!;
+        internal static readonly ConstructorInfo OracleParameterConstructor = OracleDbParameterType?.GetConstructor(new[] { typeof(string), OracleDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        private static readonly MethodInfo OracleDbCommandBindByName = OracleDbCommandType?.GetProperty("BindByName", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
+        private static readonly MethodInfo OracleDbCommandInitialLONGFetchSize = OracleDbCommandType?.GetProperty("InitialLONGFetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
+        private static readonly MethodInfo OracleDbCommandFetchSize = OracleDbCommandType?.GetProperty("FetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
 
         private static readonly IReadOnlyDictionary<Type, string> OracleDbTypes = new Dictionary<Type, string>
         {
@@ -143,18 +142,18 @@ namespace Thomas.Database.Core.Provider
 
         #region PostgreSql
 
-        private static readonly Type? PostgresDbCommandType = Type.GetType("Npgsql.NpgsqlCommand, Npgsql");
-        internal static readonly Type? PostgresConnectionType = Type.GetType("Npgsql.NpgsqlConnection, Npgsql");
-        internal static readonly Type? PostgresDbParameterType = Type.GetType("Npgsql.NpgsqlParameter, Npgsql");
-        private static readonly Type? PostgresDbParameterCollectionType = Type.GetType("Npgsql.NpgsqlParameterCollection, Npgsql");
-        internal static readonly Type? PostgresDataReader = Type.GetType("Npgsql.NpgsqlDataReader, Npgsql");
-        private static readonly Type? PostgresDbType = Type.GetType("NpgsqlTypes.NpgsqlDbType, Npgsql");
+        private static readonly Type PostgresDbCommandType = Type.GetType("Npgsql.NpgsqlCommand, Npgsql");
+        internal static readonly Type PostgresConnectionType = Type.GetType("Npgsql.NpgsqlConnection, Npgsql");
+        internal static readonly Type PostgresDbParameterType = Type.GetType("Npgsql.NpgsqlParameter, Npgsql");
+        private static readonly Type PostgresDbParameterCollectionType = Type.GetType("Npgsql.NpgsqlParameterCollection, Npgsql");
+        internal static readonly Type PostgresDataReader = Type.GetType("Npgsql.NpgsqlDataReader, Npgsql");
+        private static readonly Type PostgresDbType = Type.GetType("NpgsqlTypes.NpgsqlDbType, Npgsql");
 
-        private static readonly MethodInfo? GetPostgresParametersProperty = PostgresDbCommandType?.GetProperty("Parameters", PostgresDbParameterCollectionType)?.GetGetMethod();
-        private static readonly MethodInfo? AddPostgresParameterMethod = PostgresDbParameterCollectionType?.GetMethod("Add", new[] { PostgresDbParameterType });
-        internal static readonly ConstructorInfo? PostgresConnectionConstructor = PostgresConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo? PostgresCommandConstructor = PostgresDbCommandType?.GetConstructor(new Type[] { typeof(string), PostgresConnectionType })!;
-        internal static readonly ConstructorInfo? PostgresParameterConstructor = PostgresDbParameterType?.GetConstructor(new[] { typeof(string), PostgresDbType, typeof(int), typeof(string), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(DataRowVersion), typeof(object) });
+        private static readonly MethodInfo GetPostgresParametersProperty = PostgresDbCommandType?.GetProperty("Parameters", PostgresDbParameterCollectionType)?.GetGetMethod();
+        private static readonly MethodInfo AddPostgresParameterMethod = PostgresDbParameterCollectionType?.GetMethod("Add", new[] { PostgresDbParameterType });
+        internal static readonly ConstructorInfo PostgresConnectionConstructor = PostgresConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
+        internal static readonly ConstructorInfo PostgresCommandConstructor = PostgresDbCommandType?.GetConstructor(new Type[] { typeof(string), PostgresConnectionType })!;
+        internal static readonly ConstructorInfo PostgresParameterConstructor = PostgresDbParameterType?.GetConstructor(new[] { typeof(string), PostgresDbType, typeof(int), typeof(string), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(DataRowVersion), typeof(object) });
 
         private static readonly IReadOnlyDictionary<Type, string> PostgresDbTypes = new Dictionary<Type, string>
         {
@@ -201,18 +200,18 @@ namespace Thomas.Database.Core.Provider
 
         #region Mysql
 
-        private static readonly Type? MysqlDbCommandType = Type.GetType("MySql.Data.MySqlClient.MySqlCommand, MySql.Data");
-        private static readonly Type? MysqlDbType = Type.GetType("MySql.Data.MySqlClient.MySqlDbType, MySql.Data");
-        internal static readonly Type? MysqlConnectionType = Type.GetType("MySql.Data.MySqlClient.MySqlConnection, MySql.Data");
-        internal static readonly Type? MysqlDbParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
-        internal static readonly Type? MysqlDataReader = Type.GetType("MySql.Data.MySqlClient.MySqlDataReader, MySql.Data");
-        private static readonly Type? MysqlDbParameterCollectionType = Type.GetType("MySql.Data.MySqlClient.MySqlParameterCollection, MySql.Data");
+        private static readonly Type MysqlDbCommandType = Type.GetType("MySql.Data.MySqlClient.MySqlCommand, MySql.Data");
+        private static readonly Type MysqlDbType = Type.GetType("MySql.Data.MySqlClient.MySqlDbType, MySql.Data");
+        internal static readonly Type MysqlConnectionType = Type.GetType("MySql.Data.MySqlClient.MySqlConnection, MySql.Data");
+        internal static readonly Type MysqlDbParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
+        internal static readonly Type MysqlDataReader = Type.GetType("MySql.Data.MySqlClient.MySqlDataReader, MySql.Data");
+        private static readonly Type MysqlDbParameterCollectionType = Type.GetType("MySql.Data.MySqlClient.MySqlParameterCollection, MySql.Data");
 
-        private static readonly MethodInfo? GetMysqlParametersProperty = MysqlDbCommandType?.GetProperty("Parameters", MysqlDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo? AddMysqlParameterMethod = MysqlDbParameterCollectionType?.GetMethod("Add", new[] { MysqlDbParameterType });
-        internal static readonly ConstructorInfo? MysqlConnectionConstructor = MysqlConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo? MysqlCommandConstructor = MysqlDbCommandType?.GetConstructor(new Type[] { typeof(string), MysqlConnectionType })!;
-        internal static readonly ConstructorInfo? MysqlParameterConstructor = MysqlDbParameterType?.GetConstructor(new[] { typeof(string), MysqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        private static readonly MethodInfo GetMysqlParametersProperty = MysqlDbCommandType?.GetProperty("Parameters", MysqlDbParameterCollectionType)!.GetGetMethod();
+        private static readonly MethodInfo AddMysqlParameterMethod = MysqlDbParameterCollectionType?.GetMethod("Add", new[] { MysqlDbParameterType });
+        internal static readonly ConstructorInfo MysqlConnectionConstructor = MysqlConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
+        internal static readonly ConstructorInfo MysqlCommandConstructor = MysqlDbCommandType?.GetConstructor(new Type[] { typeof(string), MysqlConnectionType })!;
+        internal static readonly ConstructorInfo MysqlParameterConstructor = MysqlDbParameterType?.GetConstructor(new[] { typeof(string), MysqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
 
         private readonly static IReadOnlyDictionary<Type, string> MySQLDbTypes = new Dictionary<Type, string>
         {
@@ -259,20 +258,20 @@ namespace Thomas.Database.Core.Provider
 
         #region Sqlite
 
-        private static readonly Type? SqliteDbCommandType = Type.GetType("Microsoft.Data.Sqlite.SqliteCommand, Microsoft.Data.Sqlite");
-        internal static readonly Type? SqliteConnectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite");
-        internal static readonly Type? SqliteDbParameterType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameter, Microsoft.Data.Sqlite");
-        internal static readonly Type? SqliteDataReader = Type.GetType("Microsoft.Data.Sqlite.SqliteDataReader, Microsoft.Data.Sqlite");
-        private static readonly Type? SqliteDbParameterCollectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameterCollection, Microsoft.Data.Sqlite");
-        private static readonly MethodInfo? GetSqliteParametersProperty = SqliteDbCommandType?.GetProperty("Parameters", SqliteDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo? AddSqliteParameterMethod = SqliteDbParameterCollectionType?.GetMethod("Add", new[] { SqliteDbParameterType });
-        internal static readonly ConstructorInfo? SqliteConnectionConstructor = SqliteConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo? SqliteCommandConstructor = SqliteDbCommandType?.GetConstructor(new Type[] { typeof(string), SqliteConnectionType })!;
-        internal static readonly ConstructorInfo? SqliteParameterConstructor = SqliteDbParameterType?.GetConstructor(new[] { typeof(string), typeof(object) })!;
+        private static readonly Type SqliteDbCommandType = Type.GetType("Microsoft.Data.Sqlite.SqliteCommand, Microsoft.Data.Sqlite");
+        internal static readonly Type SqliteConnectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite");
+        internal static readonly Type SqliteDbParameterType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameter, Microsoft.Data.Sqlite");
+        internal static readonly Type SqliteDataReader = Type.GetType("Microsoft.Data.Sqlite.SqliteDataReader, Microsoft.Data.Sqlite");
+        private static readonly Type SqliteDbParameterCollectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameterCollection, Microsoft.Data.Sqlite");
+        private static readonly MethodInfo GetSqliteParametersProperty = SqliteDbCommandType?.GetProperty("Parameters", SqliteDbParameterCollectionType)!.GetGetMethod();
+        private static readonly MethodInfo AddSqliteParameterMethod = SqliteDbParameterCollectionType?.GetMethod("Add", new[] { SqliteDbParameterType });
+        internal static readonly ConstructorInfo SqliteConnectionConstructor = SqliteConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
+        internal static readonly ConstructorInfo SqliteCommandConstructor = SqliteDbCommandType?.GetConstructor(new Type[] { typeof(string), SqliteConnectionType })!;
+        internal static readonly ConstructorInfo SqliteParameterConstructor = SqliteDbParameterType?.GetConstructor(new[] { typeof(string), typeof(object) })!;
 
-        private static readonly MethodInfo? GetParameterValue = typeof(DbParameter).GetProperty("Value").GetGetMethod()!;
-        private static readonly MethodInfo? GenericDbParametersCollection = typeof(DbCommand).GetProperty("Parameters").GetGetMethod()!;
-        private static readonly MethodInfo? GenericDbParameterCollectionIndex = typeof(DbParameterCollection).GetProperty("Item", new[] { typeof(string) }).GetGetMethod()!;
+        private static readonly MethodInfo GetParameterValue = typeof(DbParameter).GetProperty("Value").GetGetMethod()!;
+        private static readonly MethodInfo GenericDbParametersCollection = typeof(DbCommand).GetProperty("Parameters").GetGetMethod()!;
+        private static readonly MethodInfo GenericDbParameterCollectionIndex = typeof(DbParameterCollection).GetProperty("Item", new[] { typeof(string) }).GetGetMethod()!;
 
         #endregion Sqlite
 
@@ -310,7 +309,9 @@ namespace Thomas.Database.Core.Provider
                     il.Emit(OpCodes.Call, parameter.PropertyInfo.GetSetMethod(true)!);
                 }
                 else
+                {
                     il.Emit(OpCodes.Callvirt, parameter.PropertyInfo.GetSetMethod(true)!);
+                }
             }
 
             il.Emit(OpCodes.Ret);
@@ -328,12 +329,13 @@ namespace Thomas.Database.Core.Provider
         /// <param name="hasOutputParameters">check if has output parameter the filter object</param>
         /// <param name="allParameters">list of parameter</param>
         /// <returns>instance of specific DbCommand provider with values preloaded</returns>
+        /// <exception cref="NotImplementedException"></exception>
         public static Func<object, string, string, DbCommand, DbCommand> GetSetupCommandDelegate(in Type type, in LoaderConfiguration options, out bool hasOutputParameters, out DbParameterInfo[] allParameters)
         {
             hasOutputParameters = false;
 
             PropertyInfo[] properties = Array.Empty<PropertyInfo>();
-            FluentApi.DbTable? table = null;
+            FluentApi.DbTable table = null;
 
             if (options.GenerateParameterWithKeys)
             {
@@ -344,7 +346,7 @@ namespace Thomas.Database.Core.Provider
                 if (DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out table))
                 {
                     if (options.KeyAsReturnValue)
-                        properties = table.Columns.Where(x => !x.Autogenerated).Select(x => x.Property).ToArray();
+                        properties = table.Columns.Where(x => !x.AutoGenerated).Select(x => x.Property).ToArray();
                     else
                         properties = table.Columns.Select(x => x.Property).ToArray();
                 }
@@ -369,13 +371,10 @@ namespace Thomas.Database.Core.Provider
 
                 if (options.Provider != SqlProvider.Sqlite)
                 {
-                    if (options.Provider == SqlProvider.Oracle)
+                    if (options.Provider == SqlProvider.Oracle && attributes.IsOracleCursor)
                     {
-                        if (attributes.IsOracleCursor)
-                        {
-                            enumValue = 121; //OracleDbType.RefCursor
-                            goto addParam;
-                        }
+                        enumValue = 121; //OracleDbType.RefCursor
+                        goto addParam;
                     }
 
                     enumValue = GetEnumValue(in options.Provider, item.PropertyType);
@@ -481,6 +480,7 @@ namespace Thomas.Database.Core.Provider
             var il = method.GetILGenerator();
 
             LocalBuilder commandInstance = null;
+
             if (!options.IsTransactionOperation)
                 SetupCommandBase(in il, in options, out commandInstance);
 
@@ -512,7 +512,6 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Castclass, typeof(DbCommand));
                 il.Emit(OpCodes.Ret);
             }
-            
 
             Type funcType = Expression.GetFuncType(new [] { typeof(object), typeof(string), typeof(string), typeof(DbCommand), typeof(DbCommand) } );
 
@@ -532,7 +531,7 @@ namespace Thomas.Database.Core.Provider
             var dbTypes = DbTypes(in provider);
 
             if (!dbTypes.ContainsKey(type))
-                throw new KeyNotFoundException($"{type.Name} key was no found on {provider.ToString()} mapping");
+                throw new KeyNotFoundException($"{type.Name} key was no found on {provider} mapping");
 
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             if (Enum.TryParse(dbType, dbTypes[type], true, out var enumVal))
@@ -540,8 +539,8 @@ namespace Thomas.Database.Core.Provider
             if (EnumExtensions.TryParse(dbType, dbTypes[type], true, out var enumVal))
 #endif
                 return (int)enumVal!;
-            else
-                throw new NotSupportedException($"Conversion not supported from {type.Name} to Enum {dbTypes[type]} in {provider.ToString()} mapping");
+
+           throw new NotSupportedException($"Conversion not supported from {type.Name} to Enum {dbTypes[type]} in {provider} mapping");
         }
 
         private static void SetupCommandBase(in ILGenerator il, in LoaderConfiguration options, out LocalBuilder commandInstance)
@@ -653,9 +652,9 @@ namespace Thomas.Database.Core.Provider
             if (parameters.Length == 0)
                 return;
 
-            MethodInfo? parametersProperty = null;
-            ConstructorInfo? parametersConstructor = null;
-            MethodInfo? addParameterMethod = null;
+            MethodInfo parametersProperty = null;
+            ConstructorInfo parametersConstructor = null;
+            MethodInfo addParameterMethod = null;
 
             switch (options.Provider)
             {
@@ -791,7 +790,6 @@ namespace Thomas.Database.Core.Provider
             il.Emit(OpCodes.Ldstr, parameter.Name);
             il.Emit(OpCodes.Ldarg_0);
 
-
             if (parameter.Direction == ParameterDirection.Output)
             {
                 il.Emit(OpCodes.Pop);
@@ -815,7 +813,8 @@ namespace Thomas.Database.Core.Provider
             SqlProvider.Oracle => OracleDbType,
             SqlProvider.MySql => MysqlDbType,
             SqlProvider.Sqlite => null,
-            SqlProvider.PostgreSql => PostgresDbType
+            SqlProvider.PostgreSql => PostgresDbType,
+            _ => throw new NotImplementedException()
         };
 
         internal static IReadOnlyDictionary<Type, string> DbTypes(in SqlProvider provider)
@@ -826,7 +825,8 @@ namespace Thomas.Database.Core.Provider
                 SqlProvider.Oracle => OracleDbTypes,
                 SqlProvider.MySql => MySQLDbTypes,
                 SqlProvider.Sqlite => null,
-                SqlProvider.PostgreSql => PostgresDbTypes
+                SqlProvider.PostgreSql => PostgresDbTypes,
+                _ => throw new NotImplementedException()
             };
         }
 
@@ -841,7 +841,6 @@ namespace Thomas.Database.Core.Provider
             public readonly int FetchSize;
             public readonly List<DbParameterInfo> AdditionalOracleRefCursors;
 
-            //command values
             public readonly string Query;
             public readonly int Timeout;
             public readonly CommandType CommandType;

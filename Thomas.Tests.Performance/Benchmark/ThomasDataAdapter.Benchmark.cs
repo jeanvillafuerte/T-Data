@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.IdentityModel.Tokens;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 using Thomas.Cache;
@@ -17,7 +16,7 @@ namespace Thomas.Tests.Performance.Benchmark
     [ThreadingDiagnoser]
 #endif
     [MemoryDiagnoser]
-    public class ThomasDataAdapterBenckmark : BenckmarkBase
+    public class ThomasDataAdapterBenchmark : BenckmarkBase
     {
         [GlobalSetup]
         public void Setup()
@@ -94,7 +93,7 @@ namespace Thomas.Tests.Performance.Benchmark
         [Benchmark(Description = "ToList<> T with nullables")]
         public List<PersonWithNullables> ToList2()
         {
-           return DbFactory.GetDbContext("db").ToList<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
+            return DbFactory.GetDbContext("db").ToList<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }
 
         [Benchmark(Description = "Single<> T with nullables")]

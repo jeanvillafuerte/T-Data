@@ -20,7 +20,7 @@ namespace Thomas.Database.Core.Provider
             return getConnectionAction!(stringConnection);
         }
 
-        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetadata(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
+        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
         {
             if (!options.IsExecuteNonQuery)
                 commandBehavior |= CommandBehavior.SequentialAccess;
@@ -45,7 +45,7 @@ namespace Thomas.Database.Core.Provider
             }
         }
 
-        #endregion
+        #endregion build connection
 
         public static DbCommand CreateCommand(in DbConnection connection, in string script, in CommandType commandType, in int timeout)
         {
@@ -57,7 +57,7 @@ namespace Thomas.Database.Core.Provider
             return command;
         }
 
-        public static bool IsCancellatedOperationException(in Exception? exception)
+        public static bool IsCancelatedOperationException(in Exception exception)
         {
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             return exception.Message.AsSpan().Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase);
@@ -66,10 +66,9 @@ namespace Thomas.Database.Core.Provider
 #endif
         }
 
-
         internal static object GetValueFromOracleParameter(in IDbDataParameter parameter)
         {
-            var valueObject = DatabaseHelperProvider.OracleValueParameterProperty.GetValue(parameter);
+            var valueObject = OracleValueParameterProperty.GetValue(parameter);
             var valueType = valueObject.GetType();
             PropertyInfo valueProperty = valueType.GetProperty("Value");
             return valueProperty.GetValue(valueObject);

@@ -4,15 +4,12 @@ namespace Thomas.Cache.MemoryCache
 {
     internal sealed class DbDataCache : IDbDataCache
     {
-        private static DbDataCache instance;
+        private static DbDataCache? instance;
         public static DbDataCache Instance
         {
             get
             {
-                if (instance == null)
-                {
-                    instance = new DbDataCache();
-                }
+                instance ??= new DbDataCache();
                 return instance;
             }
         }

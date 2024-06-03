@@ -95,9 +95,9 @@ namespace Thomas.Database.Core.Provider
         public readonly PropertyInfo PropertyInfo;
         public readonly Type PropertyType;
         public readonly int DbType;
-        public readonly object? Value;
+        public readonly object Value;
 
-        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object? value)
+        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value)
         {
             Name = name;
             BindName = bindName;

@@ -9,19 +9,29 @@ using Thomas.Database.Core.WriteDatabase;
 
 namespace Thomas.Database
 {
-    public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbResulSet, IDbOperationResultAsync , IDbResultSetAsync
+    public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbResultSet, IDbOperationResultAsync , IDbResultSetAsync
     {
-        int Execute(in string script, in object? parameters = null);
+        int Execute(in string script, in object parameters = null);
 
-        T ToSingle<T>(Expression<Func<T, bool>>? where = null);
-        List<T> ToList<T>(Expression<Func<T, bool>>? where = null);
+        T ToSingle<T>(Expression<Func<T, bool>> where = null);
+        List<T> ToList<T>(Expression<Func<T, bool>> where = null);
 
-        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000);
+        /// <summary>
+        /// stream data from database
+        /// </summary>
+        /// <param name="script">SQL text</param>
+        /// <param name="parameters">object filter</param>
+        /// <param name="batchSize">size of collection batch, default 1000</param>
+        /// <returns>
+        /// The action to dispose explicitly connection
+        /// Enumerable of list of T streamed from database
+        /// </returns>
+        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object parameters = null, int batchSize = 1000);
 
         void ExecuteBlock(Action<IDatabase> func);
 
-        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>>? where);
-        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>>? where, [EnumeratorCancellation] CancellationToken cancellationToken);
+        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where);
+        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken);
 
         Task ExecuteBlockAsync(Func<IDatabase, Task> func);
         Task ExecuteBlockAsync(Func<IDatabase, CancellationToken, Task> func, CancellationToken cancellationToken);

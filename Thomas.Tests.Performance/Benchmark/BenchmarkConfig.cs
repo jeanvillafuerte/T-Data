@@ -40,10 +40,10 @@ namespace Thomas.Tests.Performance.Benchmark
 
             //AddJob(Job.Default.WithToolchain(CsProjClassicNetToolchain.Net48));
             AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(NetCoreAppSettings.NetCoreApp80)));
-            //AddJob(Job.MediumRun.WithGcServer(true).WithGcForce(true).WithId("ServerForce"));
-            //AddJob(Job.MediumRun.WithGcServer(true).WithGcForce(false).WithId("Server"));
-            //AddJob(Job.MediumRun.WithGcServer(false).WithGcForce(true).WithId("Workstation"));
-            //AddJob(Job.MediumRun.WithGcServer(false).WithGcForce(false).WithId("WorkstationForce"));
+            AddJob(Job.MediumRun.WithGcServer(true).WithGcForce(true).WithId("ServerForce"));
+            AddJob(Job.MediumRun.WithGcServer(true).WithGcForce(false).WithId("Server"));
+            AddJob(Job.MediumRun.WithGcServer(false).WithGcForce(true).WithId("Workstation"));
+            AddJob(Job.MediumRun.WithGcServer(false).WithGcForce(false).WithId("WorkstationForce"));
         }
 
     }

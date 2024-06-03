@@ -70,32 +70,23 @@ namespace Thomas.Cache
         }
 
 
-        public T? ToSingle<T>(Expression<Func<T, bool>>? where = null, bool refresh = false, string? key = null) where T : class, new()
+        public T? ToSingle<T>(Expression<Func<T, bool>> where = null, bool refresh = false, string? key = null) where T : class, new()
         {
-            try
-            {
-                var calculatedKey = SqlGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, key);
-                var fromCache = _cache.TryGet(calculatedKey, out QueryResult<T> result);
+            var calculatedKey = SQLGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, key);
+            var fromCache = _cache.TryGet(calculatedKey, out QueryResult<T>? result);
 
-                T data = result?.Data;
+            if (!fromCache || refresh)
+                result = ToSingle(calculatedKey, where);
 
-                if (!fromCache || refresh)
-                    data = ToSingle(calculatedKey, where);
-
-                return data;
-            }
-            catch(Exception ex)
-            {
-                throw new Exception(ex.StackTrace);
-            }
+            return result.Data;
         }
 
-        private T ToSingle<T>(int calculatedKey, Expression<Func<T, bool>>? where = null) where T : class, new()
+        private QueryResult<T> ToSingle<T>(int calculatedKey, Expression<Func<T, bool>> where) where T : class, new()
         {
             var data = _database.ToSingle<T>(where);
             var result = new QueryResult<T>(MethodHandled.ToSingleExpression, null, null, data, where);
             _cache.AddOrUpdate(calculatedKey, result);
-            return result.Data;
+            return result;
         }
 
         #endregion
@@ -104,22 +95,21 @@ namespace Thomas.Cache
 
         public List<T> ToList<T>(Expression<Func<T, bool>>? where = null, bool refresh = false, string? key = null) where T : class, new()
         {
-            var calculatedHash = SqlGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, key);
-            var fromCache = _cache.TryGet(calculatedHash, out QueryResult<List<T>> result);
-            List<T> data = result?.Data;
+            var calculatedHash = SQLGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, key);
+            var fromCache = _cache.TryGet(calculatedHash, out QueryResult<List<T>>? result);
 
             if (!fromCache || refresh)
-                data = ToList(calculatedHash, where);
+                result = ToList(calculatedHash, where);
 
-            return data;
+            return result.Data;
         }
 
-        private List<T> ToList<T>(int calculatedKey, Expression<Func<T, bool>>? where = null) where T : class, new()
+        private QueryResult<List<T>> ToList<T>(int calculatedKey, Expression<Func<T, bool>> where) where T : class, new()
         {
             var data = _database.ToList<T>(where);
             var result = new QueryResult<List<T>>(MethodHandled.ToListExpression, null, null, data, where);
             _cache.AddOrUpdate(calculatedKey, result);
-            return result.Data;
+            return result;
         }
 
         public List<T> ToList<T>(string script, object? parameters, bool refresh = false, string? identifier = null) where T : class, new()
@@ -273,20 +263,25 @@ namespace Thomas.Cache
             _cache.Clear(key.GetHashCode());
         }
 
+        private readonly static Type CachedDatabaseType = typeof(CachedDatabase)!;
+
         public void Refresh(string key, bool throwErrorIfNotFound = false)
         {
             var calculatedHash = HashHelper.GenerateHash(key);
-            if (DbDataCache.TryGetValue(calculatedHash, out IQueryResult item))
+            if (DbDataCache.TryGetValue(calculatedHash, out IQueryResult? item))
             {
+                if (item == null && throwErrorIfNotFound)
+                    throw new ArgumentNullException();
+
                 Type genericType = item.GetType().GetGenericArguments()[0];
                 string handler = item.MethodHandled.ToString();
                 string methodName = handler.IndexOf("List") > 0 ? "ToList" : handler.IndexOf("Single") > 0 ? "ToSingle" : "ToTuple";
 
-                MethodInfo methodInfo = null;
+                MethodInfo? methodInfo = null;
                 switch (item.MethodHandled)
                 {
                     case MethodHandled.ToListExpression:
-                        methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+                        methodInfo = CachedDatabaseType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
                         break;
                     case MethodHandled.ToListQueryString:
                         methodInfo = GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string), typeof(object), typeof(bool), typeof(string) }, null);
@@ -309,7 +304,10 @@ namespace Thomas.Cache
                         break;
                 }
 
-                var tupleArgs = methodName.Equals("ToTuple") ? ReflectionHelper.GetTupleGenericArguments(genericType) : null;
+                if (methodInfo == null)
+                    throw new ArgumentNullException($"Method '{methodName}' not found in '{GetType().Name}'.");
+
+                Type[]? tupleArgs = methodName.Equals("ToTuple") ? ReflectionHelper.GetTupleGenericArguments(genericType) : null;
 
                 var _ = item.MethodHandled switch
                 {
@@ -323,6 +321,8 @@ namespace Thomas.Cache
                     MethodHandled.ToTupleQueryString_5 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4]).Invoke(this, new object[] { item.Query, item.Params, true, key }),
                     MethodHandled.ToTupleQueryString_6 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5]).Invoke(this, new object[] { item.Query, item.Params, true, key }),
                     MethodHandled.ToTupleQueryString_7 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5], tupleArgs[6]).Invoke(this, new object[] { item.Query, item.Params, true, key }),
+                    MethodHandled.Execute => throw new NotImplementedException(),
+                    _ => throw new NotImplementedException(),
                 };
             }
             else
