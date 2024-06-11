@@ -216,7 +216,6 @@ namespace Thomas.Database
 #endif
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Prepare()
         {
             if (_connection == null)
@@ -231,7 +230,7 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
-                _commandSetupDelegate(_filter, null, null, _command);
+                _ = _commandSetupDelegate(_filter, null, null, _command);
             }
         }
 
@@ -254,7 +253,7 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
-                _commandSetupDelegate(_filter, null, null, _command);
+                _ = _commandSetupDelegate(_filter, null, null, _command);
             }
         }
 
@@ -278,7 +277,6 @@ namespace Thomas.Database
         }
 
         #region reader operations
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken)
         {
             _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
@@ -293,7 +291,6 @@ namespace Thomas.Database
             return list;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
             if (await _reader.NextResultAsync(cancellationToken))
@@ -310,7 +307,6 @@ namespace Thomas.Database
             return Enumerable.Empty<T>().ToList();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<T> ReadListItems<T>()
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
@@ -352,7 +348,6 @@ namespace Thomas.Database
                 yield return list;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<T> ReadListNextItems<T>()
         {
             if (_reader.NextResult())

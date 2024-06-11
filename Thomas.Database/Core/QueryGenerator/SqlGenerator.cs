@@ -221,7 +221,6 @@ namespace Thomas.Database.Core.QueryGenerator
 
         #region Cache management
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureCacheItem(int key, string sqlText, out object filter)
         {
 #if NETFRAMEWORK || NETSTANDARD
@@ -632,7 +631,6 @@ namespace Thomas.Database.Core.QueryGenerator
         }
         #endregion Handlers
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int CalculateExpressionKey(in Expression<Func<T, bool>> expression, in Type type, in SqlOperation operation, in SqlProvider provider, in string key = null)
         {
             if (!string.IsNullOrEmpty(key))

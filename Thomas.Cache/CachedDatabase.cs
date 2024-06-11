@@ -30,7 +30,6 @@ namespace Thomas.Cache
             _sqlValues = sqlValues;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int CalculateHash(string script, object? parameters, string? identifier)
         {
             int _operationKey = 17;

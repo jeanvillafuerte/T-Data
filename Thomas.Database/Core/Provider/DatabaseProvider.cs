@@ -14,11 +14,8 @@ namespace Thomas.Database.Core.Provider
         #region build connection
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection)
-        {
-            ConnectionCache.TryGetValue(provider, out var getConnectionAction);
-            return getConnectionAction!(stringConnection);
-        }
+        internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
+        
 
         public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
         {
