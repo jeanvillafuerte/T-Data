@@ -303,9 +303,9 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Callvirt, GenericDbParameterCollectionIndex);
                 il.Emit(OpCodes.Callvirt, GetParameterValue);
 
-                if (parameter.PropertyInfo.PropertyType.IsValueType)
+                if (parameter.PropertyType.IsValueType)
                 {
-                    il.Emit(OpCodes.Unbox_Any, parameter.PropertyInfo.PropertyType);
+                    il.Emit(OpCodes.Unbox_Any, parameter.PropertyType);
                     il.Emit(OpCodes.Call, parameter.PropertyInfo.GetSetMethod(true)!);
                 }
                 else
@@ -727,10 +727,7 @@ namespace Thomas.Database.Core.Provider
                     }
                     else
                     {
-                        il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
-
-                        if (parameter.PropertyInfo.PropertyType.IsValueType)
-                            il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+                        EmitValue(in il, in parameter);
                     }
 
                     il.Emit(OpCodes.Newobj, parametersConstructor);
@@ -739,6 +736,96 @@ namespace Thomas.Database.Core.Provider
                 }
             }
         }
+
+        #region value getters
+
+        private static bool ShouldValidateValue(string typeName) => typeName switch
+        {
+            "Nullable`1" => true,
+            "String" => true,
+            "DateTime" => true,
+            "TimeSpan" => true,
+            "Guid" => true,
+            "StringBuilder" => true,
+            "XmlDocument" => true,
+            "Byte[]" => true,
+            _ => false,
+        };
+
+        /*
+        * handle default values as null (default) or compatible with DbType that way load parameters could be more fluent
+        * recommended use null-able properties for a natural interpretation of null values
+        */
+        private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter)
+        {
+            il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
+
+            if (ShouldValidateValue(parameter.PropertyType.Name))
+            {
+                var underlyingType = Nullable.GetUnderlyingType(parameter.PropertyType);
+
+                MethodInfo valueGetter;
+                if (underlyingType != null)
+                {
+                    valueGetter = typeof(DatabaseHelperProvider).GetMethod("GetValueGeneric", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(new[] { underlyingType });
+                }
+                else
+                {
+                    valueGetter = typeof(DatabaseHelperProvider).GetMethod("GetValue", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { parameter.PropertyType }, null);
+                }
+
+                il.Emit(OpCodes.Call, valueGetter);
+            }
+            else if (parameter.PropertyType.IsValueType)
+            {
+                il.Emit(OpCodes.Box, parameter.PropertyType);
+            }
+        }
+
+        private static object GetValue(DateTime value)
+        {
+            return DateTime.MinValue.Equals(value) ? (object)DBNull.Value : value;
+
+        }
+
+        private static object GetValue(TimeSpan value)
+        {
+            return TimeSpan.MinValue.Equals(value) ? (object)DBNull.Value : value;
+
+        }
+
+        private static object GetValue(byte[] value)
+        {
+            return value == null || value.Length == 0 ? (object)DBNull.Value : value;
+
+        }
+
+        private static object GetValueGeneric<T>(T? value) where T : struct
+        {
+            return value.HasValue ? value : (object)DBNull.Value;
+        }
+
+        private static object GetValue(Guid value)
+        {
+            return Guid.Empty.Equals(value) ? (object)DBNull.Value : value;
+        }
+
+        private static object GetValue(string value)
+        {
+            return value == null ? (object)DBNull.Value : value;
+        }
+
+        private static object GetValue(StringBuilder value)
+        {
+            return value == null || value.Length == 0 ? (object)DBNull.Value : value;
+        }
+
+        private static object GetValue(XmlDocument value)
+        {
+            return value == null ? (object)DBNull.Value : value;
+        }
+
+        #endregion
 
         private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter)
         {
@@ -771,10 +858,7 @@ namespace Thomas.Database.Core.Provider
             }
             else
             {
-                il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
-
-                if (parameter.PropertyInfo.PropertyType.IsValueType)
-                    il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+                EmitValue(in il, in parameter);
             }
 
             il.Emit(OpCodes.Newobj, PostgresParameterConstructor);
@@ -797,9 +881,7 @@ namespace Thomas.Database.Core.Provider
             }
             else
             {
-                il.Emit(OpCodes.Callvirt, parameter.PropertyInfo.GetGetMethod());
-                if (parameter.PropertyInfo.PropertyType.IsValueType)
-                    il.Emit(OpCodes.Box, parameter.PropertyInfo.PropertyType);
+                EmitValue(in il, in parameter);
             }
 
             il.Emit(OpCodes.Newobj, SqliteParameterConstructor);

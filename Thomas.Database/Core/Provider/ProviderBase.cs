@@ -105,7 +105,7 @@ namespace Thomas.Database.Core.Provider
             Precision = precision;
             Direction = direction;
             PropertyInfo = propertyInfo;
-            PropertyType = propertyType;
+            PropertyType = propertyType != null ? propertyType : propertyInfo != null ? propertyInfo.PropertyType : null;
             DbType = dbType;
             Value = value;
         }
