@@ -1,15 +1,16 @@
 # ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
 
-## Simplified setup for robust database operations.
+## Simplified setup for robust database operations by relief having to manage connection, commands or transactions
 
 ### 🌟 Join Us in Shaping the Future of ThomasDataAdapter! 🌟
 Join us in refining a library designed to streamline database interactions effortlessly. Your insights, tests, and small enhancements can make a big difference. Feel free to fix bugs and suggest features.
 
 ### 🎯 Features:
 
+- Support for NET CORE and NET FRAMEWORK
 - Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
 - Expanded transaction support through the use of lambda expressions.
-- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
+- Attribute configuration for DbParameter, including parameter direction, size, and precision.
 - Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
 - Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
 - Full support for record types.
@@ -135,17 +136,24 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3
 | .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<T> (buffered)'       | 602.0 us | 38.75 us | 13.36 us | 1,661.1 | 1.9531 |  26.45 KB |
 ```
 
+### Best practices
+
+- For fastest data retrieve prefer use Store procedure over Sql text queries
+- Prefer use Records over Anemic class to retrieve data
+- Try different bufferSize values when need read streams for optimal performance 
+- Columns defined as NOT NULL will enhance the generate algorithm because will avoid IsDBNull branching
+- Use latest database provider library version as much as possible for security and performance concerns
+- Use nullable Datatype for classes used to write operations or store procedures object filter for more natural interpretation of DBNull when is possible, here are more DbNull implicit values from other datatypes:
+
 ### Considerations
-Library's purpose is to make easy DB interactions with a simple configuration and match columns with fields. Obviously it doesn't attempt to solve every problem.
+Library's purpose is to make easy DB interactions with a simple configuration. Obviously it doesn't attempt to solve every problem.
 There are some considerations at development time:
 
 - Ensure that the specific database provider library is installed in your project, as it will be accessed via reflection by this library.
-- Compatible with .NET Core versions 6 and 8.
-- Configuration for CRUD functions is required using TableBuilder.
+- Configuration for write operations (insert, update and delete) requires TableBuilder preferring at application startup.
  
 ### Limitations
 Be aware of the following limitations:
 
 - Currently limited to specific DB library providers, with plans to expand support in the future.
-- Utilizes [Sigil](https://github.com/kevin-montrose/Sigil) a powerful reflection.emit ILGenerator. However, I consider remove it.
-- Does not support .NET Framework.
+- Depend on [Sigil](https://github.com/kevin-montrose/Sigil) a powerful reflection.emit ILGenerator. However, I consider remove it.
