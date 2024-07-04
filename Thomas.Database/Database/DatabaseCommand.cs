@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database.Core.Provider;
 using Thomas.Database.Database;
+using Thomas.Database.Configuration;
+
 using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
 
 namespace Thomas.Database
@@ -20,20 +21,20 @@ namespace Thomas.Database
         private readonly string _connectionString;
         private readonly SqlProvider _provider;
         private readonly int _timeout;
-        private readonly object? _filter;
+        private readonly object _filter;
         private readonly int _preparationQueryKey;
         private readonly int _operationKey;
-        private readonly Action<object, DbCommand> _actionParameterLoader;
-        private readonly bool _hasOutParameters;
+        private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
+        private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
-        private DbCommand? _command;
         private readonly int _bufferSize;
-        private readonly bool _prepareStatements;
-        private DbDataReader? _reader;
+        private readonly DbCommandConfiguration _configuration;
+        private DbDataReader _reader;
 
         //object to share in transaction context
-        private DbConnection? _connection;
-        private readonly DbTransaction? _transaction;
+        private DbCommand _command;
+        private DbConnection _connection;
+        private readonly DbTransaction _transaction;
 
         // output parameters
         public IEnumerable<IDbDataParameter> OutParameters
@@ -71,28 +72,20 @@ namespace Thomas.Database
         public DatabaseCommand(
             in DbSettings options,
             in string script,
-            in object? filter,
+            in object filter,
             in DbCommandConfiguration configuration,
-            in bool noCacheMetaData,
+            in bool buffered,
             in DbTransaction transaction = null,
             in DbCommand command = null)
         {
-            
+            _configuration = configuration;
             _bufferSize = options.BufferSize;
             _script = script;
             _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
-            _prepareStatements = options.PrepareStatements;
             _filter = filter;
             _command = command;
-
-            if (transaction != null)
-            {
-                _transaction = transaction;
-                _connection = _command.Connection;
-                _command.Parameters.Clear();
-            }
 
             _operationKey = 17;
             unchecked
@@ -102,7 +95,19 @@ namespace Thomas.Database
                 _operationKey = (_operationKey * 23) + configuration.GetHashCode();
             }
 
-            Type? filterType = null;
+            if (transaction != null)
+            {
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+
+                unchecked
+                {
+                    _operationKey = (_operationKey * 23) + _transaction.GetType().GetHashCode();
+                }
+            }
+
+            Type filterType = null;
             if (_filter != null)
             {
                 filterType = filter.GetType();
@@ -113,41 +118,48 @@ namespace Thomas.Database
                 _preparationQueryKey = _operationKey;
             }
 
-            if (!noCacheMetaData && DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
             {
                 _commandType = commandMetadata.CommandType;
-                _hasOutParameters = commandMetadata.HasOutputParameters;
                 _commandBehavior = commandMetadata.CommandBehavior;
-                _actionParameterLoader = commandMetadata.ParserDelegate;
+                _commandSetupDelegate = commandMetadata.LoadParametersDelegate;
+                _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
             }
             else
             {
                 _commandBehavior = configuration.CommandBehavior;
+
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
-                var isTuple = configuration.IsTuple();
                 _commandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
+
                 DbParameterInfo[] additionalOutputParameters = null;
 
-                if (isStoreProcedure && _provider == SqlProvider.Oracle && isTuple)
+                if (_provider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
                 {
-                    int cursorsToAdd = (int)configuration.MethodHandled - 3;
+                    int cursorsToAdd = new [] { MethodHandled.ToSingleQueryString, MethodHandled.ToListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
                     additionalOutputParameters = new DbParameterInfo[cursorsToAdd];
 
                     for (int i = 0; i < cursorsToAdd; i++)
                     {
-                        string name = $"p_cursor{i}";
+                        string name = $"C_CURSOR{i + 1}";
                         additionalOutputParameters[i] = new DbParameterInfo(in name, in name, 0, 0, ParameterDirection.Output, null, null, 121, null); // 121 -> RefCursor
                     }
                 }
 
                 var loaderConfiguration = new LoaderConfiguration(
-                    keyAsReturnValue: configuration.KeyAsReturnValue,
-                    generateParameterWithKeys: configuration.GenerateParameterWithKeys,
-                    additionalOutputParameters: additionalOutputParameters?.ToList(),
-                    provider: _provider,
-                    fetchSize: options.FetchSize);
+                    keyAsReturnValue: in configuration.KeyAsReturnValue,
+                    generateParameterWithKeys: in configuration.GenerateParameterWithKeys,
+                    additionalOracleRefCursors: additionalOutputParameters?.ToList(),
+                    provider: in _provider,
+                    fetchSize: options.FetchSize,
+                    isExecuteNonQuery: configuration.MethodHandled == MethodHandled.Execute,
+                    query: in _script,
+                    timeout: options.ConnectionTimeout,
+                    commandType: in _commandType,
+                    isTransactionOperation: transaction != null,
+                    prepareStatements: options.PrepareStatements);
 
-                _actionParameterLoader = DatabaseProvider.GetCommandMetadata(in loaderConfiguration, in _preparationQueryKey, in _commandType, filterType, in noCacheMetaData, transaction == null && !isTuple, ref _hasOutParameters, ref _commandBehavior);
+                (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
             }
 
             if (options.DetailErrorMessage)
@@ -196,17 +208,20 @@ namespace Thomas.Database
         internal async Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
         {
             _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
-            _connection.OpenAsync(cancellationToken);
+            await _connection.OpenAsync(cancellationToken);
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             return await _connection.BeginTransactionAsync(cancellationToken);
+#else
+            return _connection.BeginTransaction();
+#endif
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Prepare()
         {
             if (_connection == null)
             {
-                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
-                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
+                _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
+                _connection = _command.Connection;
                 _connection.Open();
             }
             else
@@ -215,12 +230,8 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
+                _ = _commandSetupDelegate(_filter, null, null, _command);
             }
-
-            _actionParameterLoader?.Invoke(_filter, _command);
-
-            if (_commandType == CommandType.Text && _prepareStatements)
-                _command.Prepare();
         }
 
         /// <summary>
@@ -232,8 +243,8 @@ namespace Thomas.Database
         {
             if (_connection == null)
             {
-                _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
-                _command = DatabaseProvider.CreateCommand(in _connection, in _script, in _commandType, in _timeout);
+                _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
+                _connection = _command.Connection;
                 await _connection.OpenAsync(cancellationToken);
             }
             else
@@ -242,16 +253,12 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
+                _ = _commandSetupDelegate(_filter, null, null, _command);
             }
-
-            _actionParameterLoader?.Invoke(_filter, _command);
-
-            if (_commandType == CommandType.Text && _prepareStatements)
-                await _command.PrepareAsync(cancellationToken);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public object? ExecuteScalar() => _command.ExecuteScalar();
+        public object ExecuteScalar() => _command.ExecuteScalar();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
@@ -262,66 +269,51 @@ namespace Thomas.Database
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void NextResult() => _reader.NextResult();
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SetValuesOutFields()
         {
-            if (_hasOutParameters)
-            {
-                if (_reader != null)
-                    NextResult();
-
-                ReadOnlySpan<IDbDataParameter> parameters = OutParameters.ToArray();
-
-                foreach (var item in parameters)
-                    item.Value = _command!.Parameters[item.ParameterName].Value;
-
-                foreach (var parameter in parameters)
-                {
-                    var value = parameter.Value;
-                    var property = _filter!.GetType().GetProperty(parameter.ParameterName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.IgnoreCase);
-                    property?.SetValue(_filter, value);
-                }
-            }
+            if (_actionOutParameterLoader != null)
+                _actionOutParameterLoader(_filter, _command, _reader);
         }
 
         #region reader operations
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<List<T>> ReadListItemsAsync<T>(CancellationToken cancellationToken)
         {
+            _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
+
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+
             var list = new List<T>();
-
-            _reader = await _command.ExecuteReaderAsync(_commandBehavior | CommandBehavior.SequentialAccess, cancellationToken);
-
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
 
             while (await _reader.ReadAsync(cancellationToken))
                 list.Add(parser(_reader));
 
-            parser = null;
             return list;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
-            var list = new List<T>();
+            if (await _reader.NextResultAsync(cancellationToken))
+            {
+                var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
 
-            await _reader.NextResultAsync(cancellationToken);
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+                var list = new List<T>();
+                while (await _reader.ReadAsync(cancellationToken))
+                    list.Add(parser(_reader));
 
-            while (await _reader.ReadAsync(cancellationToken))
-                list.Add(parser(_reader));
+                return list;
+            }
 
-            parser = null;
-            return list;
+            return Enumerable.Empty<T>().ToList();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<T> ReadListItems<T>()
         {
-            var list = new List<T>();
+            _reader = _command!.ExecuteReader(_commandBehavior);
 
-            _reader = _command!.ExecuteReader(_commandBehavior | CommandBehavior.SequentialAccess);
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+
+            var list = new List<T>();
 
             while (_reader.Read())
                 list.Add(parser(_reader));
@@ -331,13 +323,14 @@ namespace Thomas.Database
 
         public IEnumerable<List<T>> FetchData<T>(int batchSize)
         {
-            var list = new List<T>(batchSize);
+            _reader = _command!.ExecuteReader(_commandBehavior);
 
-            _reader = _command!.ExecuteReader(_commandBehavior | CommandBehavior.SequentialAccess);
-
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
 
             int counter = 0;
+
+            var list = new List<T>(batchSize);
+
             while (_reader.Read())
             {
                 counter++;
@@ -355,19 +348,21 @@ namespace Thomas.Database
                 yield return list;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public List<T> ReadListNextItems<T>()
         {
-            var list = new List<T>();
+            if (_reader.NextResult())
+            {
+                var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
 
-            _reader.NextResult();
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _provider, in _bufferSize);
+                var list = new List<T>();
 
-            while (_reader.Read())
-                list.Add(parser(_reader));
+                while (_reader.Read())
+                    list.Add(parser(_reader));
 
-            parser = null;
-            return list;
+                return list;
+            }
+
+            return Enumerable.Empty<T>().ToList();
         }
 
         #endregion reader operations
@@ -391,6 +386,7 @@ namespace Thomas.Database
 
         public async ValueTask DisposeAsync()
         {
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             if (_reader != null)
             {
                 await _reader.DisposeAsync();
@@ -405,8 +401,10 @@ namespace Thomas.Database
                 if (_connection != null)
                     await _connection.DisposeAsync();
             }
-
-            GC.SuppressFinalize(this);
+#else
+            await Task.Run(() => Dispose());
+#endif
         }
+
     }
 }

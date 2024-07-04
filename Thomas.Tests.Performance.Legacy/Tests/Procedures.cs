@@ -1,6 +1,6 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache.Factory;
+using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -60,19 +60,20 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 source.CancelAfter(1);
                 try
                 {
-                    DbFactory.GetDbContext(db).ExecuteAsync("WAITFOR DELAY '00:00:03'", false, source.Token);
+                    DbFactory.GetDbContext(db).ExecuteAsync("WAITFOR DELAY '00:00:03'", null, source.Token);
                 }
                 catch (System.Exception ex) { }
 
                 return Task.FromResult(1);
-            }, null, "ExecuteAsync Timeout");
+            }, null, "ExecuteAsync Timeout", true);
 
             await PerformOperationAsync(() =>
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(1);
-                return DbFactory.GetDbContext(db).ExecuteOpAsync("WAITFOR DELAY '00:00:03'", false, source.Token);
-            }, null, "ExecuteOpAsync Timeout");
+                return DbFactory.GetDbContext(db).ExecuteOpAsync("" +
+                    "WAITFOR DELAY '00:00:03'", null, source.Token);
+            }, null, "ExecuteOpAsync Timeout", true);
 
             await PerformOperationAsync(() =>
             {

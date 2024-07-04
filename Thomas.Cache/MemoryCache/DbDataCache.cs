@@ -4,22 +4,19 @@ namespace Thomas.Cache.MemoryCache
 {
     internal sealed class DbDataCache : IDbDataCache
     {
-        private static DbDataCache instance;
+        private static DbDataCache? instance;
         public static DbDataCache Instance
         {
             get
             {
-                if (instance == null)
-                {
-                    instance = new DbDataCache();
-                }
+                instance ??= new DbDataCache();
                 return instance;
             }
         }
 
         private DbDataCache() { }
 
-        private static ConcurrentDictionary<int, IQueryResult> CacheObject { get; set; } = new();
+        private static ConcurrentDictionary<int, IQueryResult> CacheObject { get; set; } = new ConcurrentDictionary<int, IQueryResult>();
         
         public void AddOrUpdate(int key, IQueryResult data)
         {

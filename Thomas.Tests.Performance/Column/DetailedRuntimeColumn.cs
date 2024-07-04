@@ -2,6 +2,7 @@
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
+using Perfolizer.Mathematics.RangeEstimators;
 
 namespace Thomas.Tests.Performance.Column
 {
@@ -17,7 +18,7 @@ namespace Thomas.Tests.Performance.Column
             var report = summary.Reports.Single(r => r.BenchmarkCase == benchmarkCase);
             var runtimeInfo = report.GetRuntimeInfo();
             var splitIndex = runtimeInfo.IndexOf(',');
-            return runtimeInfo[..splitIndex];
+            return runtimeInfo.Substring(0, splitIndex);
         }
 
         public string GetValue(Summary summary, BenchmarkCase benchmarkCase, SummaryStyle style) => GetValue(summary, benchmarkCase);

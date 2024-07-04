@@ -39,7 +39,7 @@ namespace Thomas.Database.Configuration
             return configuration;
         }
 
-        public static void AddTableBuilder(TableBuilder tableBuilder)
+        public static void AddTableBuilder(in TableBuilder tableBuilder)
         {
             Tables = new ConcurrentDictionary<string, DbTable>(tableBuilder.Tables);
         }

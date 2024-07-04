@@ -3,11 +3,9 @@ using System.Data.Common;
 using System.Data;
 using System.Reflection;
 using Thomas.Database.Attributes;
-using Thomas.Database.Exceptions;
 using System.Collections.Concurrent;
 using System.Reflection.Emit;
 using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 
 namespace Thomas.Database.Core.Provider
 {
@@ -16,41 +14,22 @@ namespace Thomas.Database.Core.Provider
         internal static readonly ConcurrentDictionary<int, CommandMetadata> CommandMetadata = new ConcurrentDictionary<int, CommandMetadata>(Environment.ProcessorCount * 2, 50);
         internal static readonly ConcurrentDictionary<SqlProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<SqlProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ParameterDirection GetParameterDireccion(PropertyInfo property)
+        static DbParameterAttribute GetDbParameterAttribute(in PropertyInfo property)
         {
             foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterDirectionAttribute attr)
-                    return GetDirection(attr.Direction);
+                if (attribute is DbParameterAttribute attr)
+                {
+                    attr.Size = property.PropertyType == typeof(decimal) && attr.Size == 0 ? (byte)18 : attr.Size;
+                    attr.Precision = property.PropertyType == typeof(decimal) && attr.Precision == 0  ? (byte)6 : attr.Precision;
+                    return attr;
+                }
 
-            return ParameterDirection.Input;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static ParameterDirection GetDirection(ParamDirection direction) => direction switch
-        {
-            ParamDirection.Input => ParameterDirection.Input,
-            ParamDirection.InputOutput => ParameterDirection.InputOutput,
-            ParamDirection.Output => ParameterDirection.Output,
-            _ => throw new UnknownParameterDirectionException()
-        };
-
-        static int? GetParameterSize(PropertyInfo property)
-        {
-            foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterSizeAttribute attr)
-                    return attr.Size;
-
-            return null;
-        }
-
-        static int? GetParameterPrecision(PropertyInfo property)
-        {
-            foreach (var attribute in property.GetCustomAttributes(true))
-                if (attribute is ParameterPrecisionAttribute attr)
-                    return attr.Precision;
-
-            return null;
+            return new DbParameterAttribute {
+                Direction = ParameterDirection.Input,
+                Size = property.PropertyType == typeof(decimal) ? (byte)18 : (byte)0,
+                Precision = property.PropertyType == typeof(decimal) ? (byte)6 : (byte)0,
+                Name = property.Name
+            };
         }
 
         internal static void LoadConnectionDelegate(SqlProvider provider)
@@ -58,23 +37,28 @@ namespace Thomas.Database.Core.Provider
             if (!ConnectionCache.TryGetValue(provider, out var connection))
             {
                 ConstructorInfo constructorInfo = null;
-
+                Type connectionType = null;
                 switch (provider)
                 {
                     case SqlProvider.SqlServer:
                         constructorInfo = SqlServerConnectionConstructor;
+                        connectionType = SqlServerConnectionType;
                         break;
                     case SqlProvider.MySql:
                         constructorInfo = MysqlConnectionConstructor;
+                        connectionType = MysqlConnectionType;
                         break;
                     case SqlProvider.PostgreSql:
                         constructorInfo = PostgresConnectionConstructor;
+                        connectionType = PostgresConnectionType;
                         break;
                     case SqlProvider.Oracle:
                         constructorInfo = OracleConnectionConstructor;
+                        connectionType = OracleConnectionType;
                         break;
                     case SqlProvider.Sqlite:
                         constructorInfo = SqliteConnectionConstructor;
+                        connectionType = SqliteConnectionType;
                         break;
                 }
 
@@ -85,9 +69,9 @@ namespace Thomas.Database.Core.Provider
 
                 var method = new DynamicMethod(
                     $"Get{provider}Connection",
-                    typeof(DbConnection),
+                    connectionType,
                     argTypes,
-                    typeof(DbConnection).Module);
+                    connectionType.Module);
 
                 var il = method.GetILGenerator();
 
@@ -95,7 +79,7 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Newobj, constructorInfo);
                 il.Emit(OpCodes.Ret);
 
-                Type actionType = Expression.GetFuncType(new[] { typeof(string), typeof(DbConnection) });
+                Type actionType = Expression.GetFuncType(new[] { typeof(string), connectionType });
                 ConnectionCache.TryAdd(provider, (Func<string, DbConnection>)method.CreateDelegate(actionType)!);
             }
         }
@@ -111,9 +95,9 @@ namespace Thomas.Database.Core.Provider
         public readonly PropertyInfo PropertyInfo;
         public readonly Type PropertyType;
         public readonly int DbType;
-        public readonly object? Value;
+        public readonly object Value;
 
-        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object? value)
+        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value)
         {
             Name = name;
             BindName = bindName;
@@ -121,7 +105,7 @@ namespace Thomas.Database.Core.Provider
             Precision = precision;
             Direction = direction;
             PropertyInfo = propertyInfo;
-            PropertyType = propertyType;
+            PropertyType = propertyType != null ? propertyType : propertyInfo != null ? propertyInfo.PropertyType : null;
             DbType = dbType;
             Value = value;
         }

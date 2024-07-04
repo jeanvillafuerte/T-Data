@@ -2,11 +2,12 @@
 using Microsoft.Extensions.Configuration;
 using BenchmarkDotNet.Attributes;
 using Thomas.Cache;
-using Thomas.Cache.Factory;
 using Thomas.Database;
 using Thomas.Database.Configuration;
 using Thomas.Tests.Performance.Entities;
+#if NETCOREAPP
 using Microsoft.EntityFrameworkCore;
+#endif
 using Thomas.Database.Core.FluentApi;
 
 namespace Thomas.Tests.Performance.Benchmark
@@ -37,7 +38,9 @@ namespace Thomas.Tests.Performance.Benchmark
 
             var tableBuilder = new TableBuilder();
             tableBuilder.Configure<Person>(x => x.Id).AddFieldsAsColumns<Person>().DbName(tableName);
+#if NETCOREAPP
             tableBuilder.Configure<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
+#endif
             DbFactory.AddDbBuilder(tableBuilder);
         }
 
@@ -46,7 +49,7 @@ namespace Thomas.Tests.Performance.Benchmark
             tableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             TableName = tableName;
 
-            DbFactory.GetDbContext("db").ExecuteBlock((service) =>
+            DbFactory.GetDbContext("db", buffered: false).ExecuteBlock((service) =>
             {
                 string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
                                                 BEGIN
@@ -69,7 +72,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
                                                 END";
 
-                var result = service.ExecuteOp(tableScriptDefinition, null, noCacheMetadata: true);
+                var result = service.ExecuteOp(tableScriptDefinition, null);
 
                 if (!result.Success)
                 {
@@ -78,28 +81,28 @@ namespace Thomas.Tests.Performance.Benchmark
 
                 var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
 
-                result = service.ExecuteOp(checkSp1, null, noCacheMetadata: true);
+                result = service.ExecuteOp(checkSp1, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-                result = service.ExecuteOp(checkSp2, null, noCacheMetadata: true);
+                result = service.ExecuteOp(checkSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
 
-                result = service.ExecuteOp(createSp1, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createSp1, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
 
-                result = service.ExecuteOp(createSp2, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
@@ -113,7 +116,7 @@ namespace Thomas.Tests.Performance.Benchmark
 								SET @IDX = @IDX + 1;
 							END";
 
-                var dataResult = service.ExecuteOp(data, null, noCacheMetadata: true);
+                var dataResult = service.ExecuteOp(data, null);
 
                 if (!dataResult.Success)
                 {
@@ -122,7 +125,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
                 var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
 
-                result = service.ExecuteOp(createIndexByAge, null, noCacheMetadata: true);
+                result = service.ExecuteOp(createIndexByAge, null);
 
                 if (!result.Success)
                 {
@@ -135,11 +138,12 @@ namespace Thomas.Tests.Performance.Benchmark
         {
             if (CleanData)
             {
-                DbFactory.GetDbContext("db").Execute($"DROP TABLE {TableName}", null, noCacheMetadata: true);
+                DbFactory.GetDbContext("db", buffered: false).Execute($"DROP TABLE {TableName}", null);
             }
         }
     }
 
+#if NETCOREAPP
     public class PersonContext : DbContext
     {
         private readonly string _stringConnection;
@@ -160,4 +164,6 @@ namespace Thomas.Tests.Performance.Benchmark
             modelBuilder.Entity<Person>().ToTable("Person");
         }
     }
+
+#endif
 }

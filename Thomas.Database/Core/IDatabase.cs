@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database.Core;
@@ -7,13 +9,30 @@ using Thomas.Database.Core.WriteDatabase;
 
 namespace Thomas.Database
 {
-    public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbOperationResultAsync, IDbResulSet, IDbResultSetAsync, IDbSetExpression
+    public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbResultSet, IDbOperationResultAsync , IDbResultSetAsync
     {
-        int Execute(in string script, in object? parameters = null, in bool noCacheMetadata = false);
+        int Execute(in string script, in object parameters = null);
 
-        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object? parameters = null, int batchSize = 1000);
+        T ToSingle<T>(Expression<Func<T, bool>> where = null);
+        List<T> ToList<T>(Expression<Func<T, bool>> where = null);
+
+        /// <summary>
+        /// stream data from database
+        /// </summary>
+        /// <param name="script">SQL text</param>
+        /// <param name="parameters">object filter</param>
+        /// <param name="batchSize">size of collection batch, default 1000</param>
+        /// <returns>
+        /// The action to dispose explicitly connection
+        /// Enumerable of list of T streamed from database
+        /// </returns>
+        (Action, IEnumerable<List<T>>) FetchData<T>(string script, object parameters = null, int batchSize = 1000);
 
         void ExecuteBlock(Action<IDatabase> func);
+
+        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where);
+        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken);
+
         Task ExecuteBlockAsync(Func<IDatabase, Task> func);
         Task ExecuteBlockAsync(Func<IDatabase, CancellationToken, Task> func, CancellationToken cancellationToken);
 

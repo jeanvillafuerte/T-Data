@@ -6,19 +6,20 @@
         public int RowsAffected { get; set; }
         public string ErrorMessage { get; set; }
 
-        public static DbOpResult SuccessResult()
+        public static implicit operator DbOpResult(int rowsAffected)
         {
             return new DbOpResult
             {
-                Success = true
+                Success = true,
+                RowsAffected = rowsAffected
             };
         }
 
-        public static T ErrorResult<T>(in string message) where T : DbOpResult, new()
+        public static implicit operator DbOpResult(string errorMessage)
         {
-            return new T()
+            return new DbOpResult
             {
-                ErrorMessage = message,
+                ErrorMessage = errorMessage,
                 Success = false
             };
         }
@@ -26,14 +27,32 @@
 
     public class DbOpAsyncResult : DbOpResult
     {
-        public bool Cancelled { get; set; }
+        public bool Canceled { get; set; }
 
-        public static T OperationCancelled<T>() where T : DbOpAsyncResult, new()
+        public static T OperationCanceled<T>() where T : DbOpAsyncResult, new()
         {
             return new T()
             {
                 Success = false,
-                Cancelled = true
+                Canceled = true
+            };
+        }
+
+        public static implicit operator DbOpAsyncResult(int rowsAffected)
+        {
+            return new DbOpAsyncResult
+            {
+                Success = true,
+                RowsAffected = rowsAffected
+            };
+        }
+
+        public static implicit operator DbOpAsyncResult(string errorMessage)
+        {
+            return new DbOpAsyncResult
+            {
+                ErrorMessage = errorMessage,
+                Success = false
             };
         }
     }
@@ -42,12 +61,23 @@
     {
         public T Result { get; set; }
 
-        public static DbOpResult<T> SuccessResult(T result)
+        public static implicit operator DbOpResult<T>(T result)
         {
             return new DbOpResult<T>
             {
                 Success = true,
                 Result = result
+            };
+        }
+
+        public static implicit operator T(DbOpResult<T> result) => result.Result;
+
+        public static implicit operator DbOpResult<T>(string errorMessage)
+        {
+            return new DbOpResult<T>
+            {
+                ErrorMessage = errorMessage,
+                Success = false
             };
         }
 
@@ -57,7 +87,7 @@
     {
         public T Result { get; set; }
 
-        public static DbOpAsyncResult<T> SuccessResult(T result)
+        public static implicit operator DbOpAsyncResult<T>(T result)
         {
             return new DbOpAsyncResult<T>
             {
@@ -66,5 +96,13 @@
             };
         }
 
+        public static implicit operator DbOpAsyncResult<T>(string errorMessage)
+        {
+            return new DbOpAsyncResult<T>
+            {
+                ErrorMessage = errorMessage,
+                Success = false
+            };
+        }
     }
 }

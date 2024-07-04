@@ -20,8 +20,8 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
         public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToListOpAsync<> error resilient");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToSingleOpAsync<> error resilient");
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToListOpAsync<> error resilient", true);
+            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToSingleOpAsync<> error resilient", true);
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

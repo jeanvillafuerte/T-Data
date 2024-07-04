@@ -27,6 +27,8 @@ namespace Thomas.Database.Database
                     MethodHandled == MethodHandled.ToTupleQueryString_7;
         }
 
+        readonly internal bool EligibleForAddOracleCursors() => MethodHandled == MethodHandled.ToListQueryString || MethodHandled == MethodHandled.ToSingleQueryString || IsTuple();
+
         public override int GetHashCode()
         {
             var hash = 17;
