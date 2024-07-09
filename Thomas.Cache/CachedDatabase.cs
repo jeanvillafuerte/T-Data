@@ -20,10 +20,10 @@ namespace Thomas.Cache
     internal sealed class CachedDatabase : ICachedDatabase
     {
         private readonly IDbDataCache _cache;
-        private readonly IDatabase _database;
+        private readonly Lazy<IDatabase> _database;
         private readonly ISqlFormatter _sqlValues;
 
-        internal CachedDatabase(IDbDataCache cache, IDatabase database, ISqlFormatter sqlValues)
+        internal CachedDatabase(IDbDataCache cache, Lazy<IDatabase> database, ISqlFormatter sqlValues)
         {
             _cache = cache;
             _database = database;
@@ -60,7 +60,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var data = _database.ToSingle<T>(script, parameters);
+                var data = _database.Value.ToSingle<T>(script, parameters);
                 result = new QueryResult<T>(MethodHandled.ToSingleQueryString, script, parameters, data);
                 _cache.AddOrUpdate(calculatedKey, result);
             }
@@ -82,7 +82,7 @@ namespace Thomas.Cache
 
         private QueryResult<T> ToSingle<T>(int calculatedKey, Expression<Func<T, bool>> where) where T : class, new()
         {
-            var data = _database.ToSingle<T>(where);
+            var data = _database.Value.ToSingle<T>(where);
             var result = new QueryResult<T>(MethodHandled.ToSingleExpression, null, null, data, where);
             _cache.AddOrUpdate(calculatedKey, result);
             return result;
@@ -105,7 +105,7 @@ namespace Thomas.Cache
 
         private QueryResult<List<T>> ToList<T>(int calculatedKey, Expression<Func<T, bool>> where) where T : class, new()
         {
-            var data = _database.ToList<T>(where);
+            var data = _database.Value.ToList<T>(where);
             var result = new QueryResult<List<T>>(MethodHandled.ToListExpression, null, null, data, where);
             _cache.AddOrUpdate(calculatedKey, result);
             return result;
@@ -118,7 +118,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var data = _database.ToList<T>(script, parameters);
+                var data = _database.Value.ToList<T>(script, parameters);
                 result = new QueryResult<List<T>>(MethodHandled.ToListQueryString, script, parameters, data);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -140,7 +140,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>>>(MethodHandled.ToTupleQueryString_2, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -158,7 +158,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2, T3>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2, T3>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>>>(MethodHandled.ToTupleQueryString_3, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -177,7 +177,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2, T3, T4>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2, T3, T4>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>(MethodHandled.ToTupleQueryString_4, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -197,7 +197,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2, T3, T4, T5>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2, T3, T4, T5>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>(MethodHandled.ToTupleQueryString_5, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -218,7 +218,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2, T3, T4, T5, T6>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2, T3, T4, T5, T6>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>(MethodHandled.ToTupleQueryString_6, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }
@@ -240,7 +240,7 @@ namespace Thomas.Cache
 
             if (!fromCache || refresh)
             {
-                var tuple = _database.ToTuple<T1, T2, T3, T4, T5, T6, T7>(script, parameters);
+                var tuple = _database.Value.ToTuple<T1, T2, T3, T4, T5, T6, T7>(script, parameters);
                 result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>(MethodHandled.ToTupleQueryString_7, script, parameters, tuple);
                 _cache.AddOrUpdate(calculatedHash, result);
             }

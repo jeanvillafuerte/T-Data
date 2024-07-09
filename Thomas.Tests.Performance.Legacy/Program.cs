@@ -79,7 +79,7 @@ namespace Thomas.Tests.Performance.Legacy
 
             //custom table configuration made possible querying using expression 
             var tableBuilder = new TableBuilder();
-            DbTable dbTable = tableBuilder.Configure<Person>(x => x.Id);
+            DbTable dbTable = tableBuilder.AddTable<Person>(x => x.Id);
             dbTable.AddFieldsAsColumns<Person>().DbName(TableName);
             DbFactory.AddDbBuilder(tableBuilder);
         }
