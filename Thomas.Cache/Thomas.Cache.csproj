@@ -21,7 +21,7 @@
 - Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
 - Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
 - Full support for record types.</PackageReleaseNotes>
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <Copyright>2024 © Jean Villafuerte</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>

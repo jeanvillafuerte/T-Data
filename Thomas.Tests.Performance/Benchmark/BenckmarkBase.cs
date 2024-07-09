@@ -37,9 +37,9 @@ namespace Thomas.Tests.Performance.Benchmark
             SetDataBase(int.Parse(len), out var tableName);
 
             var tableBuilder = new TableBuilder();
-            tableBuilder.Configure<Person>(x => x.Id).AddFieldsAsColumns<Person>().DbName(tableName);
+            tableBuilder.AddTable<Person>(x => x.Id).AddFieldsAsColumns<Person>().DbName(tableName);
 #if NETCOREAPP
-            tableBuilder.Configure<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
+            tableBuilder.AddTable<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
 #endif
             DbFactory.AddDbBuilder(tableBuilder);
         }

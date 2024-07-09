@@ -24,7 +24,7 @@ namespace Thomas.Tests.Performance.Benchmark
             Start();
         }
 
-        [Benchmark(Description = "ToList<>", Baseline = true)]
+        [Benchmark(Description = "ToList<>")]
         public List<Person> ToList()
         {
             return DbFactory.GetDbContext("db").ToList<Person>($"SELECT * FROM {TableName}");

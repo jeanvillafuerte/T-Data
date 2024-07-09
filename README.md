@@ -143,7 +143,19 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3
 - Try different bufferSize values when need read streams for optimal performance 
 - Columns defined as NOT NULL will enhance the generate algorithm because will avoid IsDBNull branching
 - Use latest database provider library version as much as possible for security and performance concerns
-- Use nullable Datatype for classes used to write operations or store procedures object filter for more natural interpretation of DBNull when is possible, here are more DbNull implicit values from other datatypes:
+- Use nullable Datatype for classes used to write operations or store procedures object filter for more natural interpretation of DBNull when is possible, here are more DbNull implicit values:
+
+
+| Type        | implicit DbNull           | 
+| ------------- |:-------------:| 
+| String      | null |
+| Datetime      | MinValue      |
+| TimeSpan | MinValue      |
+| Guid | default      |
+| StringBuilder | null      |
+| XmlDocument | null      |
+| Byte[] | null or empty array     |
+| Nullable<> | not(HasValue)      |
 
 ### Considerations
 Library's purpose is to make easy DB interactions with a simple configuration. Obviously it doesn't attempt to solve every problem.
@@ -152,6 +164,34 @@ There are some considerations at development time:
 - Ensure that the specific database provider library is installed in your project, as it will be accessed via reflection by this library.
 - Configuration for write operations (insert, update and delete) requires TableBuilder preferring at application startup.
  
+### Db Types
+
+ - Nullable versions has the same corresponding DbType
+ - DateOnly and TimeOnly available in NET 6 or greater
+ - C# types will transform to their specific dbTypes to setup parameters command
+ - SQLite dbtypes won't setup so when create dynamically parameters the library itself to infer their type
+
+| C# Type        | SQL Server           | Oracle           | PostgreSQL           | MySQL
+| ------------- | ------------- | ------------- | ------------- |:-------------:|
+| string      | NVARCHAR | VARCHAR2 | VARCHAR | VARCHAR
+| short / ushort    | SMALLINT | INT16 | SMALLINT | INT16
+| int / uint      | INT | INT32 | INTEGER | INT32
+| long / ulong    | BIGINT | INT64 | BIGINT | INT64
+| byte / sbyte    | TINYINT | BYTE | SMALLINT | BYTE
+| decimal      | DECIMAL | DECIMAL | NUMERIC | DECIMAL
+| double      | FLOAT | DOUBLE | DOUBLE | DOUBLE
+| float      | FLOAT | FLOAT | REAL | FLOAT
+| bool      | BIT | INT32 (0 or 1) | BIT | BIT
+| DateTime      | DATETIME | DATE | TIMESTAMP | DATETIME
+| TimeSpan      | TIME | IntervalDS | INTERVAL | -
+| Guid      | UNIQUEIDENTIFIER | RAW | UUID | GUID
+| byte[]      | VARBINARY | BLOB | BYTEA | MEDIUMBLOB
+| SqlBinary      | BINARY | - | - | -
+| XmlDocument      | XML | XMLTYPE | XML | XML
+| StringBuilder      | TEXT | CLOB | TEXT | -
+| DateOnly      | DATE | DATE | DATE | DATE
+| TimeOnly      | TIME | - | TIME | TIME
+
 ### Limitations
 Be aware of the following limitations:
 

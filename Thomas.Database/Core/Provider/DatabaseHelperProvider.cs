@@ -165,6 +165,7 @@ namespace Thomas.Database.Core.Provider
             { typeof(decimal), "NUMERIC" },
             { typeof(bool), "BIT" },
             { typeof(DateTime), "TIMESTAMP" },
+            { typeof(TimeSpan), "INTERVAL" },
             { typeof(double), "DOUBLE" },
             { typeof(float), "REAL" },
             { typeof(Guid), "UUID" },
@@ -185,6 +186,7 @@ namespace Thomas.Database.Core.Provider
             { typeof(decimal?), "NUMERIC" },
             { typeof(bool?), "BIT" },
             { typeof(DateTime?), "TIMESTAMP" },
+            { typeof(TimeSpan?), "INTERVAL" },
             { typeof(double?), "DOUBLE" },
             { typeof(float?), "REAL" },
             { typeof(Guid?), "UUID" },
@@ -193,7 +195,8 @@ namespace Thomas.Database.Core.Provider
             { typeof(ulong?), "BIGINT" },
             { typeof(sbyte?), "SMALLINT" },
             { typeof(XmlDocument), "XML" },
-            { typeof(byte[]), "BYTEA" }
+            { typeof(byte[]), "BYTEA" },
+            { typeof(StringBuilder), "TEXT" }
         };
 
         #endregion PostgreSql
