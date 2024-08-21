@@ -9,7 +9,10 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 using Thomas.Database.Configuration;
+using Thomas.Database.Core.Converters;
+using Column = Thomas.Database.Core.FluentApi.DbColumn;
 
 namespace Thomas.Database.Core.Provider
 {
@@ -20,14 +23,14 @@ namespace Thomas.Database.Core.Provider
         internal static readonly Type SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
         internal static readonly Type SqlServerCommandType = Type.GetType("Microsoft.Data.SqlClient.SqlCommand, Microsoft.Data.SqlClient")!;
         private static readonly Type SqlDbParameterCollectionType = Type.GetType("Microsoft.Data.SqlClient.SqlParameterCollection, Microsoft.Data.SqlClient")!;
-        internal static readonly Type SqlDbParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
+        internal static readonly Type SqlParameterType = Type.GetType("Microsoft.Data.SqlClient.SqlParameter, Microsoft.Data.SqlClient")!;
         internal static readonly Type SqlDataReader = Type.GetType("Microsoft.Data.SqlClient.SqlDataReader, Microsoft.Data.SqlClient")!;
         internal static readonly Type SqlDbType = typeof(SqlDbType);
         private static readonly MethodInfo GetSqlParametersProperty = SqlServerCommandType?.GetProperty("Parameters", SqlDbParameterCollectionType)!.GetGetMethod()!;
-        private static readonly MethodInfo AddSqlParameterMethod = SqlDbParameterCollectionType?.GetMethod("Add", new[] { SqlDbParameterType })!;
+        private static readonly MethodInfo AddSqlParameterMethod = SqlDbParameterCollectionType?.GetMethod("Add", new[] { SqlParameterType })!;
         internal static readonly ConstructorInfo SqlServerConnectionConstructor = SqlServerConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
         internal static readonly ConstructorInfo SqlServerCommandConstructor = SqlServerCommandType?.GetConstructor(new Type[] { typeof(string), SqlServerConnectionType })!;
-        private static readonly ConstructorInfo SqlParameterConstructor = SqlDbParameterType?.GetConstructor(new[] { typeof(string), SqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        private static readonly ConstructorInfo SqlParameterConstructor = SqlParameterType?.GetConstructor(new[] { typeof(string), SqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
 
         private static readonly IReadOnlyDictionary<Type, string> SqlTypes = new Dictionary<Type, string>
         {
@@ -49,29 +52,11 @@ namespace Thomas.Database.Core.Provider
 #if NET6_0_OR_GREATER
                 { typeof(DateOnly), "Date"},
                 { typeof(TimeOnly), "Time"},
-                { typeof(DateOnly?), "Date"},
-                { typeof(TimeOnly?), "Time"},
 #endif
                 { typeof(sbyte), "TinyInt"},
                 { typeof(byte[]), "Varbinary"},
                 { typeof(TimeSpan), "Time"},
                 { typeof(XmlDocument), "Xml"},
-                { typeof(short?), "SmallInt"},
-                { typeof(int?), "Int"},
-                { typeof(long?), "BigInt"},
-                { typeof(byte?), "TinyInt"},
-                { typeof(decimal?), "Decimal"},
-                { typeof(double?), "Float"},
-                { typeof(float?), "Float"},
-                { typeof(bool?), "Bit"},
-                { typeof(DateTime?), "DateTime"},
-                { typeof(Guid?), "UniqueIdentifier"},
-                { typeof(SqlBinary?), "Binary"},
-                { typeof(ushort?), "SmallInt"},
-                { typeof(uint?), "Int"},
-                { typeof(ulong?), "BigInt"},
-                { typeof(sbyte?), "TinyInt"},
-                { typeof(TimeSpan?), "Time"},
                 { typeof(StringBuilder), "Text"}
           };
 
@@ -81,17 +66,19 @@ namespace Thomas.Database.Core.Provider
 
         private static readonly Type OracleDbCommandType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleCommand, Oracle.ManagedDataAccess");
         internal static readonly Type OracleConnectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleConnection, Oracle.ManagedDataAccess");
-        internal static readonly Type OracleDbParameterType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameter, Oracle.ManagedDataAccess");
+        internal static readonly Type OracleParameterType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameter, Oracle.ManagedDataAccess");
         internal static readonly Type OracleDataReader = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDataReader, Oracle.ManagedDataAccess")!;
-        internal static readonly PropertyInfo OracleValueParameterProperty = OracleDbParameterType?.GetProperty("Value");
+        internal static readonly PropertyInfo OracleValueParameterProperty = OracleParameterType?.GetProperty("Value");
         private static readonly Type OracleDbParameterCollectionType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleParameterCollection, Oracle.ManagedDataAccess");
         internal static readonly Type OracleDbType = Type.GetType("Oracle.ManagedDataAccess.Client.OracleDbType, Oracle.ManagedDataAccess");
 
         private static readonly MethodInfo GetOracleParametersProperty = OracleDbCommandType?.GetProperty("Parameters", OracleDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo AddOracleParameterMethod = OracleDbParameterCollectionType?.GetMethod("Add", new[] { OracleDbParameterType });
+        private static readonly MethodInfo GetOracleParameterCollectionIndex = OracleDbParameterCollectionType?.GetProperty("Item", new[] { typeof(string) }).GetGetMethod()!;
+        private static readonly MethodInfo GetOracleParameterValue = OracleParameterType?.GetProperty("Value").GetGetMethod()!;
+        private static readonly MethodInfo AddOracleParameterMethod = OracleDbParameterCollectionType?.GetMethod("Add", new[] { OracleParameterType });
         internal static readonly ConstructorInfo OracleConnectionConstructor = OracleConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
         internal static readonly ConstructorInfo OracleCommandConstructor = OracleDbCommandType?.GetConstructor(new Type[] { typeof(string), OracleConnectionType })!;
-        internal static readonly ConstructorInfo OracleParameterConstructor = OracleDbParameterType?.GetConstructor(new[] { typeof(string), OracleDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        internal static readonly ConstructorInfo OracleParameterConstructor = OracleParameterType?.GetConstructor(new[] { typeof(string), OracleDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
         private static readonly MethodInfo OracleDbCommandBindByName = OracleDbCommandType?.GetProperty("BindByName", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
         private static readonly MethodInfo OracleDbCommandInitialLONGFetchSize = OracleDbCommandType?.GetProperty("InitialLONGFetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
         private static readonly MethodInfo OracleDbCommandFetchSize = OracleDbCommandType?.GetProperty("FetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();
@@ -113,26 +100,10 @@ namespace Thomas.Database.Core.Provider
             { typeof(ulong), "INT64" },
             { typeof(sbyte), "BYTE" },
             { typeof(TimeSpan), "IntervalDS" },
-            { typeof(short?), "INT16" },
-            { typeof(int?), "INT32" },
-            { typeof(long?), "INT64" },
-            { typeof(byte?), "BYTE" },
-            { typeof(decimal?), "DECIMAL" },
-            { typeof(bool?), "INT32" },
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             { typeof(DateOnly), "DATE" },
-            { typeof(DateOnly?), "DATE" },
 #endif
             { typeof(DateTime), "DATE" },
-            { typeof(DateTime?), "DATE" },
-            { typeof(double?), "DOUBLE" },
-            { typeof(float?), "FLOAT" },
-            { typeof(Guid?), "RAW" },
-            { typeof(ushort?), "INT16" },
-            { typeof(uint?), "INT32" },
-            { typeof(ulong?), "INT64" },
-            { typeof(sbyte?), "BYTE" },
-            { typeof(TimeSpan?), "IntervalDS" },
             { typeof(byte[]), "BLOB" },
             { typeof(XmlDocument), "XMLTYPE" },
             { typeof(StringBuilder), "CLOB" }
@@ -142,18 +113,18 @@ namespace Thomas.Database.Core.Provider
 
         #region PostgreSql
 
-        private static readonly Type PostgresDbCommandType = Type.GetType("Npgsql.NpgsqlCommand, Npgsql");
+        private static readonly Type PostgresCommandType = Type.GetType("Npgsql.NpgsqlCommand, Npgsql");
         internal static readonly Type PostgresConnectionType = Type.GetType("Npgsql.NpgsqlConnection, Npgsql");
-        internal static readonly Type PostgresDbParameterType = Type.GetType("Npgsql.NpgsqlParameter, Npgsql");
+        internal static readonly Type PostgresParameterType = Type.GetType("Npgsql.NpgsqlParameter, Npgsql");
         private static readonly Type PostgresDbParameterCollectionType = Type.GetType("Npgsql.NpgsqlParameterCollection, Npgsql");
         internal static readonly Type PostgresDataReader = Type.GetType("Npgsql.NpgsqlDataReader, Npgsql");
         private static readonly Type PostgresDbType = Type.GetType("NpgsqlTypes.NpgsqlDbType, Npgsql");
 
-        private static readonly MethodInfo GetPostgresParametersProperty = PostgresDbCommandType?.GetProperty("Parameters", PostgresDbParameterCollectionType)?.GetGetMethod();
-        private static readonly MethodInfo AddPostgresParameterMethod = PostgresDbParameterCollectionType?.GetMethod("Add", new[] { PostgresDbParameterType });
+        private static readonly MethodInfo GetPostgresParametersProperty = PostgresCommandType?.GetProperty("Parameters", PostgresDbParameterCollectionType)?.GetGetMethod();
+        private static readonly MethodInfo AddPostgresParameterMethod = PostgresDbParameterCollectionType?.GetMethod("Add", new[] { PostgresParameterType });
         internal static readonly ConstructorInfo PostgresConnectionConstructor = PostgresConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
-        internal static readonly ConstructorInfo PostgresCommandConstructor = PostgresDbCommandType?.GetConstructor(new Type[] { typeof(string), PostgresConnectionType })!;
-        internal static readonly ConstructorInfo PostgresParameterConstructor = PostgresDbParameterType?.GetConstructor(new[] { typeof(string), PostgresDbType, typeof(int), typeof(string), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(DataRowVersion), typeof(object) });
+        internal static readonly ConstructorInfo PostgresCommandConstructor = PostgresCommandType?.GetConstructor(new Type[] { typeof(string), PostgresConnectionType })!;
+        internal static readonly ConstructorInfo PostgresParameterConstructor = PostgresParameterType?.GetConstructor(new[] { typeof(string), PostgresDbType, typeof(int), typeof(string), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(DataRowVersion), typeof(object) });
 
         private static readonly IReadOnlyDictionary<Type, string> PostgresDbTypes = new Dictionary<Type, string>
         {
@@ -176,24 +147,7 @@ namespace Thomas.Database.Core.Provider
 #if NET6_0_OR_GREATER
             { typeof(DateOnly), "DATE" },
             { typeof(TimeOnly), "TIME" },
-            { typeof(DateOnly?), "DATE" },
-            { typeof(TimeOnly?), "TIME" },
 #endif
-            { typeof(short?), "SMALLINT" },
-            { typeof(int?), "INT" },
-            { typeof(long?), "BIGINT" },
-            { typeof(byte?), "SMALLINT" },
-            { typeof(decimal?), "NUMERIC" },
-            { typeof(bool?), "BIT" },
-            { typeof(DateTime?), "TIMESTAMP" },
-            { typeof(TimeSpan?), "INTERVAL" },
-            { typeof(double?), "DOUBLE" },
-            { typeof(float?), "REAL" },
-            { typeof(Guid?), "UUID" },
-            { typeof(ushort?), "SMALLINT" },
-            { typeof(uint?), "INT" },
-            { typeof(ulong?), "BIGINT" },
-            { typeof(sbyte?), "SMALLINT" },
             { typeof(XmlDocument), "XML" },
             { typeof(byte[]), "BYTEA" },
             { typeof(StringBuilder), "TEXT" }
@@ -206,15 +160,15 @@ namespace Thomas.Database.Core.Provider
         private static readonly Type MysqlDbCommandType = Type.GetType("MySql.Data.MySqlClient.MySqlCommand, MySql.Data");
         private static readonly Type MysqlDbType = Type.GetType("MySql.Data.MySqlClient.MySqlDbType, MySql.Data");
         internal static readonly Type MysqlConnectionType = Type.GetType("MySql.Data.MySqlClient.MySqlConnection, MySql.Data");
-        internal static readonly Type MysqlDbParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
+        internal static readonly Type MysqlParameterType = Type.GetType("MySql.Data.MySqlClient.MySqlParameter, MySql.Data");
         internal static readonly Type MysqlDataReader = Type.GetType("MySql.Data.MySqlClient.MySqlDataReader, MySql.Data");
         private static readonly Type MysqlDbParameterCollectionType = Type.GetType("MySql.Data.MySqlClient.MySqlParameterCollection, MySql.Data");
 
         private static readonly MethodInfo GetMysqlParametersProperty = MysqlDbCommandType?.GetProperty("Parameters", MysqlDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo AddMysqlParameterMethod = MysqlDbParameterCollectionType?.GetMethod("Add", new[] { MysqlDbParameterType });
+        private static readonly MethodInfo AddMysqlParameterMethod = MysqlDbParameterCollectionType?.GetMethod("Add", new[] { MysqlParameterType });
         internal static readonly ConstructorInfo MysqlConnectionConstructor = MysqlConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
         internal static readonly ConstructorInfo MysqlCommandConstructor = MysqlDbCommandType?.GetConstructor(new Type[] { typeof(string), MysqlConnectionType })!;
-        internal static readonly ConstructorInfo MysqlParameterConstructor = MysqlDbParameterType?.GetConstructor(new[] { typeof(string), MysqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
+        internal static readonly ConstructorInfo MysqlParameterConstructor = MysqlParameterType?.GetConstructor(new[] { typeof(string), MysqlDbType, typeof(int), typeof(ParameterDirection), typeof(bool), typeof(byte), typeof(byte), typeof(string), typeof(DataRowVersion), typeof(object) })!;
 
         private readonly static IReadOnlyDictionary<Type, string> MySQLDbTypes = new Dictionary<Type, string>
         {
@@ -226,6 +180,7 @@ namespace Thomas.Database.Core.Provider
             { typeof(decimal), "DECIMAL" },
             { typeof(bool), "BIT" },
             { typeof(DateTime), "DATETIME" },
+            { typeof(TimeSpan), "TIME" },
             { typeof(double), "DOUBLE" },
             { typeof(float), "FLOAT" },
             { typeof(Guid), "GUID" },
@@ -233,26 +188,10 @@ namespace Thomas.Database.Core.Provider
             { typeof(uint), "INT32" },
             { typeof(ulong), "INT64" },
             { typeof(sbyte), "BYTE" },
-            { typeof(short?), "INT16" },
-            { typeof(int?), "INT32" },
-            { typeof(long?), "INT64" },
-            { typeof(byte?), "BYTE" },
-            { typeof(decimal?), "DECIMAL" },
-            { typeof(bool?), "BIT" },
 #if NET6_0_OR_GREATER
             { typeof(DateOnly), "DATE" },
             { typeof(TimeOnly), "TIME" },
-            { typeof(DateOnly?), "DATE" },
-            { typeof(TimeOnly?), "TIME" },
 #endif
-            { typeof(DateTime?), "DATETIME" },
-            { typeof(double?), "DOUBLE" },
-            { typeof(float?), "FLOAT" },
-            { typeof(Guid?), "GUID" },
-            { typeof(ushort?), "INT16" },
-            { typeof(uint?), "INT32" },
-            { typeof(ulong?), "INT64" },
-            { typeof(sbyte?), "BYTE" },
             { typeof(byte[]), "MEDIUMBLOB" },
             { typeof(XmlDocument), "XML" }
         };
@@ -263,14 +202,14 @@ namespace Thomas.Database.Core.Provider
 
         private static readonly Type SqliteDbCommandType = Type.GetType("Microsoft.Data.Sqlite.SqliteCommand, Microsoft.Data.Sqlite");
         internal static readonly Type SqliteConnectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite");
-        internal static readonly Type SqliteDbParameterType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameter, Microsoft.Data.Sqlite");
+        internal static readonly Type SqliteParameterType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameter, Microsoft.Data.Sqlite");
         internal static readonly Type SqliteDataReader = Type.GetType("Microsoft.Data.Sqlite.SqliteDataReader, Microsoft.Data.Sqlite");
         private static readonly Type SqliteDbParameterCollectionType = Type.GetType("Microsoft.Data.Sqlite.SqliteParameterCollection, Microsoft.Data.Sqlite");
         private static readonly MethodInfo GetSqliteParametersProperty = SqliteDbCommandType?.GetProperty("Parameters", SqliteDbParameterCollectionType)!.GetGetMethod();
-        private static readonly MethodInfo AddSqliteParameterMethod = SqliteDbParameterCollectionType?.GetMethod("Add", new[] { SqliteDbParameterType });
+        private static readonly MethodInfo AddSqliteParameterMethod = SqliteDbParameterCollectionType?.GetMethod("Add", new[] { SqliteParameterType });
         internal static readonly ConstructorInfo SqliteConnectionConstructor = SqliteConnectionType?.GetConstructor(new Type[] { typeof(string) })!;
         internal static readonly ConstructorInfo SqliteCommandConstructor = SqliteDbCommandType?.GetConstructor(new Type[] { typeof(string), SqliteConnectionType })!;
-        internal static readonly ConstructorInfo SqliteParameterConstructor = SqliteDbParameterType?.GetConstructor(new[] { typeof(string), typeof(object) })!;
+        internal static readonly ConstructorInfo SqliteParameterConstructor = SqliteParameterType?.GetConstructor(new[] { typeof(string), typeof(object) })!;
 
         private static readonly MethodInfo GetParameterValue = typeof(DbParameter).GetProperty("Value").GetGetMethod()!;
         private static readonly MethodInfo GenericDbParametersCollection = typeof(DbCommand).GetProperty("Parameters").GetGetMethod()!;
@@ -278,7 +217,7 @@ namespace Thomas.Database.Core.Provider
 
         #endregion Sqlite
 
-        public static Action<object, DbCommand, DbDataReader> LoadOutParameterDelegate(in bool isExecuteNonQuery, in Type type, in DbParameterInfo[] parameters)
+        internal static Action<object, DbCommand, DbDataReader> LoadOutParameterDelegate(in bool isExecuteNonQuery, in Type type, in DbParameterInfo[] parameters, in SqlProvider provider)
         {
             Type[] argTypes = { typeof(object), typeof(DbCommand), typeof(DbDataReader) };
             var method = new DynamicMethod(
@@ -297,14 +236,31 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Pop);
             }
 
-            foreach (var parameter in parameters.Where(x => x.Direction == ParameterDirection.Output || x.Direction == ParameterDirection.InputOutput))
+            foreach (var parameter in parameters.Where(x => x.IsOutput))
             {
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldarg_1);
-                il.Emit(OpCodes.Callvirt, GenericDbParametersCollection);
-                il.Emit(OpCodes.Ldstr, parameter.Name);
-                il.Emit(OpCodes.Callvirt, GenericDbParameterCollectionIndex);
-                il.Emit(OpCodes.Callvirt, GetParameterValue);
+
+                if (provider == SqlProvider.Oracle)
+                {
+                    il.Emit(OpCodes.Castclass, OracleDbCommandType);
+                    il.Emit(OpCodes.Call, GetOracleParametersProperty);
+                    il.Emit(OpCodes.Ldstr, parameter.Name);
+                    il.Emit(OpCodes.Call, GetOracleParameterCollectionIndex);
+
+                    //pass the type to convert the value
+                    il.Emit(OpCodes.Ldtoken, parameter.PropertyType);
+                    il.Emit(OpCodes.Call, typeof(Type).GetMethod(nameof(Type.GetTypeFromHandle)));
+
+                    il.Emit(OpCodes.Call, typeof(DatabaseProvider).GetMethod(nameof(DatabaseProvider.GetValueFromOracleParameter), BindingFlags.Static | BindingFlags.NonPublic));
+                }
+                else
+                {
+                    il.Emit(OpCodes.Callvirt, GenericDbParametersCollection);
+                    il.Emit(OpCodes.Ldstr, parameter.Name);
+                    il.Emit(OpCodes.Callvirt, GenericDbParameterCollectionIndex);
+                    il.Emit(OpCodes.Callvirt, GetParameterValue);
+                }
 
                 if (parameter.PropertyType.IsValueType)
                 {
@@ -333,103 +289,9 @@ namespace Thomas.Database.Core.Provider
         /// <param name="allParameters">list of parameter</param>
         /// <returns>instance of specific DbCommand provider with values preloaded</returns>
         /// <exception cref="NotImplementedException"></exception>
-        public static Func<object, string, string, DbCommand, DbCommand> GetSetupCommandDelegate(in Type type, in LoaderConfiguration options, out bool hasOutputParameters, out DbParameterInfo[] allParameters)
+        internal static Func<object, string, string, DbCommand, DbCommand> GetSetupCommandDelegate(in Type type, in LoaderConfiguration options, out bool hasOutputParameters, out DbParameterInfo[] allParameters)
         {
             hasOutputParameters = false;
-
-            PropertyInfo[] properties = Array.Empty<PropertyInfo>();
-            FluentApi.DbTable table = null;
-
-            if (options.GenerateParameterWithKeys)
-            {
-                properties = new[] { DbConfigurationFactory.Tables[type.FullName].Key.Property };
-            }
-            else if (type != null)
-            {
-                if (DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out table))
-                {
-                    if (options.KeyAsReturnValue)
-                        properties = table.Columns.Where(x => !x.AutoGenerated).Select(x => x.Property).ToArray();
-                    else
-                        properties = table.Columns.Select(x => x.Property).ToArray();
-                }
-                else
-                {
-                    properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                }
-            }
-
-            int len = properties.Length + (options.KeyAsReturnValue ? 1 : 0) + (options.AdditionalOracleRefCursors?.Count ?? 0);
-
-#if NETCOREAPP
-            Span<DbParameterInfo> parameters = new DbParameterInfo[len];
-#else
-            var parameters = new DbParameterInfo[len];
-#endif
-            int counter = 0;
-            foreach (var item in properties)
-            {
-                var attributes = GetDbParameterAttribute(in item);
-                int enumValue = 0;
-
-                if (options.Provider != SqlProvider.Sqlite)
-                {
-                    if (options.Provider == SqlProvider.Oracle && attributes.IsOracleCursor)
-                    {
-                        enumValue = 121; //OracleDbType.RefCursor
-                        goto addParam;
-                    }
-
-                    enumValue = GetEnumValue(in options.Provider, item.PropertyType);
-                }
-
-            addParam:
-                parameters[counter++] = new DbParameterInfo(
-                    name: attributes.Name ?? item.Name,
-                    bindName: null,
-                    size: attributes.Size,
-                    precision: attributes.Precision,
-                    direction: attributes.Direction,
-                    propertyInfo: item,
-                    propertyType: null,
-                    dbType: enumValue,
-                    value: null);
-
-                hasOutputParameters = attributes.Direction == ParameterDirection.Output || attributes.Direction == ParameterDirection.InputOutput || hasOutputParameters;
-            }
-
-            if (options.KeyAsReturnValue && table != null)
-            {
-                parameters[counter++] = new DbParameterInfo(
-                    name: table.Key.Name,
-                    bindName: null,
-                    size: 0,
-                    precision: 0,
-                    direction: ParameterDirection.Output,
-                    propertyInfo: table.Key.Property,
-                    propertyType: table.Key.Property.PropertyType,
-                    dbType: options.Provider == SqlProvider.Sqlite ? 0 : GetEnumValue(in options.Provider, table.Key.Property.PropertyType),
-                    value: null);
-
-                hasOutputParameters = true;
-            }
-
-            if (options.AdditionalOracleRefCursors?.Count > 0)
-            {
-                foreach (var item in options.AdditionalOracleRefCursors)
-                {
-                    parameters[counter++] = new DbParameterInfo(
-                    name: item.Name,
-                    bindName: null,
-                    size: 0,
-                    precision: 0,
-                    direction: item.Direction,
-                    propertyInfo: null,
-                    propertyType: null,
-                    dbType: item.DbType,
-                    value: null);
-                }
-            }
 
             ConstructorInfo connectionConstructor = null;
             ConstructorInfo commandConstructor = null;
@@ -454,7 +316,7 @@ namespace Thomas.Database.Core.Provider
                     commandConstructor = PostgresCommandConstructor;
                     connectionConstructor = PostgresConnectionConstructor;
                     dbconnectionType = PostgresConnectionType;
-                    dbCommandType = PostgresDbCommandType;
+                    dbCommandType = PostgresCommandType;
                     break;
                 case SqlProvider.Oracle:
                     commandConstructor = OracleCommandConstructor;
@@ -471,7 +333,7 @@ namespace Thomas.Database.Core.Provider
             }
 
             if (connectionConstructor == null)
-                throw new NotImplementedException($"The provider {options.Provider} library was not found");
+                throw new DBProviderNotFoundException($"The provider {options.Provider} library was not found");
 
             var method = new DynamicMethod(
                 "SetupCommand" + InternalCounters.GetNextCommandHandlerCounter().ToString(),
@@ -487,23 +349,157 @@ namespace Thomas.Database.Core.Provider
             if (!options.IsTransactionOperation)
                 SetupCommandBase(in il, in options, out commandInstance);
 
-            SetupLoadParameter(in dbCommandType, in commandInstance, in il, parameters, in options);
-
-            //set prepare statement
-            if (options.ShouldPrepareStatement())
+            if (type != null || options.AdditionalOracleRefCursors > 0)
             {
-                if (options.IsTransactionOperation)
+                Column[] properties = Array.Empty<Column>();
+                FluentApi.DbTable table = null;
+
+                if (options.GenerateParameterWithKeys)
                 {
-                    il.Emit(OpCodes.Ldarg_3);
-                    il.Emit(OpCodes.Callvirt, typeof(DbCommand).GetMethod("Prepare"));
+                    properties = new[] { DbConfigurationFactory.Tables[type.FullName].Key };
                 }
-                else
+                else if (type != null)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
-                    il.Emit(OpCodes.Call, dbCommandType.GetMethod("Prepare"));
+                    if (DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out table))
+                    {
+                        if (options.SkipAutoGeneratedColumn)
+                            properties = table.Columns.Where(x => !x.AutoGenerated).Select(x => x).ToArray();
+                        else
+                            properties = table.Columns.Select(x => x).ToArray();
+                    }
+                    else
+                    {
+                        properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(x => new Column() { Property = x }).ToArray();
+                    }
                 }
+
+                int parameterToAdd = properties.Length + (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle ? 1 : 0) + options.AdditionalOracleRefCursors;
+                var parameters = new DbParameterInfo[parameterToAdd];
+
+                int counter = 0;
+
+                foreach (var item in properties)
+                {
+                    int enumValue = 0;
+                    Type effectiveType = Nullable.GetUnderlyingType(item.Property.PropertyType) ?? item.Property.PropertyType;
+                    Attributes.DbParameterAttribute attributes = null;
+                    IInParameterValueConverter typeConverter = null;
+
+                    if (item.Configurated)
+                    {
+                        var dbType = GetDbType(in options.Provider);
+
+                        if (!string.IsNullOrEmpty(item.DbType))
+                        {
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                            if (Enum.TryParse(dbType, item.DbType, true, out var enumVal))
+#else
+                            if (EnumExtensions.TryParse(dbType, item.DbType, true, out var enumVal))
+#endif
+                                enumValue = (int)enumVal!;
+                            else
+                                throw new NotSupportedException($"Configured column {table.Name}.{item.Name} has an invalid DbType {item.DbType}");
+
+                        }
+
+                        var precision = item.Precision == 0 && effectiveType == typeof(decimal) ? 18 : item.Precision;
+                        var scale = item.Scale == 0 && effectiveType == typeof(decimal) ? 6 : item.Scale;
+                        attributes = new Attributes.DbParameterAttribute
+                        {
+                            Name = item.Name,
+                            Precision = (byte)precision,
+                            Scale = (byte)scale,
+                            Size = (byte)item.Size,
+                        };
+                    }
+                    else
+                    {
+                        attributes = GetDbParameterAttribute(item.Property);
+                    }
+
+                    if (enumValue == 0 && options.Provider != SqlProvider.Sqlite)
+                    {
+                        if (options.Provider == SqlProvider.Oracle && attributes.IsOracleCursor)
+                        {
+                            enumValue = 121; //OracleDbType.RefCursor
+                            goto addParam;
+                        }
+
+                        enumValue = GetEnumValue(in options.Provider, effectiveType);
+                    }
+
+                    if (TypeConversionRegistry.TryGetInParameterConverter(options.Provider, effectiveType, out typeConverter))
+                    {
+                        if (options.Provider != SqlProvider.Sqlite && !(options.Provider == SqlProvider.Oracle && effectiveType == typeof(Guid)))
+                            enumValue = GetEnumValue(in options.Provider, typeConverter.TargetType);
+                    }
+
+                addParam:
+                    parameters[counter++] = new DbParameterInfo(
+                        name: attributes.Name ?? item.Property.Name,
+                        bindName: null,
+                        size: attributes.Size,
+                        precision: attributes.Precision,
+                        scale: attributes.Scale,
+                        direction: attributes.Direction,
+                        propertyInfo: item.Property,
+                        propertyType: null,
+                        dbType: enumValue,
+                        value: null,
+                        converter: typeConverter);
+
+                    hasOutputParameters = attributes.IsOutput || hasOutputParameters;
+                }
+
+                if (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle && table != null)
+                {
+                    parameters[counter++] = new DbParameterInfo(
+                        name: table.Key.Name,
+                        bindName: null,
+                        size: 0,
+                        precision: 0,
+                        scale: 0,
+                        direction: ParameterDirection.Output,
+                        propertyInfo: table.Key.Property,
+                        propertyType: table.Key.Property.PropertyType,
+                        dbType: options.Provider == SqlProvider.Sqlite ? 0 : GetEnumValue(in options.Provider, table.Key.Property.PropertyType),
+                        value: null,
+                        converter: null);
+
+                    hasOutputParameters = true;
+                }
+
+                if (options.AdditionalOracleRefCursors > 0)
+                {
+                    for (int i = 1; i <= options.AdditionalOracleRefCursors; i++)
+                    {
+                        parameters[counter++] = new DbParameterInfo(
+                            name: $"C_CURSOR{i}",
+                            bindName: null,
+                            size: 0,
+                            precision: 0,
+                            scale: 0,
+                            direction: ParameterDirection.Output,
+                            propertyInfo: null,
+                            propertyType: null,
+                            dbType: 121,
+                            value: null,
+                            converter: null);
+                    }
+                }
+
+                SetupLoadParameter(in dbCommandType, in commandInstance, in il, parameters, in options);
+
+                allParameters = parameters;
+            }
+            else
+            {
+                allParameters = Array.Empty<DbParameterInfo>();
             }
 
+            PrepareStatement(in options, in il, in commandInstance, in dbCommandType, in dbconnectionType);
+
+            //return command
             if (options.IsTransactionOperation)
             {
                 il.Emit(OpCodes.Ldarg_3);
@@ -518,26 +514,62 @@ namespace Thomas.Database.Core.Provider
 
             Type funcType = Expression.GetFuncType(new [] { typeof(object), typeof(string), typeof(string), typeof(DbCommand), typeof(DbCommand) } );
 
-#if NETFRAMEWORK
-            allParameters = parameters;
-#else
-            allParameters = parameters.ToArray();
-#endif
             return (Func<object, string, string, DbCommand, DbCommand>)method.CreateDelegate(funcType);
         }
 
         private const int DataRowVersionDefault = (int)DataRowVersion.Default;
 
+        private static void PrepareStatement(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+        {
+            if (options.ShouldPrepareStatement())
+            {
+                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+                PrepareStatementInternal(in options, in il, in commandInstance, in dbCommandType);
+            }
+            else
+            {
+                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+            }
+
+            static void PrepareStatementInternal(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType)
+            {
+
+               if (options.IsTransactionOperation)
+                {
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Callvirt, typeof(DbCommand).GetMethod("Prepare"));
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Call, dbCommandType.GetMethod("Prepare"));
+                }
+            }
+
+            static void OpenConnection(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+            {
+                if (!options.IsTransactionOperation)
+                {
+                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("Connection", dbConnectionType).GetGetMethod());
+                    il.Emit(OpCodes.Callvirt, typeof(DbConnection).GetMethod("Open"));
+                }
+            }
+        }
+
         private static int GetEnumValue(in SqlProvider provider, in Type type)
         {
+            Type underlyingType = Nullable.GetUnderlyingType(type);
+
             var dbType = GetDbType(in provider);
             var dbTypes = DbTypes(in provider);
 
-            if (!dbTypes.ContainsKey(type))
-                throw new KeyNotFoundException($"{type.Name} key was no found on {provider} mapping");
+            if (!dbTypes.ContainsKey(underlyingType ?? type))
+                throw new KeyNotFoundException($"The type '{type.Name}' is not supported by the '{provider}' provider in this library. " +
+                                                "Please check the documentation for supported types or ensure that the type is correctly mapped.");
 
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-            if (Enum.TryParse(dbType, dbTypes[type], true, out var enumVal))
+            if (Enum.TryParse(dbType, dbTypes[underlyingType ?? type], true, out var enumVal))
 #else
             if (EnumExtensions.TryParse(dbType, dbTypes[type], true, out var enumVal))
 #endif
@@ -571,7 +603,7 @@ namespace Thomas.Database.Core.Provider
                     commandConstructor = PostgresCommandConstructor;
                     connectionConstructor = PostgresConnectionConstructor;
                     dbconnectionType = PostgresConnectionType;
-                    dbCommandType = PostgresDbCommandType;
+                    dbCommandType = PostgresCommandType;
                     break;
                 case SqlProvider.Oracle:
                     commandConstructor = OracleCommandConstructor;
@@ -623,7 +655,7 @@ namespace Thomas.Database.Core.Provider
             //useful values for oracle command
             if (options.Provider == SqlProvider.Oracle)
             {
-                if (options.AdditionalOracleRefCursors == null)
+                if (options.AdditionalOracleRefCursors == 0)
                 {
                     il.Emit(OpCodes.Ldloc, commandInstance);
                     il.Emit(OpCodes.Ldc_I4_1);
@@ -634,11 +666,11 @@ namespace Thomas.Database.Core.Provider
                 il.Emit(OpCodes.Ldc_I4_M1);
                 il.EmitCall(OpCodes.Callvirt, OracleDbCommandInitialLONGFetchSize, null);
 
-                if (options.FetchSize >= 0)
+                if (options.FetchSize > 0)
                 {
                     il.Emit(OpCodes.Ldloc, commandInstance);
-                    il.Emit(OpCodes.Ldc_I8, options.FetchSize);
-                    il.EmitCall(OpCodes.Callvirt, OracleDbCommandFetchSize, null);
+                    il.Emit(OpCodes.Ldc_I8, (long)options.FetchSize);
+                    il.EmitCall(OpCodes.Call, OracleDbCommandFetchSize, null);
                 }
             }
         }
@@ -652,44 +684,131 @@ namespace Thomas.Database.Core.Provider
         private static void SetupLoadParameter(in Type dbCommandType, in LocalBuilder commandInstance, in ILGenerator il, DbParameterInfo[] parameters, in LoaderConfiguration options)
 #endif
         {
-            if (parameters.Length == 0)
-                return;
-
             MethodInfo parametersProperty = null;
-            ConstructorInfo parametersConstructor = null;
+            ConstructorInfo parameterConstructor = null;
             MethodInfo addParameterMethod = null;
+            Type dbParameterType = null;
 
             switch (options.Provider)
             {
                 case SqlProvider.SqlServer:
+                    dbParameterType = SqlParameterType;
                     parametersProperty = GetSqlParametersProperty;
-                    parametersConstructor = SqlParameterConstructor;
+                    parameterConstructor = SqlParameterConstructor;
                     addParameterMethod = AddSqlParameterMethod;
                     break;
                 case SqlProvider.MySql:
+                    dbParameterType = MysqlParameterType;
                     parametersProperty = GetMysqlParametersProperty;
-                    parametersConstructor = MysqlParameterConstructor;
+                    parameterConstructor = MysqlParameterConstructor;
                     addParameterMethod = AddMysqlParameterMethod;
                     break;
                 case SqlProvider.PostgreSql:
+                    dbParameterType = PostgresParameterType;
                     parametersProperty = GetPostgresParametersProperty;
-                    parametersConstructor = PostgresParameterConstructor;
+                    parameterConstructor = PostgresParameterConstructor;
                     addParameterMethod = AddPostgresParameterMethod;
                     break;
                 case SqlProvider.Oracle:
+                    dbParameterType = OracleParameterType;
                     parametersProperty = GetOracleParametersProperty;
-                    parametersConstructor = OracleParameterConstructor;
+                    parameterConstructor = OracleParameterConstructor;
                     addParameterMethod = AddOracleParameterMethod;
                     break;
                 case SqlProvider.Sqlite:
+                    dbParameterType = SqliteParameterType;
                     parametersProperty = GetSqliteParametersProperty;
-                    parametersConstructor = SqliteParameterConstructor;
+                    parameterConstructor = SqliteParameterConstructor;
                     addParameterMethod = AddSqliteParameterMethod;
                     break;
             }
 
             foreach (var parameter in parameters)
             {
+                LocalBuilder localValue = null;
+                LocalBuilder? convertedValue = null;
+
+                if (parameter.IsInput)
+                {
+                    localValue = il.DeclareLocal(typeof(object));
+                    EmitValue(in il, in parameter);
+                    il.Emit(OpCodes.Stloc, localValue);
+
+                    if (parameter.Converter != null)
+                    {
+                        var isNullableType = Nullable.GetUnderlyingType(parameter.PropertyType) != null;
+                        var convertNotNull = il.DefineLabel();
+
+                        if (isNullableType)
+                        {
+                           il.Emit(OpCodes.Ldloc, localValue);
+                           il.Emit(OpCodes.Ldnull);
+                           il.Emit(OpCodes.Ceq);
+                           il.Emit(OpCodes.Brfalse_S, convertNotNull);
+                        }
+
+                        var converterType = parameter.Converter.GetType();
+                        var localConverter = il.DeclareLocal(converterType);
+                        var constructorInfo = converterType.GetConstructor(Type.EmptyTypes);
+                        il.Emit(OpCodes.Newobj, constructorInfo);
+                        il.Emit(OpCodes.Stloc, localConverter);
+
+                        il.Emit(OpCodes.Ldloc, localConverter);
+                        il.Emit(OpCodes.Ldloc, localValue);
+                        il.Emit(OpCodes.Callvirt, GetMethodInfoConverterClass(converterType));
+
+                        //declare convertedValue variable
+                        convertedValue = il.DeclareLocal(typeof(object));
+                        il.Emit(OpCodes.Stloc, convertedValue);
+
+                        //close if
+                        if (isNullableType)
+                        {
+                            il.MarkLabel(convertNotNull);
+
+                            //if false load DbNull.Value into the convertedValue
+                            il.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
+                            il.Emit(OpCodes.Stloc, convertedValue);
+                        }
+                    }
+                }
+
+                if (options.Provider == SqlProvider.Sqlite)
+                {
+                    BuildSqliteParameter(in il, in parameter, value: convertedValue ?? localValue);
+                }
+                else if (options.Provider == SqlProvider.PostgreSql)
+                {
+                    BuildPostgresParameter(in il, in parameter, convertedValue ?? localValue);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldstr, parameter.Name);
+                    il.Emit(OpCodes.Ldc_I4, parameter.DbType);
+                    il.Emit(OpCodes.Ldc_I4, parameter.Size);
+                    il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
+                    il.Emit(OpCodes.Ldc_I4_1);
+                    il.Emit(OpCodes.Ldc_I4, parameter.Precision);
+                    il.Emit(OpCodes.Ldc_I4, parameter.Scale);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
+
+                    if (parameter.Direction == ParameterDirection.Output ||parameter.Direction == ParameterDirection.ReturnValue)
+                    {
+                        il.Emit(OpCodes.Ldnull);
+                    }
+                    else
+                    {
+                        il.Emit(OpCodes.Ldloc, convertedValue ?? localValue);
+                    }
+                }
+
+                il.Emit(OpCodes.Newobj, parameterConstructor);
+
+                var dbParameterInstance = il.DeclareLocal(dbParameterType);
+                il.Emit(OpCodes.Stloc, dbParameterInstance);
+                
+
                 if (options.IsTransactionOperation)
                 {
                     il.Emit(OpCodes.Ldarg_3);
@@ -701,42 +820,9 @@ namespace Thomas.Database.Core.Provider
                 }
 
                 il.Emit(OpCodes.Callvirt, parametersProperty);
-
-                if (options.Provider == SqlProvider.Sqlite)
-                {
-                    BuildSqliteParameter(in il, in parameter);
-                }
-                else if (options.Provider == SqlProvider.PostgreSql)
-                {
-                    BuildPostgresParameter(in il, in parameter);
-                }
-                else
-                {
-                    il.Emit(OpCodes.Ldstr, parameter.Name);
-                    il.Emit(OpCodes.Ldc_I4, parameter.DbType);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Size);
-                    il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
-                    il.Emit(OpCodes.Ldc_I4_1);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-                    il.Emit(OpCodes.Ldc_I4_0);
-                    il.Emit(OpCodes.Ldnull);
-                    il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
-                    il.Emit(OpCodes.Ldarg_0);
-
-                    if (parameter.Direction == ParameterDirection.Output)
-                    {
-                        il.Emit(OpCodes.Pop);
-                        il.Emit(OpCodes.Ldnull);
-                    }
-                    else
-                    {
-                        EmitValue(in il, in parameter);
-                    }
-
-                    il.Emit(OpCodes.Newobj, parametersConstructor);
-                    il.Emit(OpCodes.Callvirt, addParameterMethod);
-                    il.Emit(OpCodes.Pop);
-                }
+                il.Emit(OpCodes.Ldloc, dbParameterInstance);
+                il.Emit(OpCodes.Callvirt, addParameterMethod);
+                il.Emit(OpCodes.Pop);
             }
         }
 
@@ -761,6 +847,7 @@ namespace Thomas.Database.Core.Provider
         */
         private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter)
         {
+            il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, parameter.PropertyInfo.GetGetMethod()!);
 
             if (ShouldValidateValue(parameter.PropertyType.Name))
@@ -770,15 +857,15 @@ namespace Thomas.Database.Core.Provider
                 MethodInfo valueGetter;
                 if (underlyingType != null)
                 {
-                    valueGetter = typeof(DatabaseHelperProvider).GetMethod("GetValueGeneric", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(new[] { underlyingType });
+                    valueGetter = typeof(DatabaseHelperProvider).GetMethod(nameof(GetValueGeneric), BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(new[] { underlyingType });
                 }
                 else
                 {
-                    valueGetter = typeof(DatabaseHelperProvider).GetMethod("GetValue", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { parameter.PropertyType }, null);
+                    valueGetter = typeof(DatabaseHelperProvider).GetMethod(nameof(GetValue), BindingFlags.NonPublic | BindingFlags.Static, null, new[] { parameter.PropertyType }, null);
                 }
 
                 il.Emit(OpCodes.Call, valueGetter);
-            }
+            } 
             else if (parameter.PropertyType.IsValueType)
             {
                 il.Emit(OpCodes.Box, parameter.PropertyType);
@@ -794,7 +881,6 @@ namespace Thomas.Database.Core.Provider
         private static object GetValue(TimeSpan value)
         {
             return TimeSpan.MinValue.Equals(value) ? (object)DBNull.Value : value;
-
         }
 
         private static object GetValue(byte[] value)
@@ -805,7 +891,7 @@ namespace Thomas.Database.Core.Provider
 
         private static object GetValueGeneric<T>(T? value) where T : struct
         {
-            return value.HasValue ? value : (object)DBNull.Value;
+            return value.HasValue ? value.Value : (object)DBNull.Value;
         }
 
         private static object GetValue(Guid value)
@@ -830,7 +916,7 @@ namespace Thomas.Database.Core.Provider
 
         #endregion
 
-        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter)
+        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
         {
             //parameterName: string
             //parameterType: NpgsqlTypes
@@ -843,53 +929,57 @@ namespace Thomas.Database.Core.Provider
             //dataRowVersion: DataRowVersion
             //value: object;
 
-            il.Emit(OpCodes.Ldstr, parameter.Name);
+            //ignore output parameters
+            if (parameter.Direction == ParameterDirection.Output || parameter.Direction == ParameterDirection.ReturnValue)
+                return;
+
+            il.Emit(OpCodes.Ldstr, $"@{parameter.Name.ToLower()}");
             il.Emit(OpCodes.Ldc_I4, parameter.DbType);
             il.Emit(OpCodes.Ldc_I4, parameter.Size);
             il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
             il.Emit(OpCodes.Ldc_I4_1);
             il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ldc_I4, parameter.Scale);
             il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
-            il.Emit(OpCodes.Ldarg_0);
-
-            if (parameter.Direction == ParameterDirection.Output)
-            {
-                il.Emit(OpCodes.Pop);
-                il.Emit(OpCodes.Ldnull);
-            }
-            else
-            {
-                EmitValue(in il, in parameter);
-            }
-
-            il.Emit(OpCodes.Newobj, PostgresParameterConstructor);
-            il.Emit(OpCodes.Callvirt, AddPostgresParameterMethod);
-            il.Emit(OpCodes.Pop);
+            il.Emit(OpCodes.Ldloc, value);
         }
 
-        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter)
+        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
         {
             //parameterName: string
             //value: object
 
             il.Emit(OpCodes.Ldstr, parameter.Name);
-            il.Emit(OpCodes.Ldarg_0);
 
-            if (parameter.Direction == ParameterDirection.Output)
+            if (parameter.Direction == ParameterDirection.Output || parameter.Direction == ParameterDirection.ReturnValue)
             {
-                il.Emit(OpCodes.Pop);
                 il.Emit(OpCodes.Ldnull);
             }
             else
             {
-                EmitValue(in il, in parameter);
+               il.Emit(OpCodes.Ldloc, value);
+            }
+        }
+
+        public static MethodInfo GetMethodInfoConverterClass(Type type)
+        {
+            if (!typeof(IInParameterValueConverter).IsAssignableFrom(type))
+            {
+                throw new ArgumentException($"{type.Name} does not implement {typeof(IInParameterValueConverter).Name}");
             }
 
-            il.Emit(OpCodes.Newobj, SqliteParameterConstructor);
-            il.Emit(OpCodes.Callvirt, AddSqliteParameterMethod);
-            il.Emit(OpCodes.Pop);
+            InterfaceMapping interfaceMapping = type.GetInterfaceMap(typeof(IInParameterValueConverter));
+
+            for (int i = 0; i < interfaceMapping.InterfaceMethods.Length; i++)
+            {
+                if (interfaceMapping.InterfaceMethods[i].Name.Equals("ConvertInValue"))
+                {
+                    return interfaceMapping.TargetMethods[i];
+                }
+            }
+
+            throw new NotImplementedException();
         }
 
         private static Type GetDbType(in SqlProvider provider) => provider switch
@@ -915,40 +1005,41 @@ namespace Thomas.Database.Core.Provider
             };
         }
 
-        internal readonly struct LoaderConfiguration
+    }
+
+    internal readonly struct LoaderConfiguration
+    {
+        public readonly bool CanPrepareStatement;
+        public readonly bool PrepareStatements;
+        public readonly bool IsTransactionOperation;
+        public readonly bool KeyAsReturnValue;
+        public readonly bool SkipAutoGeneratedColumn;
+        public readonly bool GenerateParameterWithKeys;
+        public readonly SqlProvider Provider;
+        public readonly int FetchSize;
+        public readonly int AdditionalOracleRefCursors;
+
+        public readonly int Timeout;
+        public readonly CommandType CommandType;
+
+        public LoaderConfiguration(in bool keyAsReturnValue, in bool skipAutoGeneratedColumn, in bool generateParameterWithKeys, in int additionalOracleRefCursors, in SqlProvider provider, in int fetchSize, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements, in bool canPrepareStatement)
         {
-            public readonly bool PrepareStatements;
-            public readonly bool IsTransactionOperation;
-            public readonly bool IsExecuteNonQuery;
-            public readonly bool KeyAsReturnValue;
-            public readonly bool GenerateParameterWithKeys;
-            public readonly SqlProvider Provider;
-            public readonly int FetchSize;
-            public readonly List<DbParameterInfo> AdditionalOracleRefCursors;
+            KeyAsReturnValue = keyAsReturnValue;
+            SkipAutoGeneratedColumn = skipAutoGeneratedColumn;
+            GenerateParameterWithKeys = generateParameterWithKeys;
+            AdditionalOracleRefCursors = additionalOracleRefCursors;
+            IsTransactionOperation = isTransactionOperation;
+            Provider = provider;
+            FetchSize = fetchSize;
+            Timeout = timeout;
+            CommandType = commandType;
+            PrepareStatements = prepareStatements;
+            CanPrepareStatement = canPrepareStatement;
+        }
 
-            public readonly string Query;
-            public readonly int Timeout;
-            public readonly CommandType CommandType;
-
-            public LoaderConfiguration(in bool keyAsReturnValue, in bool generateParameterWithKeys, in List<DbParameterInfo> additionalOracleRefCursors, in SqlProvider provider, in int fetchSize, in bool isExecuteNonQuery, in string query, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements)
-            {
-                KeyAsReturnValue = keyAsReturnValue;
-                GenerateParameterWithKeys = generateParameterWithKeys;
-                AdditionalOracleRefCursors = additionalOracleRefCursors;
-                IsTransactionOperation = isTransactionOperation;
-                Provider = provider;
-                FetchSize = fetchSize;
-                IsExecuteNonQuery = isExecuteNonQuery;
-                Query = query;
-                Timeout = timeout;
-                CommandType = commandType;
-                PrepareStatements = prepareStatements;
-            }
-
-            internal readonly bool ShouldPrepareStatement()
-            {
-                return PrepareStatements && CommandType == CommandType.Text;
-            }
+        internal readonly bool ShouldPrepareStatement()
+        {
+            return CanPrepareStatement && PrepareStatements && CommandType == CommandType.Text;
         }
     }
 }

@@ -39,6 +39,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 return string.Empty;
             }
         }
+
         private string TableName
         {
             get
@@ -46,6 +47,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 return $"{DbSchema}{_table.DbName ?? _table.Name} {TableAlias}";
             }
         }
+
         private string TableNameWithoutAlias
         {
             get
@@ -54,6 +56,7 @@ namespace Thomas.Database.Core.QueryGenerator
             }
         }
 
+        private bool IsStaticQuery = true;
         private readonly DbTable _table;
         private readonly ISqlFormatter _formatter;
 
@@ -121,17 +124,26 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private bool GetCachedValues(in int key, Expression predicate, ref string sql, out object filter)
         {
-            if (DynamicQueryString.TryGet(key, out var value))
+            if (DynamicQueryInfo.TryGet(key, out var value))
             {
-                sql = value.Item1;
+                sql = value.Query;
 
-                if (predicate != null)
+                object[] paramValues = null;
+                if (predicate != null && !value.IsStaticQuery)
                 {
                     var valueExtractor = new ExpressionValueExtractor<T>(this);
                     valueExtractor.LoadParameterValues(predicate);
+                    paramValues = DbParametersToBind.Select(x => x.Value).ToArray();
+                }
+                else
+                {
+                    paramValues = value.ParameterValues;
                 }
 
-                InstanciateFilter(value.Item2, out filter);
+                if (value.InternalType != null)
+                    InstanciateFilter(value.InternalType, paramValues, out filter);
+                else
+                    filter = null;
 
                 return true;
             }
@@ -147,9 +159,10 @@ namespace Thomas.Database.Core.QueryGenerator
                 ConstantExpression constantExpression => HandleConstantExpression(constantExpression, member),
                 UnaryExpression unaryExpression => HandleUnaryExpression(unaryExpression, aliasIdentifiers),
                 BinaryExpression binaryExpression => HandleBinaryExpression(binaryExpression, aliasIdentifiers),
+                MemberExpression memberExpression when memberExpression.Member.Name == "Now" && memberExpression.Type == typeof(DateTime) => SqlDateNow(),
                 MemberExpression memberExpression when memberExpression.Member.Name == "MinValue" && memberExpression.Type == typeof(DateTime) => SqlMin(),
                 MemberExpression memberExpression when memberExpression.Member.Name == "MaxValue" && memberExpression.Type == typeof(DateTime) => SqlMax(),
-                MemberExpression memberExpression when memberExpression.Type == typeof(string) => GetColumnName(memberExpression, aliasIdentifiers),
+                MemberExpression memberExpression when (memberExpression.Type == typeof(string) || Nullable.GetUnderlyingType(memberExpression.Type) != null) => GetColumnName(memberExpression, aliasIdentifiers),
                 MemberExpression memberExpression when memberExpression.Type == typeof(int) ||
                                                        memberExpression.Type == typeof(short) ||
                                                        memberExpression.Type == typeof(long) ||
@@ -163,8 +176,8 @@ namespace Thomas.Database.Core.QueryGenerator
                                                        typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression, aliasIdentifiers),
                 NewExpression newExpression => HandleNewExpression(newExpression),
                 NewArrayExpression newArrayExpression => HandleNewArrayExpression(newArrayExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(bool) || memberExpression.Type == typeof(bool?) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(_formatter.Provider == SqlProvider.PostgreSql ? "'1'" : "1")}",
-                MethodCallExpression methodCall when IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains, aliasIdentifiers),
+                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(_formatter.Provider == SqlProvider.PostgreSql ? "'1'" : "1")}",
+               MethodCallExpression methodCall when IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains, aliasIdentifiers),
                 MethodCallExpression methodCall when IsEnumerableContains(methodCall) => HandleEnumerableContains(methodCall, aliasIdentifiers),
                 MethodCallExpression methodCall when IsEquals(methodCall) => HandleStringContains(methodCall, StringOperator.Equals, aliasIdentifiers),
                 MethodCallExpression methodCall when IsStartsWith(methodCall) => HandleStringContains(methodCall, StringOperator.StartsWith, aliasIdentifiers),
@@ -201,12 +214,12 @@ namespace Thomas.Database.Core.QueryGenerator
             return _formatter.GenerateUpdate(TableNameWithoutAlias, columns, _table.Key.DbName ?? _table.Key.Name, _table.Key.Name);
         }
 
-        public string GenerateInsert<T>(bool returnGenerateId = false) where T : class, new()
+        public string GenerateInsert(bool generateKeyValue = false)
         {
             var values = _table.Columns.Where(x => !x.AutoGenerated).Select(c => _formatter.BindVariable + c.Name).ToArray();
-            var columns = _table.Columns.Where(x => !x.AutoGenerated).Select(x => x.FullDbName).ToArray();
+            var columns = _table.Columns.Where(x => !x.AutoGenerated).Select(x => x.DbName ?? x.Name).ToArray();
 
-            return _formatter.GenerateInsert(TableNameWithoutAlias, columns, values, _table.Key, returnGenerateId);
+            return _formatter.GenerateInsert(TableNameWithoutAlias, columns, values, _table.Key, generateKeyValue);
         }
 
         public string GenerateDelete()
@@ -223,19 +236,30 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private void EnsureCacheItem(int key, string sqlText, out object filter)
         {
+            var parameters = DbParametersToBind.ToArray();
+
+            if (parameters.Length > 0)
+            {
 #if NETFRAMEWORK || NETSTANDARD
-            var dynamicType = BuildType(DbParametersToBind.ToArray());
+                var dynamicType = BuildType(parameters);
 #else
-            var dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(DbParametersToBind.ToArray()));
+                var dynamicType = BuildType(new ReadOnlySpan<DbParameterInfo>(parameters));
 #endif
-            DynamicQueryString.Set(key, new ValueTuple<string, Type>(sqlText, dynamicType));
-            InstanciateFilter(dynamicType, out filter);
+                var paramValues = parameters.Select(x => x.Value).ToArray();
+                DynamicQueryInfo.Set(key, new ExpressionQueryItem(sqlText, dynamicType, IsStaticQuery, IsStaticQuery ? paramValues: null));
+                InstanciateFilter(dynamicType, paramValues, out filter);
+            }
+            else
+            {
+                filter = null;
+                DynamicQueryInfo.Set(key, new ExpressionQueryItem(sqlText, null, IsStaticQuery, null));
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void InstanciateFilter(Type type, out object filter)
+        private static void InstanciateFilter(Type type, object[] paramValues, out object filter)
         {
-            filter = Activator.CreateInstance(type, DbParametersToBind.Select(x => x.Value).ToArray());
+            filter = Activator.CreateInstance(type, paramValues);
         }
 
 #endregion Cache management
@@ -247,51 +271,60 @@ namespace Thomas.Database.Core.QueryGenerator
             var parameterName = $"p{counter}";
             paramName = _formatter.BindVariable + parameterName;
 
-            var convertedValue = TypeConversionRegistry.ConvertByType(value, propertyType, _formatter.Provider, true);
+            var convertedValue = TypeConversionRegistry.ConvertInParameterValue(_formatter.Provider, value, propertyType, true);
 
             DbParametersToBind.AddLast(new DbParameterInfo(
                 parameterName,
                 paramName,
                 0,
                 0,
+                0,
                 ParameterDirection.Input,
                 null,
                 convertedValue.GetType(),
                 0,
-                convertedValue
-                ));
+                convertedValue,
+                null));
         }
 
         public void AddInParam(in PropertyInfo propertyInfo)
         {
             var paramName = _formatter.BindVariable + propertyInfo.Name;
+
+            TypeConversionRegistry.TryGetInParameterConverter(_formatter.Provider, propertyInfo.PropertyType, out var converter);
+
             DbParametersToBind.AddLast(new DbParameterInfo(
                 propertyInfo.Name,
                 paramName,
+                0,
                 0,
                 0,
                 ParameterDirection.Input,
                 propertyInfo,
                 null,
                 0,
-                null
-                ));
+                null,
+                converter));
         }
 
         public void AddInParam(in PropertyInfo propertyInfo, out string paramName)
         {
             paramName = _formatter.BindVariable + propertyInfo.Name;
+
+            TypeConversionRegistry.TryGetInParameterConverter(_formatter.Provider, propertyInfo.PropertyType, out var converter);
+
             DbParametersToBind.AddLast(new DbParameterInfo(
                 propertyInfo.Name,
                 paramName,
+                0,
                 0,
                 0,
                 ParameterDirection.Input,
                 null,
                 propertyInfo.PropertyType,
                 0,
-                null
-                ));
+                null,
+                converter));
         }
 
         public void AddOutParam(DbColumn column, out string paramBindName)
@@ -304,12 +337,13 @@ namespace Thomas.Database.Core.QueryGenerator
                 paramBindName,
                 0,
                 0,
+                0,
                 ParameterDirection.Output,
                 null,
                 column.Property.PropertyType,
                 0,
-                null
-                ));
+                null,
+                null));
         }
 
         #endregion parameter handlers
@@ -324,7 +358,16 @@ namespace Thomas.Database.Core.QueryGenerator
             var b = lambdaExpression.Parameters[1];
 
             string where = "";
-            string tableName = b.Type.Name;
+
+            if (!DbConfigurationFactory.Tables.TryGetValue(b.Type.FullName!, out var _table))
+            {
+                var dbTable = new DbTable { Name = Type.Name!, Columns = new LinkedList<DbColumn>() };
+                dbTable.AddFieldsAsColumns<T>();
+                DbConfigurationFactory.Tables.TryAdd(Type.FullName!, dbTable);
+                _table = dbTable;
+            }
+
+            string tableName = $"{DbSchema}{_table.DbName ?? _table.Name}";
 
             string[][] aliasIdentifier = new string[2][];
 
@@ -371,6 +414,7 @@ namespace Thomas.Database.Core.QueryGenerator
             return $"{WhereClause(expression.Operand, null, aliasIdentifier)} BETWEEN {minValue} AND {maxValue}";
         }
 
+        private string SqlDateNow() => _formatter.CurrentDate;
         private string SqlMin() => _formatter.MinDate;
         private string SqlMax() => _formatter.MaxDate;
 
@@ -378,6 +422,7 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             if (memberExpression.Expression is ConstantExpression ce && memberExpression.Member is FieldInfo fe)
             {
+                IsStaticQuery = false;
                 var constant = Expression.Constant(fe.GetValue(ce.Value));
                 if (constant.Type.IsArray || (constant.Type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(constant.Type)))
                 {
@@ -416,13 +461,17 @@ namespace Thomas.Database.Core.QueryGenerator
             return instantiator();
         }
 
-        private void AddArrayConstantValues<T>(Type type, ConstantExpression expression, HashSet<string> @params)
+        private void AddArrayConstantValues<TValue>(Type type, ConstantExpression expression, HashSet<string> @params)
         {
-            foreach (var value in GetValues<T>(expression))
+            //TODO: if the account of values is too big consider generate a temp table
+            foreach (var value in GetValues<TValue>(expression))
             {
                 AddInParam(type, value, null, out var paramName);
                 @params.Add(paramName);
             }
+
+            if (@params.Count() >= 1000)
+                throw new NotSupportedException("The amount of values in the array is too big for IN expression");
         }
 
         private string HandleNewExpression(NewExpression newExpression)
@@ -434,7 +483,7 @@ namespace Thomas.Database.Core.QueryGenerator
 
                 AddInParam(typeof(DateTime), value, null, out var paramName);
 
-                return paramName;
+                return ApplyTransformation(paramName, nameof(DateTime));
             }
 
             return "";
@@ -609,14 +658,36 @@ namespace Thomas.Database.Core.QueryGenerator
             if (member.Expression is ConstantExpression)
                 return WhereClause(member.Expression, member.Member, aliasIdentifiers);
 
-            var dbColumn = _table.Columns.First(x => x.Name == member.Member.Name);
+            if (member.Expression != null)
+            {
+                var dbColumn = _table.Columns.First(x => x.Name == member.Member.Name);
 
-            if (member.Member.ReflectedType == typeof(T))
-                return $"{TableAlias}.{dbColumn.DbName ?? dbColumn.Name}";
+                if (member.Member.ReflectedType == typeof(T))
+                    return ApplyTransformation($"{TableAlias}.{dbColumn.DbName ?? dbColumn.Name}", member.Type.Name);
 
-            var tableTempAlias = member.Expression!.ToString().Split('.')[0];
-            return $"{ReplaceIdentifier(tableTempAlias, aliasIdentifiers)}.{dbColumn.DbName ?? dbColumn.Name}";
+                var tableTempAlias = member.Expression!.ToString().Split('.')[0];
+                return $"{ReplaceIdentifier(tableTempAlias, aliasIdentifiers)}.{dbColumn.DbName ?? dbColumn.Name}";
+            }
+            else
+            {
+                //handle static values from dotnet libraries
+                return member.Member.Name;
+            }
         }
+
+        private string ApplyTransformation(string name, string typeName)
+        {
+            if (_formatter.Provider == SqlProvider.Sqlite)
+            {
+                return typeName switch
+                {
+                    "DateTime" => $"datetime({name})",
+                    _ => name,
+                };
+            }
+            return name;
+        }
+
         private static string ReplaceIdentifier(string expression, string[][] aliasIdentifiers)
         {
             for (int i = 0; i < aliasIdentifiers.Length; i++)
@@ -635,7 +706,7 @@ namespace Thomas.Database.Core.QueryGenerator
         {
             if (!string.IsNullOrEmpty(key))
             {
-                return key.GetHashCode();
+                return HashHelper.GenerateHash(key);
             }
 
             int calculatedKey = 17;
@@ -645,7 +716,8 @@ namespace Thomas.Database.Core.QueryGenerator
                 calculatedKey = (calculatedKey * 23) + operation.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + provider.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + type.GetHashCode();
-                calculatedKey = (calculatedKey * 23) + ExpressionHasher.GetHashCode(expression!, provider);
+                if (expression != null)
+                    calculatedKey = (calculatedKey * 23) + ExpressionHasher.GetHashCode(expression, provider);
             }
 
             return calculatedKey;

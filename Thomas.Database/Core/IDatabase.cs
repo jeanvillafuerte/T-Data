@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database.Core;
@@ -12,7 +11,7 @@ namespace Thomas.Database
     public interface IDatabase : IWriteOnlyDatabase, IDbOperationResult, IDbResultSet, IDbOperationResultAsync , IDbResultSetAsync
     {
         int Execute(in string script, in object parameters = null);
-
+        T ExecuteScalar<T>(in string script, in object parameters = null);
         T ToSingle<T>(Expression<Func<T, bool>> where = null);
         List<T> ToList<T>(Expression<Func<T, bool>> where = null);
 

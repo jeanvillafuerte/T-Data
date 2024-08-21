@@ -1,0 +1,34 @@
+﻿version: "3"
+services:
+  oracle:
+    image: gvenzl/oracle-xe:latest
+    container_name: oracle
+    ports:
+     - 1521:1521
+    environment:
+      ORACLE_PASSWORD: Oracle_Test
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    ports:
+      - 3306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: Mysql_Test
+      MYSQL_DATABASE: test
+  postgres:
+    image: postgres:alpine
+    container_name: postgres
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: mssql
+    ports:
+      - 1433:1433
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: "Mssql_Test"

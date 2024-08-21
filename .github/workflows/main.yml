@@ -1,0 +1,54 @@
+name: Thomas Data Adapter Build
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+    paths:
+    - '**.cs'
+jobs:
+  vm-job:
+    name: Ubuntu
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        ports:
+        - 5432/tcp
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports:
+        - 1433/tcp
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: "Mssql_Test"
+      mysql:
+        image: mysql
+        ports:
+        - 3306/tcp
+        env:
+          MYSQL_ROOT_PASSWORD: Mysql_Test
+          MYSQL_DATABASE: test
+      oracle:
+        image: gvenzl/oracle-xe:latest
+        ports:
+        - 1521/tcp
+        env:
+          ORACLE_PASSWORD: Oracle_Test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v1
+    - name: .NET Build
+      run: dotnet build ThomasDataAdapter.sln -c Release /p:CI=true
+    - name: Library Tests
+      run: dotnet test Thomas.Database.Tests/Thomas.Database.Tests.csproj -c Release --logger GitHubActions /p:CI=true
+      env:
+        MySqlCnx: Server=localhost;Port=${{ job.services.mysql.ports[3306] }};Database=test;Uid=root;Pwd=Mysql_Test;Allow User Variables=true
+        OracleCnx: Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=${{ job.services.oracle.ports[1521] }})))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=FREEPDB1)));Persist Security Info=True;User ID=SYS;DBA Privilege=SYSDBA;Password=Oracle_Test;Statement Cache Size=10
+        PostgresCnx: Server=localhost;Port=${{ job.services.postgres.ports[5432] }};Database=test;User ID=postgres;Password=postgres;
+        SqlServerCnx: Server=tcp:localhost,${{ job.services.sqlserver.ports[1433] }};Database=tempdb;User ID=sa;Password=Mssql_Test;Encrypt=True;TrustServerCertificate=True;

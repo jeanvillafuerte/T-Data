@@ -1,6 +1,6 @@
 {
-  "connection1": "Data Source=localhost;Initial Catalog=dbtest1;Persist Security Info=True;User ID=sa;Password=YourPassword;TrustServerCertificate=true;packet size=2048;ApplicationIntent=ReadOnly;Min Pool Size=32;Max Pool Size=64;Pooling=true",
-  "connection2": "Data Source=localhost;Initial Catalog=dbtest2;Persist Security Info=True;User ID=sa;Password=YourPassword;TrustServerCertificate=true;packet size=2048;ApplicationIntent=ReadOnly;Min Pool Size=32;Max Pool Size=64;Pooling=true",
+  "connection1": "Data Source=localhost;Initial Catalog=dbtest1;Persist Security Info=True;User ID=sa;Password=Mssql_Test;TrustServerCertificate=true;packet size=2048;ApplicationIntent=ReadOnly;Min Pool Size=32;Max Pool Size=64;Pooling=true",
+  "connection2": "Data Source=localhost;Initial Catalog=dbtest2;Persist Security Info=True;User ID=sa;Password=Mssql_Test;TrustServerCertificate=true;packet size=2048;ApplicationIntent=ReadOnly;Min Pool Size=32;Max Pool Size=64;Pooling=true",
   "rows": 100,
   "cleanData": true
 }

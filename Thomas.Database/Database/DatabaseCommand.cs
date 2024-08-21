@@ -7,11 +7,11 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database.Core.Provider;
-using Thomas.Database.Database;
 using Thomas.Database.Configuration;
 
 using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
 
+[assembly: InternalsVisibleTo("Thomas.Database.Tests")]
 namespace Thomas.Database
 {
     internal partial class DatabaseCommand : IDisposable, IAsyncDisposable
@@ -23,7 +23,6 @@ namespace Thomas.Database
         private readonly int _timeout;
         private readonly object _filter;
         private readonly int _preparationQueryKey;
-        private readonly int _operationKey;
         private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
         private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
@@ -32,12 +31,12 @@ namespace Thomas.Database
         private DbDataReader _reader;
 
         //object to share in transaction context
-        private DbCommand _command;
+        internal DbCommand _command;
         private DbConnection _connection;
         private readonly DbTransaction _transaction;
 
         // output parameters
-        public IEnumerable<IDbDataParameter> OutParameters
+        internal IEnumerable<IDbDataParameter> OutParameters
         {
             get
             {
@@ -48,7 +47,7 @@ namespace Thomas.Database
 
                 foreach (DbParameter item in _command.Parameters)
                 {
-                    if (item.Direction == ParameterDirection.InputOutput || item.Direction == ParameterDirection.Output)
+                    if (item.Direction == ParameterDirection.InputOutput || item.Direction == ParameterDirection.Output || item.Direction == ParameterDirection.ReturnValue)
                     {
                         yield return item;
                     }
@@ -80,22 +79,24 @@ namespace Thomas.Database
         {
             _configuration = configuration;
             _bufferSize = options.BufferSize;
-            _script = script;
+            _script = string.IsNullOrEmpty(script) ? throw new ScriptNotProvidedException() : script;
             _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
             _filter = filter;
             _command = command;
 
-            _operationKey = 17;
+            bool hasFilter = _filter != null;
+            bool isTransaction = transaction != null;
+            var operationKey = 17;
             unchecked
             {
-                _operationKey = (_operationKey * 23) + _script.GetHashCode();
-                _operationKey = (_operationKey * 23) + _provider.GetHashCode();
-                _operationKey = (_operationKey * 23) + configuration.GetHashCode();
+                operationKey = (operationKey * 23) + _script.GetHashCode();
+                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
             }
 
-            if (transaction != null)
+            if (isTransaction)
             {
                 _transaction = transaction;
                 _connection = _command.Connection;
@@ -103,19 +104,19 @@ namespace Thomas.Database
 
                 unchecked
                 {
-                    _operationKey = (_operationKey * 23) + _transaction.GetType().GetHashCode();
+                    operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
                 }
             }
 
             Type filterType = null;
-            if (_filter != null)
+            if (hasFilter)
             {
                 filterType = filter.GetType();
-                _preparationQueryKey = (_operationKey * 23) + filterType.GetHashCode();
+                _preparationQueryKey = (operationKey * 23) + filterType.GetHashCode();
             }
             else
             {
-                _preparationQueryKey = _operationKey;
+                _preparationQueryKey = operationKey;
             }
 
             if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
@@ -124,69 +125,108 @@ namespace Thomas.Database
                 _commandBehavior = commandMetadata.CommandBehavior;
                 _commandSetupDelegate = commandMetadata.LoadParametersDelegate;
                 _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
+                _script = commandMetadata.TransformedScript ?? _script;
             }
             else
             {
                 _commandBehavior = configuration.CommandBehavior;
 
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
-                _commandType = isStoreProcedure ? CommandType.StoredProcedure : CommandType.Text;
+                bool isExecuteNonQuery = configuration.MethodHandled == MethodHandled.Execute;
 
-                DbParameterInfo[] additionalOutputParameters = null;
+                LoaderConfiguration commandConfiguration;
+                bool expectBindValueParameters;
+                bool canPrepareStatement = false;
+                string transformedScript = null;
 
-                if (_provider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
+                if (isStoreProcedure && _provider == SqlProvider.PostgreSql)
                 {
-                    int cursorsToAdd = new [] { MethodHandled.ToSingleQueryString, MethodHandled.ToListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
-                    additionalOutputParameters = new DbParameterInfo[cursorsToAdd];
+                    _commandType = CommandType.Text;
+                    isStoreProcedure = false;
 
-                    for (int i = 0; i < cursorsToAdd; i++)
+                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out var parameters);
+
+                    if (parameters.Any(x => x.IsOutput) && !isExecuteNonQuery)
+                        throw new PostgreSQLInvalidRequestCallException();
+
+                    expectBindValueParameters = parameters.Any(x => x.IsInput);
+                    canPrepareStatement = expectBindValueParameters;
+                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in parameters, in isExecuteNonQuery);
+                }
+                else
+                {
+                    if (isStoreProcedure)
                     {
-                        string name = $"C_CURSOR{i + 1}";
-                        additionalOutputParameters[i] = new DbParameterInfo(in name, in name, 0, 0, ParameterDirection.Output, null, null, 121, null); // 121 -> RefCursor
+                        if (_provider == SqlProvider.Sqlite)
+                            throw new SqLiteStoreProcedureNotSupportedException();
+
+                        expectBindValueParameters = false;
+                        _commandType = CommandType.StoredProcedure;
                     }
+                    else
+                    {
+                        ValidateScript(in script, in options.SqlProvider, in isExecuteNonQuery, in hasFilter, out var isDML, out expectBindValueParameters);
+                        canPrepareStatement = isDML && expectBindValueParameters;
+                        _commandType = CommandType.Text;
+                    }
+
+                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, in isStoreProcedure, in canPrepareStatement);
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out _);
                 }
 
-                var loaderConfiguration = new LoaderConfiguration(
-                    keyAsReturnValue: in configuration.KeyAsReturnValue,
-                    generateParameterWithKeys: in configuration.GenerateParameterWithKeys,
-                    additionalOracleRefCursors: additionalOutputParameters?.ToList(),
-                    provider: in _provider,
-                    fetchSize: options.FetchSize,
-                    isExecuteNonQuery: configuration.MethodHandled == MethodHandled.Execute,
-                    query: in _script,
-                    timeout: options.ConnectionTimeout,
-                    commandType: in _commandType,
-                    isTransactionOperation: transaction != null,
-                    prepareStatements: options.PrepareStatements);
-
-                (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in loaderConfiguration, in _preparationQueryKey, in _commandType, in filterType, in buffered, ref _commandBehavior);
+                if (buffered)
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, transformedScript));
             }
-
-            if (options.DetailErrorMessage)
-                EnsureRequest();
         }
 
-        void EnsureRequest()
+        private static LoaderConfiguration GetCommandConfiguration(in DbSettings options, in CommandType commandType, in DbCommandConfiguration configuration, in bool isTransaction, in bool isStoreProcedure, in bool canPrepareStatement)
         {
-            if (string.IsNullOrEmpty(_script))
-                throw new InvalidOperationException("The script was no provided");
+            int cursorsToAdd = 0;
 
-            //unsupported operations
-            if (_commandType == CommandType.StoredProcedure && _provider == SqlProvider.Sqlite)
-                throw new InvalidOperationException("SQLite does not support stored procedures");
+            if (options.SqlProvider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
+                cursorsToAdd = new[] { MethodHandled.ToSingleQueryString, MethodHandled.ToListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
 
-            //validate parameters
-            if (_filter == null && QueryValidators.IsDML(_script) && QueryValidators.ScriptExpectParameterMatch(_script))
-                throw new InvalidOperationException("DML script expects parameters, but no parameters were provided");
+            return new LoaderConfiguration(
+                keyAsReturnValue: in configuration.KeyAsReturnValue,
+                skipAutoGeneratedColumn: in configuration.SkipAutoGeneratedColumn,
+                generateParameterWithKeys: in configuration.GenerateParameterWithKeys,
+                additionalOracleRefCursors: cursorsToAdd,
+                provider: in options.SqlProvider,
+                fetchSize: options.FetchSize,
+                timeout: options.ConnectionTimeout,
+                commandType: in commandType,
+                isTransactionOperation: in isTransaction,
+                prepareStatements: options.PrepareStatements,
+                canPrepareStatement: canPrepareStatement);
+        }
 
-            if (_filter != null && QueryValidators.IsDDL(_script))
-                throw new InvalidOperationException("DDL scripts does not support parameters");
+        private static void ValidateScript(in string script, in SqlProvider provider, in bool isExecuteNonQuery, in bool hasFilter, out bool isDML, out bool expectBindValueParameters)
+        {
+            isDML = QueryValidators.IsDML(script);
+            var isDDL = QueryValidators.IsDDL(script);
+            var isDCL = QueryValidators.IsDCL(script);
+            var isAnonymousBlock = QueryValidators.IsAnonymousBlock(script);
+            expectBindValueParameters = QueryValidators.ScriptExpectParameterMatch(script);
 
-            if (_filter != null && QueryValidators.IsDCL(_script))
-                throw new InvalidOperationException("DCL scripts does not support parameters");
+            if (hasFilter)
+            {
+                if (isDML && !expectBindValueParameters)
+                    throw new NotAllowParametersException();
 
-            if (_filter != null && QueryValidators.IsAnonymousBlock(_script))
-                throw new InvalidOperationException("Anonymous block does not support parameters");
+                if (isDCL || isDDL)
+                    throw new UnsupportedParametersException();
+
+                if (isAnonymousBlock && provider != SqlProvider.Oracle)
+                    throw new UnsupportedParametersException();
+            }
+            else if (isDML && expectBindValueParameters)
+            {
+                throw new MissingParametersException();
+            }
+
+            if ((isDCL || isDDL) && !isExecuteNonQuery)
+                throw new NotSupportedCommandTypeException();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -222,36 +262,11 @@ namespace Thomas.Database
             {
                 _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
                 _connection = _command.Connection;
-                _connection.Open();
             }
             else
             {
                 _command.CommandText = _script;
                 _command.CommandType = _commandType;
-                _command.Transaction = _transaction;
-                _command.CommandTimeout = _timeout;
-                _ = _commandSetupDelegate(_filter, null, null, _command);
-            }
-        }
-
-        /// <summary>
-        /// Prepare the command to be executed, opening the connection and load the parameters
-        /// </summary>
-        /// <param name="cancellationToken">cancellation token</param>
-        /// <returns>Parameters of the command</returns>
-        public async Task PrepareAsync(CancellationToken cancellationToken)
-        {
-            if (_connection == null)
-            {
-                _command = _commandSetupDelegate(_filter, _connectionString, _script, null);
-                _connection = _command.Connection;
-                await _connection.OpenAsync(cancellationToken);
-            }
-            else
-            {
-                _command.CommandText = _script;
-                _command.CommandType = _commandType;
-                _command.Transaction = _transaction;
                 _command.CommandTimeout = _timeout;
                 _ = _commandSetupDelegate(_filter, null, null, _command);
             }
@@ -281,7 +296,7 @@ namespace Thomas.Database
         {
             _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
             var list = new List<T>();
 
@@ -295,7 +310,7 @@ namespace Thomas.Database
         {
             if (await _reader.NextResultAsync(cancellationToken))
             {
-                var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+                var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
                 var list = new List<T>();
                 while (await _reader.ReadAsync(cancellationToken))
@@ -311,7 +326,7 @@ namespace Thomas.Database
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
             var list = new List<T>();
 
@@ -325,7 +340,7 @@ namespace Thomas.Database
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize, in batchSize);
 
             int counter = 0;
 
@@ -352,7 +367,7 @@ namespace Thomas.Database
         {
             if (_reader.NextResult())
             {
-                var parser = GetParserTypeDelegate<T>(in _reader, in _operationKey, in _preparationQueryKey, in _provider, in _bufferSize);
+                var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
                 var list = new List<T>();
 

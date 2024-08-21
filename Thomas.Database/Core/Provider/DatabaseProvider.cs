@@ -4,7 +4,7 @@ using System.Data.Common;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-
+using Thomas.Database.Core.Converters;
 using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
 
 namespace Thomas.Database.Core.Provider
@@ -17,19 +17,14 @@ namespace Thomas.Database.Core.Provider
         internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
         
 
-        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in int key, in CommandType commandType, in Type type, in bool buffered, ref CommandBehavior commandBehavior)
+        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, out DbParameterInfo[] parameters)
         {
-            if (!options.IsExecuteNonQuery)
-                commandBehavior |= CommandBehavior.SequentialAccess;
-
-            var loadParametersDelegate = GetSetupCommandDelegate(in type, in options, out var hasOutputParams, out var parameters);
+            var loadParametersDelegate = GetSetupCommandDelegate(in type, in options, out var hasOutputParams, out parameters);
 
             Action<object, DbCommand, DbDataReader> loadOutParameterDelegate = null;
-            if (hasOutputParams)
-                loadOutParameterDelegate = LoadOutParameterDelegate(in options.IsExecuteNonQuery, in type, in parameters);
 
-            if (buffered)
-                DatabaseHelperProvider.CommandMetadata.TryAdd(key, new CommandMetadata(in loadParametersDelegate, in loadOutParameterDelegate, in commandBehavior, in commandType));
+            if (hasOutputParams)
+                loadOutParameterDelegate = LoadOutParameterDelegate(in isExecuteNonQuery, in type, in parameters, in options.Provider);
 
             return (loadParametersDelegate, loadOutParameterDelegate);
         }
@@ -38,7 +33,7 @@ namespace Thomas.Database.Core.Provider
         {
             if (DatabaseHelperProvider.CommandMetadata.TryGetValue(key, out var metadata))
             {
-                DatabaseHelperProvider.CommandMetadata.TryUpdate(key, metadata.CloneNoCommandSequencial(), metadata);
+                DatabaseHelperProvider.CommandMetadata.TryUpdate(key, metadata.CloneNoCommandSequential(), metadata);
             }
         }
 
@@ -63,12 +58,30 @@ namespace Thomas.Database.Core.Provider
 #endif
         }
 
-        internal static object GetValueFromOracleParameter(in IDbDataParameter parameter)
+        internal static object GetValueFromOracleParameter(IDbDataParameter parameter, Type targetType)
         {
             var valueObject = OracleValueParameterProperty.GetValue(parameter);
             var valueType = valueObject.GetType();
             PropertyInfo valueProperty = valueType.GetProperty("Value");
-            return valueProperty.GetValue(valueObject);
+            var paramValue = valueProperty.GetValue(valueObject);
+            return TypeConversionRegistry.ConvertOutParameterValue(SqlProvider.Oracle, paramValue, targetType, true);
+        }
+
+        internal static string TransformPostgresScript(in string routineName, in DbParameterInfo[] parameters, in bool isExecuteNonQuery)
+        {
+            var hasInputParameters = parameters.Any(x => x.Direction == ParameterDirection.Input || x.Direction == ParameterDirection.InputOutput);
+
+            var prefix = isExecuteNonQuery ? "CALL" : "SELECT * FROM";
+
+            if (hasInputParameters)
+            {
+                var routineParams = string.Join(",", parameters.Where(x => x.Direction == ParameterDirection.Input || x.Direction == ParameterDirection.InputOutput).Select(x => x.BindName ?? $"@{x.Name.ToLower()}").ToArray());
+                return $"{prefix} {routineName}({routineParams})";
+            }
+            else
+            {
+                return $"{prefix} {routineName}()";
+            }
         }
     }
 }

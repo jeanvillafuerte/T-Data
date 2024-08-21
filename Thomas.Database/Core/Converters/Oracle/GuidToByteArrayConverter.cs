@@ -1,28 +1,30 @@
 ﻿using System;
-using System.Globalization;
 
 namespace Thomas.Database.Core.Converters.Oracle
 {
-    public class GuidToByteArrayConverter : ITypeConversionStrategy
+    public class GuidToByteArrayConverter : IInParameterValueConverter, IOutParameterValueConverter
     {
-        public bool CanConvert(Type targetType, object value)
+        public Type SourceType => typeof(Guid);
+        public Type TargetType => typeof(byte[]);
+
+        bool IInParameterValueConverter.CanConvert(object value)
         {
-            return targetType == typeof(byte[]) && value is Guid;
+            return value is Guid;
         }
 
-        public bool CanConvertByType(object value)
+        bool IOutParameterValueConverter.CanConvert(object value, Type targetType)
         {
-            return false;
+            return targetType == typeof(Guid) && value is byte[];
         }
 
-        public object Convert(object value, CultureInfo cultureInfo)
+        object IInParameterValueConverter.ConvertInValue(object value)
         {
             return ((Guid)value).ToByteArray();
         }
 
-        public object ConvertByType(object value, CultureInfo cultureInfo)
+        object IOutParameterValueConverter.ConvertOutValue(object value)
         {
-            return value;
+            return new Guid((byte[])value);
         }
     }
 }
