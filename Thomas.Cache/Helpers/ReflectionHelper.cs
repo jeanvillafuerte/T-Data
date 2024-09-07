@@ -6,39 +6,17 @@ namespace Thomas.Cache.Helpers
 {
     internal class ReflectionHelper
     {
-        public static bool IsTuple(Type type)
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Tuple<,>))
-                return true;
-
-            return false;
-        }
-
         public static Type[] GetTupleGenericArguments(Type type)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Tuple<,>))
+            if (type.IsGenericType)
                 return type.GetGenericArguments().Select(x => GetIEnumerableElementType(x)).ToArray();
 
             return null;
         }
 
-        public static bool IsIEnumerable(Type type)
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-                return true;
-
-            foreach (Type interfaceType in type.GetInterfaces())
-            {
-                if (interfaceType.IsGenericType && interfaceType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
-                    return true;
-            }
-
-            return false;
-        }
-
         public static Type GetIEnumerableElementType(Type type)
         {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
                 Type[] genericArguments = type.GetGenericArguments();
 

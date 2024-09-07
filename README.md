@@ -120,20 +120,20 @@ Experience really good performance without the hassle of managing DbConnection. 
 Note: Tested with Docker MSSQL locally
 
 ``` ini
-BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.3527/23H2/2023Update/SunValley3)
+BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4112/23H2/2023Update/SunValley3)
 13th Gen Intel Core i9-13900H, 1 CPU, 20 logical and 14 physical cores
-.NET SDK 8.0.101
-  [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-  Job-VNBJGA : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+.NET SDK 8.0.304
+  [Host]     : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
+  DefaultJob : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
 
 
 | Detailed Runtime           | Type                       | Method                      | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
 |--------------------------- |--------------------------- |---------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | Single<>                    | 432.8 us | 22.58 us |  8.15 us | 2,310.6 |      - |   8.04 KB |
-| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | QuerySingle<T>              | 500.0 us | 25.82 us |  9.93 us | 2,000.1 |      - |  11.54 KB |
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | 'ToListRecord<> Expression' | 563.7 us | 44.90 us | 15.23 us | 1,774.0 | 1.9531 |  26.76 KB |
-| .NET 8.0.1 (8.0.123.58001) | ThomasDataAdapterBenckmark | ToList<>                    | 572.7 us | 12.89 us | 10.83 us | 1,746.2 | 1.9531 |  26.47 KB |
-| .NET 8.0.1 (8.0.123.58001) | DapperBenckmark            | 'Query<T> (buffered)'       | 602.0 us | 38.75 us | 13.36 us | 1,661.1 | 1.9531 |  26.45 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | Single<>                    | 464.3 us | 51.84 us | 18.82 us | 2,153.8 | 0.4883 |   7.81 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | QuerySingle<T>              | 482.0 us | 68.35 us | 23.82 us | 2,074.7 | 0.4883 |   8.26 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | ToList<>                    | 516.8 us | 24.02 us | 10.28 us | 1,935.0 | 1.9531 |  25.12 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | Query<T>                    | 536.9 us | 63.32 us | 22.45 us | 1,862.5 | 0.9766 |  23.63 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'ToListRecord<> Expression' | 588.5 us | 66.56 us | 23.20 us | 1,699.2 | 1.9531 |  26.02 KB |
 ```
 
 ### Best practices

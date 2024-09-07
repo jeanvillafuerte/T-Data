@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -44,7 +45,10 @@ namespace Thomas.Database.Helpers
                     var instantiator = Expression.Lambda<Func<DateTime>>(newExpression).Compile();
                     var value = instantiator();
 
-                    return (hash * 23) + int.Parse(value.ToString("yyyyMMddmmss"));
+                    unchecked
+                    {
+                        return (hash * 23) + value.GetHashCode();
+                    }
                 }
 
                 return (hash * 23) + newExpression.Type.GetHashCode();
@@ -74,12 +78,24 @@ namespace Thomas.Database.Helpers
             return hash;
         }
 
-        public static int MemberExpression(MemberExpression memberExpr, int hash, bool includeValues, SqlProvider provider)
+        public static int MemberExpression(MemberExpression memberExpression, int hash, bool includeValues, SqlProvider provider)
         {
-            hash = (hash * 23) + memberExpr.Member.Name.GetHashCode();
+            hash = (hash * 23) + memberExpression.Member.Name.GetHashCode();
 
-            if (memberExpr.Expression != null)
-                hash = (hash * 23) + GetHashCode(memberExpr.Expression, hash, includeValues, provider);
+            if (memberExpression.Expression is ConstantExpression ce && memberExpression.Member is FieldInfo fe)
+            {
+                var constant = Expression.Constant(fe.GetValue(ce.Value));
+                if (constant.Type.IsArray || (constant.Type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(constant.Type)))
+                {
+                    var elementAmount = ((IEnumerable)constant.Value).Cast<object>().ToArray().Length;
+                    return (hash * 23) + elementAmount;
+                }
+
+                return (hash * 23) + constant.Value.GetHashCode();
+            }
+            
+            if (memberExpression.Expression != null)
+                hash = (hash * 23) + GetHashCode(memberExpression.Expression, hash, includeValues, provider);
 
             return hash;
         }

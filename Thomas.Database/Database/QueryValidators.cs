@@ -69,8 +69,8 @@ namespace Thomas.Database
         internal static bool ScriptExpectParameterMatch(string input)
 #endif
         {
-            var bindSymbols = new[] { '@', ':' };
-            return input.IndexOfAny(bindSymbols) > -1;
+            var bindSymbols = new[] { '@', ':', '$' };
+            return input.IndexOfAny(bindSymbols) > 0;
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER

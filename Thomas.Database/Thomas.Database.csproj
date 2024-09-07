@@ -15,11 +15,11 @@
     <Platforms>AnyCPU;x64</Platforms>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <Version>3.1.0</Version>
+    <Version>3.1.1</Version>
     <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>ThomasIco.png</PackageIcon>
-    <PackageReleaseNotes>Features released 3.0.0:
+    <PackageReleaseNotes>Features released 3.1.1:
 
 - Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
 - Expanded transaction support through the use of lambda expressions.
@@ -75,6 +75,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Sigil" Version="5.0.0" />
+    <PackageReference Include="System.Buffers" Version="4.5.1" />
     <PackageReference Include="System.Data.Common" Version="4.3.0" />
     <PackageReference Include="System.Linq.Expressions" Version="4.3.0" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />

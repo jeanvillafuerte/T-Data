@@ -33,10 +33,5 @@ namespace Thomas.Tests.Performance.Benchmark.Others
             new PersonContext(StringConnection).Database.SqlQueryRaw<Person>($"SELECT * FROM {TableName}").Consume(consumer);
         }
     }
-
-    class Filter
-    {
-        public int Id { get; set; }
-    }
 }
 #endif

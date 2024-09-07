@@ -12,7 +12,7 @@ namespace Thomas.Database.Core.Provider.Formatter
         readonly string ISqlFormatter.BindVariable => "$";
         readonly string ISqlFormatter.MinDate => "date('1900-01-01')";
         readonly string ISqlFormatter.MaxDate => "date('9999-12-31')";
-        readonly string ISqlFormatter.CurrentDate => "date('now')";
+        readonly string ISqlFormatter.CurrentDate => "datetime('now')";
 
         readonly string ISqlFormatter.Concatenate(params string[] values) => string.Join("||", values);
 

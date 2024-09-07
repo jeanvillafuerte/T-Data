@@ -6,12 +6,13 @@ using Thomas.Database.Attributes;
 using System.Collections.Concurrent;
 using System.Reflection.Emit;
 using System.Linq.Expressions;
+using Thomas.Database.Core.Converters;
 
 namespace Thomas.Database.Core.Provider
 {
     internal static partial class DatabaseHelperProvider
     {
-        internal static readonly ConcurrentDictionary<int, CommandMetadata> CommandMetadata = new ConcurrentDictionary<int, CommandMetadata>(Environment.ProcessorCount * 2, 50);
+        internal static readonly ConcurrentDictionary<int, CommandMetaData> CommandMetadata = new ConcurrentDictionary<int, CommandMetaData>(Environment.ProcessorCount * 2, 50);
         internal static readonly ConcurrentDictionary<SqlProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<SqlProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
 
         static DbParameterAttribute GetDbParameterAttribute(in PropertyInfo property)
@@ -19,15 +20,15 @@ namespace Thomas.Database.Core.Provider
             foreach (var attribute in property.GetCustomAttributes(true))
                 if (attribute is DbParameterAttribute attr)
                 {
-                    attr.Size = property.PropertyType == typeof(decimal) && attr.Size == 0 ? (byte)18 : attr.Size;
-                    attr.Precision = property.PropertyType == typeof(decimal) && attr.Precision == 0  ? (byte)6 : attr.Precision;
+                    attr.Precision = (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?)) && attr.Precision == 0  ? (byte)6 : attr.Precision;
+                    attr.Scale = (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?)) && attr.Scale == 0 ? (byte)6 : attr.Scale;
                     return attr;
                 }
 
             return new DbParameterAttribute {
                 Direction = ParameterDirection.Input,
-                Size = property.PropertyType == typeof(decimal) ? (byte)18 : (byte)0,
-                Precision = property.PropertyType == typeof(decimal) ? (byte)6 : (byte)0,
+                Precision = (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?)) ? (byte)18 : (byte)0,
+                Scale = (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?)) ? (byte)6 : (byte)0,
                 Name = property.Name
             };
         }
@@ -91,23 +92,30 @@ namespace Thomas.Database.Core.Provider
         public readonly string BindName;
         public readonly int Size;
         public readonly int Precision;
+        public readonly int Scale;
         public readonly ParameterDirection Direction;
         public readonly PropertyInfo PropertyInfo;
         public readonly Type PropertyType;
         public readonly int DbType;
         public readonly object Value;
+        public readonly IInParameterValueConverter Converter;
 
-        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value)
+        public bool IsInput => Direction == ParameterDirection.Input || Direction == ParameterDirection.InputOutput;
+        public bool IsOutput => Direction == ParameterDirection.Output || Direction == ParameterDirection.InputOutput || Direction == ParameterDirection.ReturnValue;
+
+        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in int scale, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value, in IInParameterValueConverter converter)
         {
             Name = name;
             BindName = bindName;
             Size = size;
             Precision = precision;
+            Scale = scale;
             Direction = direction;
             PropertyInfo = propertyInfo;
             PropertyType = propertyType != null ? propertyType : propertyInfo != null ? propertyInfo.PropertyType : null;
             DbType = dbType;
             Value = value;
+            Converter = converter;
         }
     }
 }

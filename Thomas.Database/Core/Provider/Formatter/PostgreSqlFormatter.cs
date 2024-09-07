@@ -8,10 +8,10 @@ namespace Thomas.Database.Core.Provider.Formatter
     internal readonly struct PostgreSqlFormatter : ISqlFormatter
     {
         readonly SqlProvider ISqlFormatter.Provider => SqlProvider.PostgreSql;
-        readonly string ISqlFormatter.BindVariable => ":";
+        readonly string ISqlFormatter.BindVariable => "@";
         readonly string ISqlFormatter.MinDate => "CAST('1900-01-01' AS date)";
         readonly string ISqlFormatter.MaxDate => "CAST('9999-12-31' AS date)";
-        readonly string ISqlFormatter.CurrentDate => "CURRENT_DATE";
+        readonly string ISqlFormatter.CurrentDate => "NOW()";
 
         readonly string ISqlFormatter.Concatenate(params string[] values)
         {

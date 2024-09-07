@@ -5,18 +5,38 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Thomas.Cache")]
 namespace Thomas.Database.Cache
 {
-    internal sealed class DynamicQueryString
+    internal sealed class DynamicQueryInfo
     {
-        private static ConcurrentDictionary<int, ValueTuple<string, Type>> DynamicQueryStringDictionary = new ConcurrentDictionary<int, ValueTuple<string, Type>>(Environment.ProcessorCount * 2, 50);
+        private static ConcurrentDictionary<int, ExpressionQueryItem> DynamicQueryStringDictionary = new ConcurrentDictionary<int, ExpressionQueryItem>(Environment.ProcessorCount * 2, 50);
 
-        private DynamicQueryString() { }
+        private DynamicQueryInfo() { }
 
-        internal static void Set(in int key, ValueTuple<string, Type> value) => DynamicQueryStringDictionary.TryAdd(key, value);
-        internal static bool TryGet(in int key, out ValueTuple<string, Type> meta) => DynamicQueryStringDictionary.TryGetValue(key, out meta);
+        internal static void Set(in int key, ExpressionQueryItem value) => DynamicQueryStringDictionary.TryAdd(key, value);
+        internal static bool TryGet(in int key, out ExpressionQueryItem meta) => DynamicQueryStringDictionary.TryGetValue(key, out meta);
         public static void Clear()
         {
             DynamicQueryStringDictionary.Clear();
-            DynamicQueryStringDictionary = new ConcurrentDictionary<int, ValueTuple<string, Type>>(Environment.ProcessorCount * 2, 50);
+            DynamicQueryStringDictionary = new ConcurrentDictionary<int, ExpressionQueryItem>(Environment.ProcessorCount * 2, 50);
+        }
+    }
+
+    internal sealed class ExpressionQueryItem
+    {
+        public string Query { get; set; }
+        public Type InternalType { get; set; }
+        public bool IsStaticQuery { get; set; }
+
+        /// <summary>
+        /// Hold parameter values on static queries
+        /// </summary>
+        public object[] ParameterValues { get; set; }
+
+        public ExpressionQueryItem(string query, Type internalType, bool isStaticQuery, object[] parameterValues)
+        {
+            Query = query;
+            InternalType = internalType;
+            IsStaticQuery = isStaticQuery;
+            ParameterValues = parameterValues;
         }
     }
 }

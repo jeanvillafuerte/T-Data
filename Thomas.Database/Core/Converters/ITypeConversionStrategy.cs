@@ -1,13 +1,23 @@
 ﻿using System;
-using System.Globalization;
 
 namespace Thomas.Database.Core.Converters
 {
-    internal interface ITypeConversionStrategy
+    public interface IParameterValueConverter
     {
-        object Convert(object value, CultureInfo cultureInfo);
-        bool CanConvert(Type targetType, object value);
-        bool CanConvertByType(object value);
-        object ConvertByType(object value, CultureInfo cultureInfo);
+        Type SourceType { get; }
+        Type TargetType { get; }
+    }
+
+    public interface IInParameterValueConverter : IParameterValueConverter
+    {
+       
+        bool CanConvert(object value);
+        object ConvertInValue(object value);
+    }
+
+    public interface IOutParameterValueConverter : IParameterValueConverter
+    {
+        bool CanConvert(object value, Type targetType);
+        object ConvertOutValue(object value);
     }
 }
