@@ -29,13 +29,13 @@ Join us in refining a library designed to streamline database interactions effor
 Benefits of persisting the configuration with its string connection you may have different versions of it for different purposes like pooling or Packet Size:
 
 ```c#
-DbConfigurationFactory.Register(new DbSettings(
+DbConfig.Register(new DbSettings(
     signature: "db1",
     provider: SqlProvider.SqlServer,
     stringConnection: $"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}"
 ));
 
-DbConfigurationFactory.Register(new DbSettings(
+DbConfig.Register(new DbSettings(
     signature: "db2",
     provider: SqlProvider.Sqlite,
     stringConnection: $"Data Source={filePath}"
@@ -45,7 +45,7 @@ DbConfigurationFactory.Register(new DbSettings(
 ### Custom configuration
 
 ```c#
-DbConfigurationFactory.Register(new DbSettings { 
+DbConfig.Register(new DbSettings { 
     Signature = "db1",
     StringConnection = $"Data Source={SourceName};Initial Catalog={database};User ID={User};Password={Pass}",
     DetailErrorMessage = true,
@@ -57,36 +57,36 @@ DbConfigurationFactory.Register(new DbSettings {
 ```c#
    var builder = new TableBuilder();
    builder.Configure<User>(key: x => x.Id).AddFieldsAsColumns<User>().DbName("system_user");
-   DbFactory.AddDbBuilder(builder);
+   DbConfig.AddDbBuilder(builder);
 ```
 
 ### Expressions calls
 ```c#
 public class UserRepository
 {
-    public List<User> GetUsers() => DbFactory.GetDbContext("db1").ToList<User>();
-    public List<User> GetInvalidUsers() => DbFactory.GetDbContext("db1").ToList<User>(
+    public List<User> GetUsers() => DbHub.Use("db1").FetchList<User>();
+    public List<User> GetInvalidUsers() => DbHub.Use("db1").FetchList<User>(
         user => 
-        SqlExpression.IsNull<Person>(x => x.LastName) &&
-        x.Age <= 0 && x.Age > 100 &&
-        x.Salary <= 0
+        user.LastName == null &&
+        user.Age <= 0 && user.Age > 100 &&
+        user.Salary <= 0
     );
 
-    public int Add(User user) => DbFactory.GetDbContext("db2").Add<User, int>(user);
-    public void Update(User user) => DbFactory.GetDbContext("db2").Update(user);
-    public void Delete(User user) => DbFactory.GetDbContext("db2").Delete(user);
+    public int Add(User user) => DbHub.Use("db2").Add<User, int>(user);
+    public void Update(User user) => DbHub.Use("db2").Update(user);
+    public void Delete(User user) => DbHub.Use("db2").Delete(user);
 }
 ```
 ### Direct calls
 ```c#
-    public void DisableUser(int id) => DbFactory.GetDbContext("db2").ExecuteOp(new { id }, "disable_user");
-    public Tuple<IEnumerable<User>, IEnumerable<Office>> ProcessData() {
-        return DbFactory.GetDbContext("db1").ToTupleOp<User, Office>("sp_process");
+    public void DisableUser(int id) => DbHub.Use("db2").ExecuteOp("disable_user", new { id });
+    public Tuple<List<User>, List<Office>> ProcessData() {
+        return DbHub.Use("db1").ToTuple<User, Office>("sp_process");
     }
 
     public bool ActiveOffice(decimal officeId)
     {
-        return DbFactory.GetDbContext("db2").ExecuteTransaction((db) =>
+        return DbHub.Use("db2").ExecuteTransaction((db) =>
         {
             db.Execute("UPDATE User SET Active = 1 WHERE OfficeId = $officeId", new { officeId });
             db.Execute("UPDATE Office SET Active = 1 WHERE OfficeId = $officeId", new { officeId });
@@ -97,7 +97,7 @@ public class UserRepository
     //batching
     public void Export()
     {
-        var (dispose, data) = sqlServerContext.FetchData<Order>(script: "SELECT * FROM Order", parameters: null, batchSize: 10000);
+        var (dispose, data) = DbHub.Use("db1").FetchData<Order>(script: "SELECT * FROM Order", parameters: null, batchSize: 10000);
         foreach (var batch in data)
         {
             //process batch
@@ -109,7 +109,7 @@ public class UserRepository
     public record User(int Id, string Name, byte[] photo);
     public List<User> Export()
     {
-        return sqlServerContext.ToList<User>("SELECT * FROM User"); 
+        return DbHub.Use("db1").FetchList<User>("SELECT * FROM User"); 
     }
 ```
 
@@ -129,11 +129,11 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4112/23H2/2023Update/SunValley3
 
 | Detailed Runtime           | Type                       | Method                      | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
 |--------------------------- |--------------------------- |---------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | Single<>                    | 464.3 us | 51.84 us | 18.82 us | 2,153.8 | 0.4883 |   7.81 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchOne<>                    | 464.3 us | 51.84 us | 18.82 us | 2,153.8 | 0.4883 |   7.81 KB |
 | .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | QuerySingle<T>              | 482.0 us | 68.35 us | 23.82 us | 2,074.7 | 0.4883 |   8.26 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | ToList<>                    | 516.8 us | 24.02 us | 10.28 us | 1,935.0 | 1.9531 |  25.12 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchList<>                    | 516.8 us | 24.02 us | 10.28 us | 1,935.0 | 1.9531 |  25.12 KB |
 | .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | Query<T>                    | 536.9 us | 63.32 us | 22.45 us | 1,862.5 | 0.9766 |  23.63 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'ToListRecord<> Expression' | 588.5 us | 66.56 us | 23.20 us | 1,699.2 | 1.9531 |  26.02 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'FetchList<> Expression' | 588.5 us | 66.56 us | 23.20 us | 1,699.2 | 1.9531 |  26.02 KB |
 ```
 
 ### Best practices

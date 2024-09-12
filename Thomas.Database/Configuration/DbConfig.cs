@@ -5,7 +5,7 @@ using Thomas.Database.Core.Provider;
 
 namespace Thomas.Database.Configuration
 {
-    public sealed class DbConfigurationFactory
+    public sealed class DbConfig
     {
         private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>(Environment.ProcessorCount * 2, 10);
         internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>(Environment.ProcessorCount * 2, 10);

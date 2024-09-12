@@ -3,17 +3,17 @@ using Thomas.Database.Core.FluentApi;
 
 namespace Thomas.Database
 {
-    public static class DbFactory
+    public static class DbHub
     {
-        public static IDatabase GetDbContext(string signature, bool buffered = true)
+        public static IDatabase Use(string signature, bool buffered = true)
         {
-            var config = DbConfigurationFactory.Get(in signature);
+            var config = DbConfig.Get(in signature);
             if (config == null)
                 throw new System.Exception("Database configuration not found");
 
             return new DbBase(in config, in buffered);
         }
 
-        public static void AddDbBuilder(TableBuilder builder) => DbConfigurationFactory.AddTableBuilder(in builder);
+        public static void AddDbBuilder(TableBuilder builder) => DbConfig.AddTableBuilder(in builder);
     }
 }

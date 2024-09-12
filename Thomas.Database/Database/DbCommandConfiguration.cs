@@ -21,15 +21,15 @@ namespace Thomas.Database
 
         readonly internal bool IsTuple()
         {
-            return MethodHandled == MethodHandled.ToTupleQueryString_2 ||
-                    MethodHandled == MethodHandled.ToTupleQueryString_3 ||
-                    MethodHandled == MethodHandled.ToTupleQueryString_4 ||
-                    MethodHandled == MethodHandled.ToTupleQueryString_5 ||
-                    MethodHandled == MethodHandled.ToTupleQueryString_6 ||
-                    MethodHandled == MethodHandled.ToTupleQueryString_7;
+            return MethodHandled == MethodHandled.FetchTupleQueryString_2 ||
+                    MethodHandled == MethodHandled.FetchTupleQueryString_3 ||
+                    MethodHandled == MethodHandled.FetchTupleQueryString_4 ||
+                    MethodHandled == MethodHandled.FetchTupleQueryString_5 ||
+                    MethodHandled == MethodHandled.FetchTupleQueryString_6 ||
+                    MethodHandled == MethodHandled.FetchTupleQueryString_7;
         }
 
-        readonly internal bool EligibleForAddOracleCursors() => MethodHandled == MethodHandled.ToListQueryString || MethodHandled == MethodHandled.ToSingleQueryString || IsTuple();
+        readonly internal bool EligibleForAddOracleCursors() => MethodHandled == MethodHandled.FetchListQueryString || MethodHandled == MethodHandled.FetchOneQueryString || IsTuple();
 
         public override int GetHashCode()
         {

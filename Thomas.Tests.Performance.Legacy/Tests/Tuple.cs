@@ -11,22 +11,22 @@ namespace Thomas.Tests.Performance.Legacy.Tests
         public void Execute(string db, string tableName, int expectedItems = 0)
         {
             string query = $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperation(() => DbFactory.GetDbContext(db).ToTuple<Person, Person>($"{query}; {query}"), null, "ToTuple<>");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToTupleOp<Person, Person>($"{query}; {query}"), null, "ToTupleOp<>");
+            PerformOperation(() => DbHub.Use(db).FetchTuple<Person, Person>($"{query}; {query}"), null, "FetchTuple<>");
+            PerformOperation(() => DbHub.Use(db).TryFetchTuple<Person, Person>($"{query}; {query}"), null, "TryFetchTuple<>");
         }
 
         public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
             string query = $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToTupleAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), null, "ToTupleAsync<>");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToTupleOpAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), null, "ToTupleOpAsync<>");
+            await PerformOperationAsync(() => DbHub.Use(db).FetchTupleAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), null, "FetchTupleAsync<>");
+            await PerformOperationAsync(() => DbHub.Use(db).TryFetchTupleAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), null, "TryFetchTupleAsync<>");
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
             string query = $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToTuple<Person, Person>($"{query}; {query}"), null, "ToTuple<>");
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToTuple<Person, Person, Person>($"{query}; {query}; {query}"), null, "ToTuple<>");
+            PerformOperation(() => CachedDbHub.Use(db).FetchTuple<Person, Person>($"{query}; {query}"), null, "FetchTuple<>");
+            PerformOperation(() => CachedDbHub.Use(db).FetchTuple<Person, Person, Person>($"{query}; {query}; {query}"), null, "FetchTuple<>");
         }
     }
 }

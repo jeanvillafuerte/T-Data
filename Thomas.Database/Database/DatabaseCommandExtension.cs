@@ -521,11 +521,11 @@ namespace Thomas.Database
             var table = reader.GetSchemaTable();
             var columnSchema = new LinkedList<PropertyTypeInfo>();
 
-            if (!DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out var configuratedTable))
+            if (!DbConfig.Tables.TryGetValue(type.FullName!, out var configuratedTable))
             {
                 var dbTable = new DbTable { Name = type.Name!, Columns = new LinkedList<Thomas.Database.Core.FluentApi.DbColumn>() };
                 dbTable.AddFieldsAsColumns(type);
-                DbConfigurationFactory.Tables.TryAdd(type.FullName!, dbTable);
+                DbConfig.Tables.TryAdd(type.FullName!, dbTable);
                 configuratedTable = dbTable;
             }
             

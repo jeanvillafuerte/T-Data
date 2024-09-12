@@ -1,6 +1,5 @@
 ﻿using System.Threading;
 using System.Threading.Tasks;
-using Thomas.Cache;
 using Thomas.Database;
 using Thomas.Tests.Performance.Entities;
 
@@ -14,14 +13,14 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
         public void Execute(string db, string tableName, int expectedItems = 0)
         {
-            PerformOperation(() => DbFactory.GetDbContext(db).ToListOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToListOp<> error resilient");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToSingleOp<Person>($@"SELECT UserName2 FROM {tableName}"), null, "ToSingleOp<> error resilient");
+            PerformOperation(() => DbHub.Use(db).TryFetchList<Person>($@"SELECT UserName2 FROM {tableName}"), null, "TryFetchList<>");
+            PerformOperation(() => DbHub.Use(db).TryFetchOne<Person>($@"SELECT UserName2 FROM {tableName}"), null, "TryFetchOne<>");
         }
 
         public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToListOpAsync<> error resilient", true);
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "ToSingleOpAsync<> error resilient", true);
+            await PerformOperationAsync(() => DbHub.Use(db).TryFetchListAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "TryFetchListAsync<>", true);
+            await PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "TryFetchOneAsync<>", true);
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

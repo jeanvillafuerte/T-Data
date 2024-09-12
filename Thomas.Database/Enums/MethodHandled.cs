@@ -3,15 +3,15 @@
     internal enum MethodHandled : byte
     {
         Execute = 0,
-        ToListExpression = 1,
-        ToListQueryString = 2,
-        ToSingleExpression = 3,
-        ToSingleQueryString = 4,
-        ToTupleQueryString_2 = 5,
-        ToTupleQueryString_3 = 6,
-        ToTupleQueryString_4 = 7,
-        ToTupleQueryString_5 = 8,
-        ToTupleQueryString_6 = 9,
-        ToTupleQueryString_7 = 10,
+        FetchListExpression = 1,
+        FetchListQueryString = 2,
+        FetchOneExpression = 3,
+        FetchOneQueryString = 4,
+        FetchTupleQueryString_2 = 5,
+        FetchTupleQueryString_3 = 6,
+        FetchTupleQueryString_4 = 7,
+        FetchTupleQueryString_5 = 8,
+        FetchTupleQueryString_6 = 9,
+        FetchTupleQueryString_7 = 10,
     }
 }

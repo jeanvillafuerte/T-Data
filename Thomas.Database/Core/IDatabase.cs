@@ -12,8 +12,8 @@ namespace Thomas.Database
     {
         int Execute(in string script, in object parameters = null);
         T ExecuteScalar<T>(in string script, in object parameters = null);
-        T ToSingle<T>(Expression<Func<T, bool>> where = null);
-        List<T> ToList<T>(Expression<Func<T, bool>> where = null);
+        T FetchOne<T>(Expression<Func<T, bool>> where = null);
+        List<T> FetchList<T>(Expression<Func<T, bool>> where = null);
 
         /// <summary>
         /// stream data from database
@@ -29,8 +29,8 @@ namespace Thomas.Database
 
         void ExecuteBlock(Action<IDatabase> func);
 
-        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where);
-        Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken);
+        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where);
+        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken);
 
         Task ExecuteBlockAsync(Func<IDatabase, Task> func);
         Task ExecuteBlockAsync(Func<IDatabase, CancellationToken, Task> func, CancellationToken cancellationToken);
@@ -39,6 +39,9 @@ namespace Thomas.Database
         T ExecuteTransaction<T>(Func<IDatabase, T> func);
         TransactionResult Commit();
         TransactionResult Rollback();
+
+        Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, Task<T>> func);
+        Task<bool> ExecuteTransaction(Func<IDatabase, Task<TransactionResult>> func);
 
         Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, CancellationToken, Task<T>> func, CancellationToken cancellationToken);
         Task<bool> ExecuteTransaction(Func<IDatabase, CancellationToken, Task<TransactionResult>> func, CancellationToken cancellationToken);

@@ -71,11 +71,11 @@ namespace Thomas.Database.Core.QueryGenerator
             Type = typeof(T);
             TableAlias = GetTableAlias();
 
-            if (!DbConfigurationFactory.Tables.TryGetValue(Type.FullName!, out _table))
+            if (!DbConfig.Tables.TryGetValue(Type.FullName!, out _table))
             {
                 var dbTable = new DbTable { Name = Type.Name!, Columns = new LinkedList<DbColumn>() };
                 dbTable.AddFieldsAsColumns<T>();
-                DbConfigurationFactory.Tables.TryAdd(Type.FullName!, dbTable);
+                DbConfig.Tables.TryAdd(Type.FullName!, dbTable);
                 _table = dbTable;
             }
 
@@ -359,11 +359,11 @@ namespace Thomas.Database.Core.QueryGenerator
 
             string where = "";
 
-            if (!DbConfigurationFactory.Tables.TryGetValue(b.Type.FullName!, out var _table))
+            if (!DbConfig.Tables.TryGetValue(b.Type.FullName!, out var _table))
             {
                 var dbTable = new DbTable { Name = Type.Name!, Columns = new LinkedList<DbColumn>() };
                 dbTable.AddFieldsAsColumns<T>();
-                DbConfigurationFactory.Tables.TryAdd(Type.FullName!, dbTable);
+                DbConfig.Tables.TryAdd(Type.FullName!, dbTable);
                 _table = dbTable;
             }
 

@@ -185,7 +185,7 @@ namespace Thomas.Database
             int cursorsToAdd = 0;
 
             if (options.SqlProvider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
-                cursorsToAdd = new[] { MethodHandled.ToSingleQueryString, MethodHandled.ToListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
+                cursorsToAdd = new[] { MethodHandled.FetchOneQueryString, MethodHandled.FetchListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
 
             return new LoaderConfiguration(
                 keyAsReturnValue: in configuration.KeyAsReturnValue,
@@ -276,6 +276,9 @@ namespace Thomas.Database
         public object ExecuteScalar() => _command.ExecuteScalar();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<object> ExecuteScalarAsync(CancellationToken cancellationToken) => await _command.ExecuteScalarAsync(cancellationToken);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -347,6 +350,33 @@ namespace Thomas.Database
             var list = new List<T>(batchSize);
 
             while (_reader.Read())
+            {
+                counter++;
+                list.Add(parser(_reader));
+
+                if (counter == batchSize)
+                {
+                    yield return list;
+                    list.Clear();
+                    counter = 0;
+                }
+            }
+
+            if (counter > 0)
+                yield return list;
+        }
+
+        public async IAsyncEnumerable<List<T>> FetchDataAsync<T>(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            _reader = await _command!.ExecuteReaderAsync(_commandBehavior, cancellationToken);
+
+            var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize, in batchSize);
+
+            int counter = 0;
+
+            var list = new List<T>(batchSize);
+
+            while (await _reader.ReadAsync(cancellationToken))
             {
                 counter++;
                 list.Add(parser(_reader));
