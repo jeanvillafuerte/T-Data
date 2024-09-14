@@ -63,9 +63,9 @@ namespace Thomas.Database.Tests.SQLite
             var dbContext = DbHub.Use("db1");
             dbContext.ExecuteBlock((db) =>
             {
-                db.Add(new UserType(1, "Administrator"));
-                db.Add(new UserType(2, "Operator"));
-                db.Add(new UserType(3, "Regular"));
+                db.Insert(new UserType(1, "Administrator"));
+                db.Insert(new UserType(2, "Operator"));
+                db.Insert(new UserType(3, "Regular"));
             });
         }
 
@@ -74,7 +74,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            var id = dbContext.Add<User, int>(new User(0, 3, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
+            var id = dbContext.Insert<User, int>(new User(0, 3, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
             Assert.That(Convert.ToInt32(id), Is.GreaterThan(0));
         }
 
@@ -83,9 +83,9 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            dbContext.Add(new User(0, 2, "Peter", false, 3350.99m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
-            dbContext.Add(new User(0, 2, "Jean", true, 1346.23m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
-            dbContext.Add(new User(0, 1, "John", true, 6344.98m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
+            dbContext.Insert(new User(0, 2, "Peter", false, 3350.99m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
+            dbContext.Insert(new User(0, 2, "Jean", true, 1346.23m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
+            dbContext.Insert(new User(0, 1, "John", true, 6344.98m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
             Assert.Pass();
         }
 
@@ -171,7 +171,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var user = new UserNullableRecord(0, 1, "Sample", null, null, null, null, null);
-            var id = dbContext.Add<UserNullableRecord, int>(user);
+            var id = dbContext.Insert<UserNullableRecord, int>(user);
             var output = dbContext.FetchOne<UserNullableRecord>(x => x.Id == id);
             Assert.That(user.State, Is.EqualTo(output.State));
             Assert.That(user.Salary, Is.EqualTo(output.Salary));
@@ -184,7 +184,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var user = new UserNullableClass { Name = "Sample 2" };
-            var id = dbContext.Add<UserNullableClass, int>(user);
+            var id = dbContext.Insert<UserNullableClass, int>(user);
             var output = dbContext.FetchOne<UserNullableClass>(x => x.Id == id);
             Assert.That(user.State, Is.EqualTo(output.State));
             Assert.That(user.Salary, Is.EqualTo(output.Salary));
@@ -262,7 +262,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            dbContext.Add(new User(0, 2, "John", false, 3350.99m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
+            dbContext.Insert(new User(0, 2, "John", false, 3350.99m, new DateTime(1989, 5, 17), Guid.NewGuid(), icon));
             User result = dbContext.FetchOne<User>(x => x.Name.Contains('o') && x.Name.EndsWith("n") && x.Name.StartsWith("J"));
             Assert.That(result, Is.Not.Null);
         }
@@ -273,7 +273,7 @@ namespace Thomas.Database.Tests.SQLite
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
             var user = new UserNullableRecord(0, 2, "John", null, 351.94m, new DateTime(1996, 7, 28), Guid.NewGuid(), icon);
-            dbContext.Add(user);
+            dbContext.Insert(user);
             var result = dbContext.FetchOne<UserNullableRecord>(x => x.State == null && x.Name != null && x.Name == "John");
             Assert.That(result, Is.Not.Null);
             Assert.That(result.Name, Is.EqualTo(user.Name));
@@ -330,7 +330,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            var id = dbContext.Add<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
+            var id = dbContext.Insert<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
             var user = dbContext.FetchOne<User>("SELECT * FROM USERS WHERE ID = $Id", new { Id = id });
             Assert.That(user, Is.Not.Null);
         }
@@ -340,7 +340,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            dbContext.Add(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
+            dbContext.Insert(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
             var users = dbContext.FetchList<User>();
             Assert.That(users, Is.Not.Empty);
         }
@@ -351,7 +351,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            var id = dbContext.Add<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
+            var id = dbContext.Insert<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
             var user = dbContext.FetchOne<User>(x => x.Id == id);
             Assert.That(user, Is.Not.Null);
         }
@@ -370,7 +370,7 @@ namespace Thomas.Database.Tests.SQLite
         {
             var dbContext = DbHub.Use("db1");
             var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
-            var id = dbContext.Add<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
+            var id = dbContext.Insert<User, int>(new User(0, 2, "Jean", true, 1340.5m, new DateTime(1997, 3, 21), Guid.NewGuid(), icon));
             var result = dbContext.TryFetchOne<User>("SELECT * FROM USERS WHERE ID = $Id", new { Id = id });
             Assert.That(result.Success, Is.True);
             Assert.That(result.Result, Is.Not.Null);

@@ -19,19 +19,19 @@ namespace Thomas.Database.Tests
                 db.Execute("CREATE TABLE USERS(ID INT PRIMARY KEY IDENTITY(1,1), USER_TYPE_ID INT NOT NULL, NAME VARCHAR(50), STATE BIT, SALARY DECIMAL(15,2), BIRTHDAY DATE, USERCODE UniqueIdentifier, ICON VARBINARY(MAX))");
 
                 //TODO: replace for bulk insert
-                db.Add(new UserNullableRecord(0, 3, "Sample 1", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 2", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 3", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 4", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 5", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 6", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 7", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 8", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 9", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 10", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 11", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 12", null, null, null, null, null));
-                db.Add(new UserNullableRecord(0, 3, "Sample 13", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 1", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 2", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 3", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 4", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 5", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 6", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 7", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 8", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 9", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 10", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 11", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 12", null, null, null, null, null));
+                db.Insert(new UserNullableRecord(0, 3, "Sample 13", null, null, null, null, null));
             });
         }
 

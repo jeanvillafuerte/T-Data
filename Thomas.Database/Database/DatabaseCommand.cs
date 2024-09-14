@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 using Thomas.Database.Core.Provider;
 using Thomas.Database.Configuration;
 
-using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
-
 [assembly: InternalsVisibleTo("Thomas.Database.Tests")]
 namespace Thomas.Database
 {
@@ -35,7 +33,7 @@ namespace Thomas.Database
         private DbConnection _connection;
         private readonly DbTransaction _transaction;
 
-        // output parameters
+        //output parameters
         internal IEnumerable<IDbDataParameter> OutParameters
         {
             get
@@ -236,6 +234,12 @@ namespace Thomas.Database
         {
             _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
             _connection.Open();
+        }
+
+        internal async Task OpenConnectionAsync(CancellationToken cancellationToken)
+        {
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            await _connection.OpenAsync(cancellationToken);
         }
 
         internal DbTransaction BeginTransaction()
