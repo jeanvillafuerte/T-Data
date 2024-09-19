@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Thomas.Database;
 
@@ -12,288 +13,227 @@ namespace Thomas.Tests.Performance.Legacy.Tests
     {
         protected readonly string _databaseName = databaseName;
 
-        public void PerformOperation(Action Operation, int? expectedItems, string operationName = "")
+        public void PerformOperation(Action operation, string operationName)
         {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
+            Parallel.For(1, 10, (i) =>
             {
-                stopWatch.Start();
-
-                Operation.Invoke();
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public void PerformOperation<T>(Func<T> Operation, int? expectedItems, string operationName = "")
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-
-                try
-                {
-                    Operation.Invoke();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public void PerformOperation<T>(Func<DbOpResult<List<T>>> Operation, int? expectedItems, string operationName = "")
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-
-                var result = Operation.Invoke();
-
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, result.Result?.Count ?? 0, expectedItems ?? -1, !result.Success));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public void PerformOperation<T>(Func<List<T>> Operation, int? expectedItems, string operationName = "")
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-                int count = 0;
-                try
-                {
-                    count = Operation.Invoke().Count;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public async Task PerformOperationAsync<T>(Func<Task<T>> Operation, int? expectedItems, string operationName = "", bool shouldFail = false)
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-
-                if (shouldFail)
+                var stopWatch = new Stopwatch();
+                for (int j = 0; j < 100; j++)
                 {
                     try
                     {
-                        await Operation.Invoke();
+                        operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
                     }
-                    catch (Exception) { }
+                    catch (Exception)
+                    {
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        Interlocked.Increment(ref errorCount);
+                    }
+
+                    stopWatch.Reset();
                 }
-                else
-                {
-                    await Operation.Invoke();
-                }
+            });
 
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, default, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()}{(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
         }
 
-        public async Task PerformOperationAsync<T>(Func<Task<List<T>>> operation, int? expectedItems, string operationName = "", bool shouldFail = false)
+        public void PerformOperation<T>(Func<T> operation, string operationName)
         {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-            for (int i = 0; i < 1000; i++)
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
+            Parallel.For(1, 10, (i) =>
             {
-                stopWatch.Start();
-                int count = 0;
-
-                if (shouldFail)
+                var stopWatch = new Stopwatch();
+                for (int j = 0; j < 100; j++)
                 {
+                    T result = default;
+                    var error = false;
                     try
                     {
-                        count = (await operation.Invoke()).Count;
+                        stopWatch.Start();
+                        result = operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
                     }
-                    catch (Exception) { }
+                    catch (Exception)
+                    {
+                        Interlocked.Increment(ref errorCount);
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        error = true;
+                    }
+                    finally
+                    {
+                        if (!error && result == null)
+                            Interlocked.Increment(ref errorCount);
+
+                        stopWatch.Reset();
+                    }
                 }
-                else
+            });
+
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()} {(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
+        }
+
+        public void PerformOperation<T>(Func<DbOpResult<List<T>>> operation, int? expectedItems, string operationName)
+        {
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
+            Parallel.For(1, 10, (i) =>
+            {
+                var stopWatch = new Stopwatch();
+                var error = false;
+
+                for (int j = 0; j < 100; j++)
                 {
-                    count = (await operation.Invoke()).Count;
+                    DbOpResult<List<T>> result = null;
+                    try
+                    {
+                        stopWatch.Start();
+                        result = operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                    }
+                    catch (Exception)
+                    {
+                        Interlocked.Increment(ref errorCount);
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        error = true;
+                    }
+                    finally
+                    {
+                        if (!error && (result == null || !result.Success || (expectedItems.HasValue && result.Result.Count != expectedItems.Value)))
+                            Interlocked.Increment(ref errorCount);
+
+                        stopWatch.Reset();
+                    }
                 }
+            });
 
-                var elapsed = stopWatch.ElapsedMilliseconds;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()} {(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
         }
 
-        public void PerformOperation<T>(Func<DbOpResult<IEnumerable<T>>> Operation, int? expectedItems, string operationName = "")
+        public void PerformOperation<T>(Func<List<T>> operation, int? expectedItems, string operationName)
         {
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
 
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
+            Parallel.For(1, 10, (i) =>
             {
-                stopWatch.Start();
+                var stopWatch = new Stopwatch();
+                var error = false;
 
-                var data = Operation.Invoke();
-                var elapsed = stopWatch.ElapsedMilliseconds;
-                var count = data.Result?.Count() ?? -1;
-
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, count, expectedItems ?? -1));
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public void PerformOperation<T>(Func<IEnumerable<T>> Operation, int? expectedItems, string operationName = "")
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-
-                var data = Operation.Invoke();
-                var elapsed = stopWatch.ElapsedMilliseconds;
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, data.Count(), expectedItems ?? -1));
-
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
-        }
-
-        public async Task PerformOperationAsync<T>(Func<Task<IEnumerable<T>>> Operation, int? expectedItems, string operationName = "")
-        {
-
-            var stopWatch = new Stopwatch();
-
-            var builder = new StringBuilder();
-            builder.Append($"\tOperation: {operationName}");
-            builder.AppendLine("");
-
-            for (int i = 0; i < 1000; i++)
-            {
-                stopWatch.Start();
-                IEnumerable<T> data = null;
-                bool fail = false;
-                try
+                for (int j = 0; j < 100; j++)
                 {
-                    data = await Operation.Invoke();
+                    List<T> items = null;
+                    try
+                    {
+                        stopWatch.Start();
+                        items = operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                    }
+                    catch (Exception)
+                    {
+                        Interlocked.Increment(ref errorCount);
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        error = true;
+                    }
+                    finally
+                    {
+                        if (!error && (items == null || (expectedItems.HasValue && items.Count != expectedItems.Value)))
+                            Interlocked.Increment(ref errorCount);
+
+                        stopWatch.Reset();
+                    }
                 }
-                catch (Exception) { fail = true; }
-                var elapsed = stopWatch.ElapsedMilliseconds;
-                builder.AppendLine("\t" + WriteTestResult(i + 1, _databaseName, elapsed, default, data?.Count() ?? 0, expectedItems ?? -1, fail));
+            });
+            
 
-                stopWatch.Reset();
-            }
-
-            builder.AppendLine("");
-            Console.WriteLine(builder.ToString());
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()} {(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
         }
 
-        public static string WriteTestResult(int iteration, string database, long ElapsedMilliseconds, string additional, int rows = -1, int expectedRows = -1, bool forceFail = false)
+        public void PerformOperationAsync<T>(Func<Task<T>> operation, string operationName, bool shouldFail = false)
         {
-            string expectedResult;
-            if (expectedRows > -1 && rows > -1)
-                expectedResult = $" (expected: {expectedRows}) | RESULT: {(rows == expectedRows && !forceFail ? "OK" : "ERROR")}";
-            else
-                expectedResult = " | RESULT: OK";
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
 
-            additional = !string.IsNullOrEmpty(additional) ? $" -> {additional}" : "" + expectedResult;
-            return $"({database}) Iteration {iteration.ToString().PadLeft(3, '0')} Elapse ml: {ElapsedMilliseconds.ToString().PadLeft(8, '0')}{additional}";
-        }
-
-        public async Task<int> CountAsyncEnumerable<T>(IAsyncEnumerable<T> data)
-        {
-            int counter = 0;
-            await foreach (var item in data)
+            Parallel.For(1, 10, async (i) =>
             {
-                counter++;
-            }
+                var stopWatch = new Stopwatch();
+                var error = false;
 
-            return counter;
+                for (int j = 0; j < 100; j++)
+                {
+                    T result = default;
+                    try
+                    {
+                        stopWatch.Start();
+                        result = await operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                    }
+                    catch (Exception)
+                    {
+                        if (!shouldFail)
+                            Interlocked.Increment(ref errorCount);
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        error = true;
+                    }
+                    finally
+                    {
+                        if (!error && !shouldFail && result == null)
+                            Interlocked.Increment(ref errorCount);
+
+                        stopWatch.Reset();
+                    }
+                }
+            });
+
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()} {(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
         }
+
+        public void PerformOperationAsync<T>(Func<Task<List<T>>> operation, int expectedItems, string operationName)
+        {
+            var bag = new ConcurrentBag<long>();
+            var errorCount = 0;
+
+            Parallel.For(1, 10, async (i) =>
+            {
+                var stopWatch = new Stopwatch();
+                var error = false;
+
+                for (int j = 0; j < 100; j++)
+                {
+                    List<T> result = default;
+                    try
+                    {
+                        stopWatch.Start();
+                        result = await operation.Invoke();
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                    }
+                    catch (Exception)
+                    {
+                        Interlocked.Increment(ref errorCount);
+                        bag.Add(stopWatch.ElapsedMilliseconds);
+                        error = true;
+                    }
+                    finally
+                    {
+                        if (!error && (result == null || result.Count != expectedItems))
+                            Interlocked.Increment(ref errorCount);
+
+                        stopWatch.Reset();
+                    }
+                }
+            });
+
+            var avg =  bag.IsEmpty ? 0 : Math.Round(bag.Average(), 2);
+            Console.WriteLine($"\tOperation: {operationName} ({_databaseName}) Elapse ml avg: {avg.ToString()} {(errorCount == 0 ? "" : $"Errors: {errorCount}")}");
+        }
+
     }
 }

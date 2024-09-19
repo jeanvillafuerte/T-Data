@@ -1,8 +1,8 @@
-﻿using Thomas.Database.Configuration;
+﻿using System.Data;
+using Thomas.Database.Configuration;
 using Thomas.Database.Core.FluentApi;
 using Thomas.Database.Core.QueryGenerator;
 using Thomas.Database.Attributes;
-using System.Data;
 
 namespace Thomas.Database.Tests.Oracle
 {
@@ -78,6 +78,22 @@ namespace Thomas.Database.Tests.Oracle
         }
 
         [Test, Order(4)]
+        public void TruncateTable()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Truncate<User>();
+            dbContext.Truncate<UserType>();
+        }
+
+        [Test, Order(4)]
+        public void TruncateTableByString()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Truncate("USERS");
+            dbContext.Truncate("USER_TYPE");
+        }
+
+        [Test, Order(5)]
         public void InsertUserType()
         {
             var dbContext = DbHub.Use("db1");
@@ -89,7 +105,7 @@ namespace Thomas.Database.Tests.Oracle
             });
         }
 
-        [Test, Order(4)]
+        [Test, Order(5)]
         public void InsertDataAndReturnNewId()
         {
             var dbContext = DbHub.Use("db1");
@@ -98,7 +114,7 @@ namespace Thomas.Database.Tests.Oracle
             Assert.Greater(Convert.ToInt32(id), 0);
         }
 
-        [Test, Order(5)]
+        [Test, Order(6)]
         public void InsertUser()
         {
             var dbContext = DbHub.Use("db1");
@@ -109,7 +125,7 @@ namespace Thomas.Database.Tests.Oracle
             Assert.Pass();
         }
 
-        [Test, Order(6)]
+        [Test, Order(7)]
         public void UpdateUser()
         {
             var dbContext = DbHub.Use("db1");
@@ -118,7 +134,7 @@ namespace Thomas.Database.Tests.Oracle
             Assert.Pass();
         }
 
-        [Test, Order(7)]
+        [Test, Order(8)]
         public void Query()
         {
             var dbContext = DbHub.Use("db1");
@@ -126,7 +142,7 @@ namespace Thomas.Database.Tests.Oracle
             Assert.IsNotEmpty(users);
         }
 
-        [Test, Order(8)]
+        [Test, Order(9)]
         public void DeleteData()
         {
             var dbContext = DbHub.Use("db1");
@@ -343,6 +359,19 @@ namespace Thomas.Database.Tests.Oracle
             Assert.IsNotEmpty(result);
         }
 
+        [Test]
+        public void QueryWithSelectors()
+        {
+            var dbContext = DbHub.Use("db1");
+            var result = dbContext.FetchList<User>(x => x.Id > 0, x => new { x.Id, x.Name });
+            Assert.That(result, Is.Not.Empty);
+            Assert.That(result[0].Id, Is.GreaterThan(0));
+            Assert.That(result[0].Name, Is.Not.Null);
+            Assert.That(result[0].State, Is.EqualTo(default(bool)));
+            Assert.That(result[0].Salary, Is.EqualTo(default(decimal)));
+            Assert.That(result[0].Birthday, Is.EqualTo(default(DateTime)));
+            Assert.That(result[0].UserCode, Is.EqualTo(default(Guid)));
+        }
 
         [Test]
         public void ToListByQueryTextTest()

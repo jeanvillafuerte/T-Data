@@ -12,9 +12,8 @@ namespace Thomas.Database
     {
         int Execute(in string script, in object parameters = null);
         T ExecuteScalar<T>(in string script, in object parameters = null);
-        T FetchOne<T>(Expression<Func<T, bool>> where = null);
-        List<T> FetchList<T>(Expression<Func<T, bool>> where = null);
-
+        T FetchOne<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null);
+        List<T> FetchList<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null);
         /// <summary>
         /// stream data from database
         /// </summary>
@@ -29,8 +28,11 @@ namespace Thomas.Database
 
         void ExecuteBlock(Action<IDatabase> func);
 
-        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where);
-        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken);
+        Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null);
+        Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken);
+
+        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null);
+        Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken);
 
         Task ExecuteBlockAsync(Func<IDatabase, Task> func);
         Task ExecuteBlockAsync(Func<IDatabase, CancellationToken, Task> func, CancellationToken cancellationToken);

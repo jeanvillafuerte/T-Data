@@ -1,6 +1,6 @@
 ﻿using System.Data;
+using System.Data.Common;
 using Microsoft.Data.SqlClient;
-using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using Thomas.Database.Configuration;
 using Thomas.Database.Core.FluentApi;
@@ -71,7 +71,8 @@ namespace Thomas.Database.Tests
                 prepareStatements: false,
                 canPrepareStatement: true);
 
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(typeof(User), options, out _, out _);
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(User), options, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(user, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -152,7 +153,8 @@ namespace Thomas.Database.Tests
                 prepareStatements: false,
                 canPrepareStatement: true);
 
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(typeof(UserNullableRecord), options, out _, out _);
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(UserNullableRecord), options, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(user, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -218,7 +220,8 @@ namespace Thomas.Database.Tests
                 prepareStatements: false,
                 canPrepareStatement: false);
 
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(null, options, out _, out _);
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(null, options, out _, ref parameters);
 
             using var oracleCommand = (OracleCommand)setupCommand(null, OracleConnectionString, "SOME_STORE_PROCEDURE", null);
             
@@ -246,7 +249,8 @@ namespace Thomas.Database.Tests
                 canPrepareStatement: true);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, out _);
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(filter, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -289,7 +293,8 @@ namespace Thomas.Database.Tests
                 canPrepareStatement: true);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, out _);
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
 
             var connection = new SqlConnection(SqlConnectionString);
             connection.Open();
@@ -344,7 +349,9 @@ namespace Thomas.Database.Tests
                 canPrepareStatement: false);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
-            var setupCommand = DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, out _);
+
+            DbParameterInfo[] parameters = null;
+            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
 
             var connection = new SqlConnection(SqlConnectionString);
             connection.Open();

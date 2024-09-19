@@ -36,7 +36,15 @@ namespace Thomas.Database.Configuration
                 throw new ArgumentException($"Connection timeout cannot be less than 0, Signature ({config.Signature})");
         }
 
-        public static DbSettings Get(in string signature)
+        internal static DbSettings Get()
+        {
+            if (dictionary.Count == 1)
+                return dictionary[0];
+            else
+                throw new Exception("There is more than one configuration, use the method Get(string signature)");
+        }
+
+        internal static DbSettings Get(in string signature)
         {
             var key = HashHelper.GenerateHash(signature);
             dictionary.TryGetValue(key, out var configuration);
@@ -44,14 +52,9 @@ namespace Thomas.Database.Configuration
             return configuration;
         }
 
-        public static void AddTableBuilder(in TableBuilder tableBuilder)
+        internal static void AddTableBuilder(in TableBuilder tableBuilder)
         {
             Tables = new ConcurrentDictionary<string, DbTable>(tableBuilder.Tables);
-        }
-
-        public static void AddTable(DbTable table)
-        {
-            Tables.TryAdd(table.Name, table);
         }
     }
 }

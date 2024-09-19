@@ -58,6 +58,22 @@ namespace Thomas.Database.Tests.SQLite
         }
 
         [Test, Order(4)]
+        public void TruncateTable()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Truncate<User>();
+            dbContext.Truncate<UserType>();
+        }
+
+        [Test, Order(4)]
+        public void TruncateTableByString()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Truncate("USERS");
+            dbContext.Truncate("USER_TYPE");
+        }
+
+        [Test, Order(5)]
         public void InsertUserType()
         {
             var dbContext = DbHub.Use("db1");
@@ -69,7 +85,7 @@ namespace Thomas.Database.Tests.SQLite
             });
         }
 
-        [Test, Order(5)]
+        [Test, Order(6)]
         public void InsertDataAndReturnNewId()
         {
             var dbContext = DbHub.Use("db1");
@@ -78,7 +94,7 @@ namespace Thomas.Database.Tests.SQLite
             Assert.That(Convert.ToInt32(id), Is.GreaterThan(0));
         }
 
-        [Test, Order(6)]
+        [Test, Order(7)]
         public void InsertData()
         {
             var dbContext = DbHub.Use("db1");
@@ -89,7 +105,7 @@ namespace Thomas.Database.Tests.SQLite
             Assert.Pass();
         }
 
-        [Test, Order(7)]
+        [Test, Order(8)]
         public void UpdateData()
         {
             var dbContext = DbHub.Use("db1");
@@ -138,7 +154,7 @@ namespace Thomas.Database.Tests.SQLite
             var data2 = dbContext.FetchOne<SimpleTimeSpanRecord>($"SELECT $Value as Value", param);
             Assert.That(param.Value, Is.EqualTo(data2.Value));
 
-            var data3 = dbContext.FetchOne<SimpleTimeSpanRecord>($"SELECT $Value as Value", new { Value = "00:10:00"});
+            var data3 = dbContext.FetchOne<SimpleTimeSpanRecord>($"SELECT $Value as Value", new { Value = "00:10:00" });
             Assert.That(new TimeSpan(0, 10, 0), Is.EqualTo(data3.Value));
 
             Assert.Throws<TimeSpanConversionException>(() => dbContext.FetchOne<SimpleTimeSpanRecord>($"SELECT 'some string value' as Value"));
@@ -294,6 +310,20 @@ namespace Thomas.Database.Tests.SQLite
                                          (x.Salary % 2) > 0);
 
             Assert.IsNotEmpty(result);
+        }
+
+        [Test]
+        public void QueryWithSelectors()
+        {
+            var dbContext = DbHub.Use("db1");
+            var result = dbContext.FetchList<User>(x => x.Id > 0, x => new { x.Id, x.Name });
+            Assert.That(result, Is.Not.Empty);
+            Assert.That(result[0].Id, Is.GreaterThan(0));
+            Assert.That(result[0].Name, Is.Not.Null);
+            Assert.That(result[0].State, Is.EqualTo(default(bool)));
+            Assert.That(result[0].Salary, Is.EqualTo(default(decimal)));
+            Assert.That(result[0].Birthday, Is.EqualTo(default(DateTime)));
+            Assert.That(result[0].UserCode, Is.EqualTo(default(Guid)));
         }
 
         [Test]

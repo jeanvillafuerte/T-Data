@@ -79,6 +79,9 @@ namespace Thomas.Database.Core.Converters
                 return intValue;
             }
 
+            if (value == null && Nullable.GetUnderlyingType(targetType) != null)
+                return null;
+
             //in case of null value, return default value of target type
             if (DBNull.Value.Equals(value))
             {

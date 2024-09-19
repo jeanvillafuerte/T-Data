@@ -17,9 +17,9 @@ namespace Thomas.Database.Core.Provider
         internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
         
 
-        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, out DbParameterInfo[] parameters)
+        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, ref DbParameterInfo[] parameters)
         {
-            var loadParametersDelegate = GetSetupCommandDelegate(in type, in options, out var hasOutputParams, out parameters);
+            var loadParametersDelegate = (Func<object, string, string, DbCommand, DbCommand>)GetSetupCommandDelegate(in type, in options, out var hasOutputParams, ref parameters);
 
             Action<object, DbCommand, DbDataReader> loadOutParameterDelegate = null;
 
@@ -27,6 +27,12 @@ namespace Thomas.Database.Core.Provider
                 loadOutParameterDelegate = LoadOutParameterDelegate(in isExecuteNonQuery, in type, in parameters, in options.Provider);
 
             return (loadParametersDelegate, loadOutParameterDelegate);
+        }
+
+        public static Func<object[], string, string, DbCommand, DbCommand> GetCommandMetaData2(in LoaderConfiguration options, in DbParameterInfo[] parameters)
+        {
+            DbParameterInfo[] localParameters = parameters;
+            return (Func<object[], string, string, DbCommand, DbCommand>)GetSetupCommandDelegate(null, in options, out var hasOutputParams, ref localParameters);
         }
 
         public static void RemoveSequentialAccess(in int key)

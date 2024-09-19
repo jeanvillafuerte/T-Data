@@ -23,7 +23,6 @@ namespace Thomas.Database.Cache
     internal sealed class ExpressionQueryItem
     {
         public string Query { get; set; }
-        public Type InternalType { get; set; }
         public bool IsStaticQuery { get; set; }
 
         /// <summary>
@@ -31,10 +30,9 @@ namespace Thomas.Database.Cache
         /// </summary>
         public object[] ParameterValues { get; set; }
 
-        public ExpressionQueryItem(string query, Type internalType, bool isStaticQuery, object[] parameterValues)
+        public ExpressionQueryItem(in string query, in bool isStaticQuery, in object[] parameterValues)
         {
             Query = query;
-            InternalType = internalType;
             IsStaticQuery = isStaticQuery;
             ParameterValues = parameterValues;
         }

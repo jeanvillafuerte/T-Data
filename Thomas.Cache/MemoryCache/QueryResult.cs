@@ -9,6 +9,7 @@ namespace Thomas.Cache.MemoryCache
         object? Params { get; set; }
         MethodHandled MethodHandled { get; set; }
         Expression? Where { get; set; }
+        bool IsTuple { get; }
     }
 
     internal sealed class QueryResult<T> : IQueryResult
@@ -18,6 +19,8 @@ namespace Thomas.Cache.MemoryCache
         public T Data { get; set; }
         public Expression? Where { get; set; }
         public MethodHandled MethodHandled { get; set; }
+
+        public bool IsTuple => (int)MethodHandled >= 5;
 
         public QueryResult(MethodHandled methodHandled, string query, object? parameters, T data)
         {

@@ -8,7 +8,25 @@ namespace Thomas.Database.Helpers
 {
     internal static class ExpressionHasher
     {
-        public static int GetHashCode<T>(Expression<Func<T, bool>> expr, SqlProvider provider, bool includeValues = true)
+        internal static int GetSelectorHashCode<T>(in Expression<Func<T, object>> selector, in SqlProvider provider)
+        {
+            var newExpression = selector.Body as NewExpression;
+
+            if (newExpression == null)
+                throw new NotSupportedException("Selector must be a NewExpression");
+
+            unchecked
+            {
+                int hash = 17;
+
+                foreach (var member in newExpression.Members)
+                    hash = (hash * 23) + member.GetHashCode();
+
+                return hash;
+            }
+        }
+
+        public static int GetPredicateHashCode<T>(in Expression<Func<T, bool>> expr, in SqlProvider provider, in bool includeValues = true)
         {
             unchecked
             {

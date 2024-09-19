@@ -2,7 +2,6 @@
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
-using Perfolizer.Mathematics.RangeEstimators;
 
 namespace Thomas.Tests.Performance.Column
 {

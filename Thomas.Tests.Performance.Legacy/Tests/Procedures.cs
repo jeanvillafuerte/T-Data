@@ -19,7 +19,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             {
                 var st = new SearchTerm(id: 1);
                 return DbHub.Use(db).TryExecute("get_byid", st);
-            }, null, "TryExecute");
+            }, "TryExecute");
 
             PerformOperation(() =>
             {
@@ -49,12 +49,12 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                     return db.Rollback();
                 });
 
-            }, null, "Transaction Rollback");
+            }, "Transaction Rollback");
         }
 
-        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
+        public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() =>
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(1);
@@ -62,20 +62,20 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                 {
                     DbHub.Use(db).ExecuteAsync("WAITFOR DELAY '00:00:03'", null, source.Token);
                 }
-                catch (System.Exception ex) { }
+                catch (System.Exception) { }
 
                 return Task.FromResult(1);
-            }, null, "ExecuteAsync Timeout", true);
+            }, "ExecuteAsync Timeout", true);
 
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() =>
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(1);
                 return DbHub.Use(db).TryExecuteAsync("" +
                     "WAITFOR DELAY '00:00:03'", null, source.Token);
-            }, null, "ExecuteOpAsync Timeout", true);
+            }, "ExecuteOpAsync Timeout", true);
 
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() =>
             {
                 return DbHub.Use(db).ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
@@ -83,10 +83,10 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 2 });
                     return await db.FetchListAsync<Person>($"SELECT * FROM {tableName}", null);
                 }, CancellationToken.None);
-            }, null, "Transaction Async");
+            }, "Transaction Async");
 
 
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() =>
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(15);
@@ -95,7 +95,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
                     return await db.ExecuteAsync($"WAITFOR DELAY '00:00:03'", null, CancellationToken);
 
                 }, source.Token);
-            }, null, "Transaction Async Timeout", shouldFail: true);
+            }, "Transaction Async Timeout", shouldFail: true);
 
         }
 

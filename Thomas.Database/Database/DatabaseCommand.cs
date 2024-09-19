@@ -20,8 +20,10 @@ namespace Thomas.Database
         private readonly SqlProvider _provider;
         private readonly int _timeout;
         private readonly object _filter;
+        private readonly object[] _values;
         private readonly int _preparationQueryKey;
         private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
+        private readonly Func<object[], string, string, DbCommand, DbCommand> _commandSetupDelegate2;
         private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
         private readonly int _bufferSize;
@@ -84,7 +86,7 @@ namespace Thomas.Database
             _filter = filter;
             _command = command;
 
-            bool hasFilter = _filter != null;
+            bool hasFilter = filter != null;
             bool isTransaction = transaction != null;
             var operationKey = 17;
             unchecked
@@ -132,7 +134,6 @@ namespace Thomas.Database
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
                 bool isExecuteNonQuery = configuration.MethodHandled == MethodHandled.Execute;
 
-                LoaderConfiguration commandConfiguration;
                 bool expectBindValueParameters;
                 bool canPrepareStatement = false;
                 string transformedScript = null;
@@ -142,15 +143,16 @@ namespace Thomas.Database
                     _commandType = CommandType.Text;
                     isStoreProcedure = false;
 
-                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out var parameters);
+                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
 
-                    if (parameters.Any(x => x.IsOutput) && !isExecuteNonQuery)
+                    DbParameterInfo[] localParameters = null;
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
+
+                    if (localParameters?.Any(x => x.IsOutput) == true && !isExecuteNonQuery)
                         throw new PostgreSQLInvalidRequestCallException();
 
-                    expectBindValueParameters = parameters.Any(x => x.IsInput);
-                    canPrepareStatement = expectBindValueParameters;
-                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in parameters, in isExecuteNonQuery);
+                    canPrepareStatement = expectBindValueParameters = localParameters.Any(x => x.IsInput);
+                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
                 }
                 else
                 {
@@ -169,12 +171,83 @@ namespace Thomas.Database
                         _commandType = CommandType.Text;
                     }
 
-                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, in isStoreProcedure, in canPrepareStatement);
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out _);
+                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, in isStoreProcedure, in canPrepareStatement);
+                    DbParameterInfo[] localParameters = null;
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
                 }
 
                 if (buffered)
-                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, transformedScript));
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, null, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, transformedScript));
+            }
+        }
+
+        public DatabaseCommand(
+            in DbSettings options,
+            in string script,
+            in DbCommandConfiguration configuration,
+            in bool buffered,
+            in object[] parameters = null,
+            in DbTransaction transaction = null,
+            in DbCommand command = null)
+        {
+            _configuration = configuration;
+            _bufferSize = options.BufferSize;
+            _script = script;
+            _connectionString = options.StringConnection;
+            _provider = options.SqlProvider;
+            _timeout = options.ConnectionTimeout;
+            _command = command;
+            _commandType = CommandType.Text;
+            _commandBehavior = configuration.CommandBehavior;
+
+            bool hasFilter = parameters != null && parameters.Length > 0;
+            bool isTransaction = transaction != null;
+            var operationKey = 17;
+            unchecked
+            {
+                operationKey = (operationKey * 23) + _script.GetHashCode();
+                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
+            }
+
+            if (isTransaction)
+            {
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+
+                unchecked
+                {
+                    operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+                }
+            }
+
+            _preparationQueryKey = operationKey;
+
+            if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            {
+                if (parameters is DbParameterInfo[] convertedParameters)
+                    _values = convertedParameters.Select(x => x.Value).ToArray();
+                else
+                    _values = parameters;
+
+                _commandSetupDelegate2 = commandMetadata.LoadParametersDelegate2;
+                _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
+            }
+            else
+            {
+                DbParameterInfo[] convertedParameters = null;
+                if (parameters != null && parameters.Length > 0)
+                {
+                    convertedParameters = (DbParameterInfo[])parameters;
+                    _values = convertedParameters.Select(x => x.Value).ToArray();
+                }
+
+                var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, false, true);
+                _commandSetupDelegate2 = DatabaseProvider.GetCommandMetaData2(in commandConfiguration, convertedParameters);
+
+                if (buffered)
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(null, in _commandSetupDelegate2, null, in configuration.CommandBehavior, in _commandType, null));
             }
         }
 
@@ -273,6 +346,22 @@ namespace Thomas.Database
                 _command.CommandType = _commandType;
                 _command.CommandTimeout = _timeout;
                 _ = _commandSetupDelegate(_filter, null, null, _command);
+            }
+        }
+
+        internal void Prepare2()
+        {
+            if (_connection == null)
+            {
+                _command = _commandSetupDelegate2(_values, _connectionString, _script, null);
+                _connection = _command.Connection;
+            }
+            else
+            {
+                _command.CommandText = _script;
+                _command.CommandType = _commandType;
+                _command.CommandTimeout = _timeout;
+                _ = _commandSetupDelegate2(_values, null, null, _command);
             }
         }
 

@@ -16,9 +16,9 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             PerformOperation<Person>(() => DbHub.Use(db).FetchList<Person>(x => x.Id > 0), expectedItems, "FetchList<> Expression");
         }
 
-        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
+        public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() => DbHub.Use(db).FetchListAsync<Person>(x => x.Id > 0), expectedItems, "FetchListAsync<> Expression");
+            PerformOperationAsync(() => DbHub.Use(db).FetchListAsync<Person>(x => x.Id > 0), expectedItems, "FetchListAsync<> Expression");
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

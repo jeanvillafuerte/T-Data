@@ -561,11 +561,27 @@ namespace Thomas.Database
             return item;
         }
 
-        public T FetchOne<T>(Expression<Func<T, bool>> where = null)
+        public T FetchOne<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            var script = generator.GenerateSelectWhere(in where, SqlOperation.SelectSingle, out var filter);
-            return FetchOne<T>(in script, in filter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectSingle, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return command.ReadListItems<T>().FirstOrDefault();
+        }
+
+        public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
+        {
+            return await FetchOneAsync<T>(where, selector, CancellationToken.None);
+        }
+
+        public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken)
+        {
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(where, selector, SqlOperation.SelectSingle, out var values);
+            await using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return (await command.ReadListItemsAsync<T>(cancellationToken)).FirstOrDefault();
         }
 
         public DbOpResult<T> TryFetchOne<T>(in string script, in object parameters = null)
@@ -636,11 +652,13 @@ namespace Thomas.Database
             return result;
         }
 
-        public List<T> FetchList<T>(Expression<Func<T, bool>> where = null)
+        public List<T> FetchList<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            string script = generator.GenerateSelectWhere(in where, SqlOperation.SelectList, out var filter);
-            return FetchList<T>(in script, in filter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            string script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectList, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return command.ReadListItems<T>();
         }
 
         public DbOpResult<List<T>> TryFetchList<T>(in string script, in object parameters = null)
@@ -677,16 +695,18 @@ namespace Thomas.Database
             return await FetchListAsync<T>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where)
+        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            return await FetchListAsync<T>(where, CancellationToken.None);
+            return await FetchListAsync(where, selector, CancellationToken.None);
         }
 
-        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken)
+        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            var script = generator.GenerateSelectWhere(where, SqlOperation.SelectList, out var filter);
-            return await FetchListAsync<T>(script, filter, cancellationToken);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(where, selector, SqlOperation.SelectList, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return await command.ReadListItemsAsync<T>(cancellationToken);
         }
 
         public async Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object parameters, CancellationToken cancellationToken)
@@ -1389,7 +1409,7 @@ namespace Thomas.Database
 
         public void Insert<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateInsert(generateKeyValue: false);
             using var command = new DatabaseCommand(in Options, in script, entity, in AddConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
@@ -1405,7 +1425,7 @@ namespace Thomas.Database
 
         public TE Insert<T, TE>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
 
             if (Options.SqlProvider == SqlProvider.MySql && Options.PrepareStatements)
             {
@@ -1449,7 +1469,7 @@ namespace Thomas.Database
 
         public void Update<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateUpdate();
             using var command = new DatabaseCommand(in Options, in script, entity, in UpdateConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
@@ -1465,10 +1485,83 @@ namespace Thomas.Database
 
         public void Delete<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateDelete();
             using var command = new DatabaseCommand(in Options, in script, entity, in DeleteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
+            command.ExecuteNonQuery();
+        }
+
+        public void Truncate<T>(bool forceResetAutoIncrement = false)
+        {
+            var generator = new SQLGenerator<T>(in Formatter, false);
+            var tableName = generator.GetTableName();
+            Truncate(tableName, forceResetAutoIncrement);
+        }
+
+        public void Truncate(string tableName, bool forceResetAutoIncrement = false)
+        {
+            if (Options.SqlProvider == SqlProvider.Sqlite)
+            {
+                Execute($@"DELETE FROM {tableName}");
+
+                //remove from sqlite_sequence
+                //TODO: ensure work for most cases then execute a safe delete
+                if (forceResetAutoIncrement)
+                {
+                    var exists = ExecuteScalar<int?>($@"SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'");
+                    if (exists.HasValue)
+                        Execute($@"DELETE FROM sqlite_sequence WHERE name = '{tableName}'");
+                }
+            }
+            else
+            {
+                Execute($@"TRUNCATE TABLE {tableName}");
+
+                //TODO: ensure that this is correct
+                if (forceResetAutoIncrement && Options.SqlProvider != SqlProvider.SqlServer)
+                {
+
+                }
+            }
+        }
+
+        public void UpdateIf<T>(Expression<Func<T, bool>> condition, Expression<Func<T, object>> updateField, object newValue)
+        {
+            if (condition == null)
+                throw new RequestNotPermittedException("Update operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
+
+            if (updateField == null)
+                throw new Exception("No updates were provided");
+
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateUpdate(in condition, new List<(Expression<Func<T, object>>, object)>() { (updateField, newValue) }, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            command.ExecuteNonQuery();
+        }
+
+        public void UpdateIf<T>(Expression<Func<T, bool>> condition, List<(Expression<Func<T, object>> updateField, object newValue)> updates)
+        {
+            if (condition == null)
+                throw new RequestNotPermittedException("Update operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
+
+            if (updates == null || updates.Count == 0)
+                throw new Exception("No updates were provided");
+
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateUpdate(in condition, in updates, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            command.ExecuteNonQuery();
+        }
+
+        public void DeleteIf<T>(Expression<Func<T, bool>> condition)
+        {
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateDelete(condition, SqlOperation.Delete, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryExecuteConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
             command.ExecuteNonQuery();
         }
 

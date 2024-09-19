@@ -106,7 +106,7 @@ namespace Thomas.Tests.Performance.Legacy
                 Task.Run(() => new Tests.Procedures(databaseName).ExecuteCachedDatabase(db, TableName, rows))
                 );
 
-            CachedDbHub.Use(db).Clear();
+            CachedDbHub.Clear();
         }
         
         static void RunWriteOperations(string db, string databaseName, int rows)
@@ -117,12 +117,12 @@ namespace Thomas.Tests.Performance.Legacy
         static void RunTestsDatabaseAsync(string db, string databaseName, int rows)
         {
             Task.WaitAll(
-                 Task.Run(async () => await new Tests.Expression(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Single(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.List(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Tuple(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Procedures(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Error(databaseName).ExecuteAsync(db, TableName, rows))
+                 Task.Run(() => new Tests.Expression(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Single(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.List(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Tuple(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Procedures(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Error(databaseName).ExecuteAsync(db, TableName, rows))
                  );
         }
 
@@ -130,7 +130,7 @@ namespace Thomas.Tests.Performance.Legacy
         {
             DbHub.Use("db1", buffered: false).Execute($"DROP TABLE {TableName}", null);
             DbHub.Use("db2", buffered: false).Execute($"DROP TABLE {TableName}", null);
-            CachedResultDatabase.Clear();
+            CachedDbHub.Clear();
             DbBase.Clear();
         }
 

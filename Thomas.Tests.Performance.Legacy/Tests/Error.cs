@@ -13,14 +13,14 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
         public void Execute(string db, string tableName, int expectedItems = 0)
         {
-            PerformOperation(() => DbHub.Use(db).TryFetchList<Person>($@"SELECT UserName2 FROM {tableName}"), null, "TryFetchList<>");
-            PerformOperation(() => DbHub.Use(db).TryFetchOne<Person>($@"SELECT UserName2 FROM {tableName}"), null, "TryFetchOne<>");
+            PerformOperation(() => DbHub.Use(db).TryFetchList<Person>($@"SELECT UserName2 FROM {tableName}"), "TryFetchList<> (Error)");
+            PerformOperation(() => DbHub.Use(db).TryFetchOne<Person>($@"SELECT UserName2 FROM {tableName}"), "TryFetchOne<> (Error)");
         }
 
-        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
+        public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
-            await PerformOperationAsync(() => DbHub.Use(db).TryFetchListAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "TryFetchListAsync<>", true);
-            await PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), null, "TryFetchOneAsync<>", true);
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchListAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), "TryFetchListAsync<> (Error)", true);
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>($@"SELECT UserName2 FROM {tableName}", null, CancellationToken.None), "TryFetchOneAsync<> (Error)", true);
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

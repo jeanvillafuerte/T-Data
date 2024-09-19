@@ -70,7 +70,7 @@ namespace Thomas.Cache
 
         public T FetchOne<T>(Expression<Func<T, bool>> where = null, string? key = null, bool refresh = false)
         {
-            var calculatedKey = SQLGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, in key);
+            var calculatedKey = SQLGenerator<T>.CalculateExpressionKey(where, null, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, in key);
             var fromCache = _cache.TryGet(calculatedKey, out QueryResult<T>? result);
 
             if (!fromCache || refresh)
@@ -93,7 +93,7 @@ namespace Thomas.Cache
 
         public List<T> FetchList<T>(Expression<Func<T, bool>>? where = null, string? key = null, bool refresh = false)
         {
-            var calculatedHash = SQLGenerator<T>.CalculateExpressionKey(where, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, in key);
+            var calculatedHash = SQLGenerator<T>.CalculateExpressionKey(where, null, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, in key);
             var fromCache = _cache.TryGet(calculatedHash, out QueryResult<List<T>>? result);
 
             if (!fromCache || refresh)
@@ -239,7 +239,7 @@ namespace Thomas.Cache
                 if (item == null && throwErrorIfNotFound)
                     throw new ArgumentNullException();
 
-                Type genericType = item.GetType().GetGenericArguments()[0];
+                Type genericType = item!.GetType().GetGenericArguments()[0];
                 string handler = item.MethodHandled.ToString();
                 string methodName = handler.IndexOf("List") > 0 ? "FetchList" : handler.IndexOf("One") > 0 ? "FetchOne" : "FetchTuple";
 
@@ -285,18 +285,21 @@ namespace Thomas.Cache
 
                 Type[]? tupleArgs = methodName.Equals("FetchTuple") ? ReflectionHelper.GetTupleGenericArguments(genericType) : null;
 
-                var _ = item.MethodHandled switch
+                if (item.IsTuple && (tupleArgs == null || tupleArgs.Length == 0))
+                    throw new MissingMemberException($"Tuple arguments not found for '{genericType.Name}'.");
+
+                _ = item.MethodHandled switch
                 {
-                    MethodHandled.FetchListExpression => methodInfo.MakeGenericMethod(genericType.GenericTypeArguments[0]).Invoke(this, new object[] { calculatedHash, item.Where }),
-                    MethodHandled.FetchListQueryString => methodInfo.MakeGenericMethod(genericType.GenericTypeArguments[0]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchOneExpression => methodInfo.MakeGenericMethod(genericType).Invoke(this, new object[] { calculatedHash, item.Where }),
-                    MethodHandled.FetchOneQueryString => methodInfo.MakeGenericMethod(genericType).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_2 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_3 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_4 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_5 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_6 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
-                    MethodHandled.FetchTupleQueryString_7 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5], tupleArgs[6]).Invoke(this, new object[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchListExpression => methodInfo.MakeGenericMethod(genericType.GenericTypeArguments[0]).Invoke(this, new object?[] { calculatedHash, item.Where }),
+                    MethodHandled.FetchListQueryString => methodInfo.MakeGenericMethod(genericType.GenericTypeArguments[0]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchOneExpression => methodInfo.MakeGenericMethod(genericType).Invoke(this, new object?[] { calculatedHash, item.Where }),
+                    MethodHandled.FetchOneQueryString => methodInfo.MakeGenericMethod(genericType).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_2 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_3 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_4 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_5 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_6 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
+                    MethodHandled.FetchTupleQueryString_7 => methodInfo.MakeGenericMethod(tupleArgs[0], tupleArgs[1], tupleArgs[2], tupleArgs[3], tupleArgs[4], tupleArgs[5], tupleArgs[6]).Invoke(this, new object?[] { item.Query, item.Params, key, true }),
                     MethodHandled.Execute => throw new NotImplementedException(),
                     _ => throw new NotImplementedException(),
                 };
@@ -308,12 +311,12 @@ namespace Thomas.Cache
             }
         }
 
-        private MethodInfo GetTupleMethod(int parameterCount)
+        private MethodInfo? GetTupleMethod(int parameterCount)
         {
             var methods = CachedDatabaseType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
                               .Where(m => m.Name == "FetchTuple");
 
-            return methods.FirstOrDefault(m => m.ReturnType.GenericTypeArguments.Length == parameterCount);
+            return methods?.FirstOrDefault(m => m.ReturnType.GenericTypeArguments.Length == parameterCount);
         }
 #endregion
 
