@@ -71,7 +71,6 @@ namespace Thomas.Database.Core.QueryGenerator
             Buffered = buffered;
             Formatter = formatter;
             Type = typeof(T);
-            TableAlias = GetTableAlias();
 
             if (!DbConfig.Tables.TryGetValue(Type.FullName!, out Table))
             {
@@ -81,6 +80,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 Table = dbTable;
             }
 
+            TableAlias = formatter.Provider == SqlProvider.Sqlite ? TableNameWithoutAlias : GetTableAlias();
             DbParametersToBind = new LinkedList<DbParameterInfo>();
         }
 
@@ -101,7 +101,7 @@ namespace Thomas.Database.Core.QueryGenerator
 
             if (predicate != null && Buffered)
             {
-                var key = CalculateExpressionKey(in predicate, in selector, in Type, in operation, Formatter.Provider);
+                var key = CalculateExpressionKey(in predicate, in selector, null, in Type, in operation, Formatter.Provider);
                 if (GetCachedValues(in key, predicate, ref sqlText, out filter))
                     return sqlText;
                 else
@@ -127,7 +127,7 @@ namespace Thomas.Database.Core.QueryGenerator
 
             if (predicate != null)
             {
-                EnsureCacheInfo(key: keyValue, sqlText, saveTypeInCache: Buffered);
+                EnsureCacheInfo(key: keyValue, sqlText, buffered: Buffered);
                 filter = DbParametersToBind.ToArray();
             }
             else
@@ -175,14 +175,18 @@ namespace Thomas.Database.Core.QueryGenerator
 
         private DbColumn GetSelectedColumn(Expression<Func<T, object>> selector)
         {
-            if (selector is MemberExpression memberExpression)
+            if (selector is LambdaExpression lambdaExpression && !lambdaExpression.CanReduce)
             {
-                return Table.Columns.First(x => x.Name == memberExpression.Member.Name);
+                //those fields that need cast to object
+                if (lambdaExpression.Body is UnaryExpression unaryExpression && unaryExpression.Operand is MemberExpression memberExpression)
+                    return Table.Columns.First(x => x.Name == memberExpression.Member.Name);
+                //others like string or non-enum types
+                if (lambdaExpression.Body is MemberExpression memberExpression2)
+                    return Table.Columns.First(x => x.Name == memberExpression2.Member.Name);
+
             }
-            else
-            {
-                throw new NotSupportedException("Unsupported selector");
-            }
+            
+             throw new NotSupportedException("Unsupported selector");
         }
 
         #endregion
@@ -250,35 +254,51 @@ namespace Thomas.Database.Core.QueryGenerator
                                .Append($" WHERE {Table.Key.DbName ?? Table.Key.Name} = {Formatter.BindVariable}{Table.Key.Name}").ToString();
         }
 
-        public string GenerateUpdate(in Expression<Func<T, bool>> predicate, in List<(Expression<Func<T, object>> updateField, object newValue)> updates, out object[] filter)
+        public string GenerateUpdate(in Expression<Func<T, bool>> predicate, out object[] filter, params (Expression<Func<T, object>> field, object value)[] updates)
         {
             string updateQueryText = string.Empty;
             int? keyValue = null;
-            //TODO: missing calculate updateField hash
+            
             if (Buffered)
             {
-                int key = CalculateExpressionKey(in predicate, null, in Type, SqlOperation.Update, Formatter.Provider);
+                int key = CalculateExpressionKey(in predicate, null, in updates, in Type, SqlOperation.Update, Formatter.Provider);
 
                 if (GetCachedValues(in key, predicate, ref updateQueryText, out filter))
+                {
                     return updateQueryText;
+                }
                 else
                     keyValue = key;
             }
 
-            var columns = new string[updates.Count];
-            for (int i = 0; i < updates.Count; i++)
+            var columns = new string[updates.Length];
+            for (int i = 0; i < updates.Length; i++)
             {
-                var column = GetSelectedColumn(updates[i].updateField);
-                AddInParam(column.Property.PropertyType, updates[i].newValue, null, out var paramName);
-                columns[i] = $"{column.DbName ?? column.Name} = {Formatter.BindVariable}{paramName}";
+                var column = GetSelectedColumn(updates[i].field);
+                AddInParam(column.Property.PropertyType, updates[i].value, null, out var paramName);
+                columns[i] = $"{column.DbName ?? column.Name} = {paramName}";
             }
 
-            updateQueryText = new StringBuilder($"UPDATE {TableNameWithoutAlias} SET ")
-                               .AppendJoin(',', columns)
-                               .Append(" WHERE ")
+            StringBuilder stringBuilder = null;
+
+            if (Formatter.Provider == SqlProvider.SqlServer)
+            {
+                stringBuilder = new StringBuilder($"UPDATE {TableAlias} SET ")
+                                                   .AppendJoin(',', columns)
+                                                   .Append($" FROM {TableNameWithoutAlias} {TableAlias}");
+            }
+            else
+            {
+                var tableAlias = Formatter.Provider == SqlProvider.Sqlite ? "" : TableAlias;
+                stringBuilder = new StringBuilder($"UPDATE {TableNameWithoutAlias} {tableAlias} SET ")
+                                           .AppendJoin(',', columns);
+            }
+
+            stringBuilder.Append(" WHERE ")
                                .Append(WhereClause(predicate.Body, null, GetAlias(predicate))).ToString();
 
-            EnsureCacheInfo(key: keyValue, updateQueryText, saveTypeInCache: Buffered);
+            updateQueryText = stringBuilder.ToString();
+            EnsureCacheInfo(key: keyValue, updateQueryText, buffered: Buffered);
             filter = DbParametersToBind.ToArray();
 
             return updateQueryText;
@@ -297,33 +317,32 @@ namespace Thomas.Database.Core.QueryGenerator
             if (Table.Key == null)
                 throw new InvalidOperationException($"Key was not found in {Table.DbName ?? Table.Name}");
 
-            return Formatter.GenerateDelete(TableNameWithoutAlias, Table.Key.DbName ?? Table.Key.Name, Table.Key.Name);
+            var header = Formatter.GenerateDelete(TableNameWithoutAlias, TableAlias);
+            return $"{header} WHERE {Table.Key.DbName ?? Table.Key.Name} = {Formatter.BindVariable}{Table.Key.Name}";
         }
 
         public string GenerateDelete(in Expression<Func<T, bool>> predicate, in SqlOperation operation, out object[] filter)
         {
-            if (predicate == null)
-                throw new RequestNotPermittedException("Delete operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
-
             string sqlText = string.Empty;
             int? keyValue = null;
+
             if (Buffered)
             {
-                var key = CalculateExpressionKey(in predicate, null, in Type, in operation, Formatter.Provider);
+                var key = CalculateExpressionKey(in predicate, null, null, in Type, in operation, Formatter.Provider);
                 if (GetCachedValues(in key, predicate, ref sqlText, out filter))
                     return sqlText;
                 else
                     keyValue = key;
             }
 
-            var stringBuilder = new StringBuilder($"DELETE FROM {TableName} AS {TableAlias}");
+            var stringBuilder = new StringBuilder(Formatter.GenerateDelete(TableNameWithoutAlias, TableAlias));
 
             stringBuilder.Append(" WHERE ")
                          .Append(WhereClause(predicate!.Body, null, GetAlias(predicate)));
 
             sqlText = stringBuilder.ToString();
 
-            EnsureCacheInfo(key: keyValue, sqlText, saveTypeInCache: Buffered);
+            EnsureCacheInfo(key: keyValue, sqlText, buffered: Buffered);
             filter = DbParametersToBind.ToArray();
             return sqlText;
         }
@@ -338,18 +357,12 @@ namespace Thomas.Database.Core.QueryGenerator
 
         #region Cache management
 
-        private void EnsureCacheInfo(int? key = null, in string sqlText = null, in bool saveTypeInCache = true)
+        private void EnsureCacheInfo(int? key = null, in string sqlText = null, in bool buffered = true)
         {
             var paramValues = DbParametersToBind.Select(x => x.Value).ToArray();
 
-            if (saveTypeInCache && key.HasValue)
+            if (buffered && key.HasValue)
                 DynamicQueryInfo.Set(key.Value, new ExpressionQueryItem(in sqlText, in _isStaticQuery, _isStaticQuery ? paramValues : null));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void InstanciateFilter(Type type, object[] paramValues, out object filter)
-        {
-            filter = Activator.CreateInstance(type, paramValues);
         }
 
 #endregion Cache management
@@ -459,7 +472,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 _table = dbTable;
             }
 
-            string tableName = $"{DbSchema}{_table.DbName ?? _table.Name}";
+            string tableName = DbSchema + (_table.DbName ?? _table.Name);
 
             string[][] aliasIdentifier = new string[2][];
 
@@ -755,7 +768,7 @@ namespace Thomas.Database.Core.QueryGenerator
                 var dbColumn = Table.Columns.First(x => x.Name == member.Member.Name);
 
                 if (member.Member.ReflectedType == typeof(T))
-                    return ApplyTransformation($"{TableAlias}.{dbColumn.DbName ?? dbColumn.Name}", member.Type.Name);
+                    return ApplyTransformation($"{(aliasIdentifiers == null ? "" : $"{TableAlias}.")}{dbColumn.DbName ?? dbColumn.Name}", member.Type.Name);
 
                 var tableTempAlias = member.Expression!.ToString().Split('.')[0];
                 return $"{ReplaceIdentifier(tableTempAlias, aliasIdentifiers)}.{dbColumn.DbName ?? dbColumn.Name}";
@@ -794,7 +807,7 @@ namespace Thomas.Database.Core.QueryGenerator
         }
         #endregion Handlers
 
-        internal static int CalculateExpressionKey(in Expression<Func<T, bool>> expression, in Expression<Func<T, object>> selector, in Type type, in SqlOperation operation, in SqlProvider provider, in string key = null)
+        internal static int CalculateExpressionKey(in Expression<Func<T, bool>> expression, in Expression<Func<T, object>> selector, in (Expression<Func<T, object>> field, object value)[] updates, in Type type, in SqlOperation operation, in SqlProvider provider, in string key = null)
         {
             if (!string.IsNullOrEmpty(key))
             {
@@ -808,11 +821,30 @@ namespace Thomas.Database.Core.QueryGenerator
                 calculatedKey = (calculatedKey * 23) + operation.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + provider.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + type.GetHashCode();
+
                 if (expression != null)
                     calculatedKey = (calculatedKey * 23) + ExpressionHasher.GetPredicateHashCode(in expression, in provider);
 
                 if (selector != null)
-                    calculatedKey = (calculatedKey * 23) + ExpressionHasher.GetSelectorHashCode(in selector, in provider);
+                {
+                    var newExpression = selector.Body as NewExpression;
+                    foreach (var member in newExpression.Members)
+                        calculatedKey = (calculatedKey * 23) + member.GetHashCode();
+                }
+
+                if (updates != null)
+                {
+                    foreach (var (field, _) in updates)
+                    {
+                        if (field is LambdaExpression lambdaExpression && !lambdaExpression.CanReduce)
+                        {
+                            if (lambdaExpression.Body is UnaryExpression unaryExpression && unaryExpression.Operand is MemberExpression memberExpression)
+                                calculatedKey = (calculatedKey * 23) + memberExpression.Member.GetHashCode();
+                            if (lambdaExpression.Body is MemberExpression memberExpression2)
+                                calculatedKey = (calculatedKey * 23) + memberExpression2.Member.GetHashCode();
+                        }
+                    }
+                }
             }
 
             return calculatedKey;

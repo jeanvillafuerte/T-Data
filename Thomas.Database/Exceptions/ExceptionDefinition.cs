@@ -8,10 +8,6 @@ namespace Thomas.Database
         public DBProviderNotFoundException(string message) : base(message) { }
     }
 
-    public sealed class SqLiteStoreProcedureNotSupportedException : Exception {
-        public override string Message => "SQLite does not support stored procedures.";
-    }
-
     public sealed class PostgreSQLInvalidRequestCallException : Exception {
 
         public override string Message => "PostgreSQL function call is invalid because cannot call a function that return a result set and contains output parameters.\r\nInstead of that return two result sets, one with the result set and another with the output parameters.";

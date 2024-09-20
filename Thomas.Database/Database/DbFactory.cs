@@ -5,7 +5,7 @@ namespace Thomas.Database
 {
     public static class DbHub
     {
-        public static IDatabase Use(bool buffered = true)
+        public static IDatabase GetDefaultDb(bool buffered = true)
         {
             var config = DbConfig.Get();
             return new DbBase(in config, in buffered);

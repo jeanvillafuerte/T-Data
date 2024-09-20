@@ -56,9 +56,9 @@ namespace Thomas.Database.Core.Provider.Formatter
             return sb.ToString();
         }
 
-        readonly string ISqlFormatter.GenerateDelete(string tableName, string keyDbName, string propertyKeyName)
+        readonly string ISqlFormatter.GenerateDelete(string tableName, string alias)
         {
-            return $"DELETE FROM {tableName} WHERE {keyDbName} = @{propertyKeyName}";
+            return $"DELETE FROM {tableName} {alias}";
         }
     }
 }

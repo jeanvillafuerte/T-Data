@@ -1526,31 +1526,16 @@ namespace Thomas.Database
             }
         }
 
-        public void UpdateIf<T>(Expression<Func<T, bool>> condition, Expression<Func<T, object>> updateField, object newValue)
+        public void UpdateIf<T>(Expression<Func<T, bool>> condition, params (Expression<Func<T, object>> field, object value)[] updates)
         {
             if (condition == null)
                 throw new RequestNotPermittedException("Update operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
 
-            if (updateField == null)
+            if (updates == null || updates.Length == 0)
                 throw new Exception("No updates were provided");
 
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
-            var script = generator.GenerateUpdate(in condition, new List<(Expression<Func<T, object>>, object)>() { (updateField, newValue) }, out var values);
-            using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
-            command.Prepare2();
-            command.ExecuteNonQuery();
-        }
-
-        public void UpdateIf<T>(Expression<Func<T, bool>> condition, List<(Expression<Func<T, object>> updateField, object newValue)> updates)
-        {
-            if (condition == null)
-                throw new RequestNotPermittedException("Update operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
-
-            if (updates == null || updates.Count == 0)
-                throw new Exception("No updates were provided");
-
-            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
-            var script = generator.GenerateUpdate(in condition, in updates, out var values);
+            var script = generator.GenerateUpdate(in condition, out var values, updates);
             using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             command.ExecuteNonQuery();
@@ -1558,6 +1543,9 @@ namespace Thomas.Database
 
         public void DeleteIf<T>(Expression<Func<T, bool>> condition)
         {
+            if (condition == null)
+                throw new RequestNotPermittedException("Delete operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
+
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateDelete(condition, SqlOperation.Delete, out var values);
             using var command = new DatabaseCommand(in Options, in script, in QueryExecuteConfig, in _buffered, in values, in _transaction, in _command);

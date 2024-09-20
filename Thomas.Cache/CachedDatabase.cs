@@ -70,7 +70,7 @@ namespace Thomas.Cache
 
         public T FetchOne<T>(Expression<Func<T, bool>> where = null, string? key = null, bool refresh = false)
         {
-            var calculatedKey = SQLGenerator<T>.CalculateExpressionKey(where, null, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, in key);
+            var calculatedKey = SQLGenerator<T>.CalculateExpressionKey(where, null, null, typeof(T), SqlOperation.SelectSingle, _sqlValues.Provider, in key);
             var fromCache = _cache.TryGet(calculatedKey, out QueryResult<T>? result);
 
             if (!fromCache || refresh)
@@ -93,7 +93,7 @@ namespace Thomas.Cache
 
         public List<T> FetchList<T>(Expression<Func<T, bool>>? where = null, string? key = null, bool refresh = false)
         {
-            var calculatedHash = SQLGenerator<T>.CalculateExpressionKey(where, null, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, in key);
+            var calculatedHash = SQLGenerator<T>.CalculateExpressionKey(where, null, null, typeof(T), SqlOperation.SelectList, _sqlValues.Provider, in key);
             var fromCache = _cache.TryGet(calculatedHash, out QueryResult<List<T>>? result);
 
             if (!fromCache || refresh)

@@ -23,13 +23,6 @@ namespace Thomas.Database.Tests
         }
 
         [Test]
-        public void ScriptNotProvided()
-        {
-            DbSettings options = new DbSettings("Db1", SqlProvider.SqlServer, "Data Source=localhost;Initial Catalog=db;Persist Security Info=True;User ID=sa;Password=YourPassword;") { ConnectionTimeout = 30 };
-            Assert.Throws<ScriptNotProvidedException>(() => new DatabaseCommand(options, "", null, commmandConfig, true, null, null));
-        }
-
-        [Test]
         public void DDLUnsupportedParameters()
         {
             DbSettings options = new DbSettings("Db1", SqlProvider.SqlServer, "Data Source=localhost;Initial Catalog=db;Persist Security Info=True;User ID=sa;Password=YourPassword;") { ConnectionTimeout = 30 };

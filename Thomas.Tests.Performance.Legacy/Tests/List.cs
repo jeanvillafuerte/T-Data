@@ -22,7 +22,7 @@ namespace Thomas.Tests.Performance.Legacy.Tests
             {
                 var st = new ListResult(age: 35);
                 return DbHub.Use(db).FetchList<Person>("get_byAge", st);
-            }, null, "ToList<> by SP");
+            }, null, "FetchList<> by SP");
         }
 
         public void ExecuteAsync(string db, string tableName, int expectedItems = 0)

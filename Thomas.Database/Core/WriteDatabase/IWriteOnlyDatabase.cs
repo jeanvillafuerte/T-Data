@@ -12,8 +12,7 @@ namespace Thomas.Database.Core.WriteDatabase
         void Delete<T>(T entity);
         void Truncate<T>(bool forceResetAutoIncrement = false);
         void Truncate(string tableName, bool forceResetAutoIncrement = false);
-        void UpdateIf<T>(Expression<Func<T, bool>> condition, Expression<Func<T, object>> updateField, object newValue);
-        void UpdateIf<T>(Expression<Func<T, bool>> condition, List<(Expression<Func<T, object>> updateField, object newValue)> updates);
+        void UpdateIf<T>(Expression<Func<T, bool>> condition, params (Expression<Func<T, object>> field, object value)[] updates);
         void DeleteIf<T>(Expression<Func<T, bool>> condition);
     }
 }

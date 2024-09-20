@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using Thomas.Database.Core.FluentApi;
 using Thomas.Database.Core.Provider;
 
@@ -39,7 +40,7 @@ namespace Thomas.Database.Configuration
         internal static DbSettings Get()
         {
             if (dictionary.Count == 1)
-                return dictionary[0];
+                return dictionary.Values.First();
             else
                 throw new Exception("There is more than one configuration, use the method Get(string signature)");
         }

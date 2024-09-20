@@ -116,20 +116,59 @@ namespace Thomas.Database.Tests.SQLite
             Assert.That(icon.Length, Is.EqualTo(user.Icon.Length));
         }
 
-        [Test, Order(9)]
-        public void DeleteData()
+        [Test]
+        public void UpdateIfSingleColumn()
         {
-            var dbContext = DbHub.Use("db1");
-            var user = dbContext.FetchOne<User>(x => x.Id == 1);
-            if (user == null)
-                Assert.Fail("User not found");
-            else
-            {
-                dbContext.Delete(user);
-                Assert.Pass();
-            }
+            var data = new[] { (11, 7777.6666m) };
+            var context = DbHub.GetDefaultDb();
+            context.UpdateIf<User>(x => x.Id == 1, (f => f.Salary, 7777.6666m));
+            var user = context.FetchOne<User>(x => x.Id == 1);
+            Assert.That(user, Is.Not.Null);
+            Assert.That(user.Salary, Is.EqualTo(7777.6666m));
         }
 
+        [Test]
+        public void UpdateIfMultipleColumns()
+        {
+            var context = DbHub.GetDefaultDb();
+            context.UpdateIf<User>(x => x.Id == 1,
+                (f => f.Salary, 7777.6666m),
+                (f => f.Name, "Thomas 2")
+            );
+
+            var user = context.FetchOne<User>(x => x.Id == 1);
+            Assert.That(user, Is.Not.Null);
+            Assert.That(user.Salary, Is.EqualTo(7777.6666m));
+            Assert.That(user.Name, Is.EqualTo("Thomas 2"));
+        }
+
+        [Test]
+        public void DeleteUser()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
+            var id = dbContext.Insert<User, int>(new User(0, 1, "Thomas", true, 6666.888m, new DateTime(1984, 4, 8), Guid.NewGuid(), icon));
+            Assert.That(id, Is.GreaterThan(0));
+            var user = dbContext.FetchOne<User>(x => x.Id == id);
+            Assert.That(user, Is.Not.Null);
+            dbContext.Delete(user);
+            Assert.Pass();
+        }
+
+        [Test]
+        public void DeleteIf()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
+            int[] ids = new int[2];
+            dbContext.ExecuteBlock((db) =>
+            {
+                ids[0] = db.Insert<User, int>(new User(0, 1, "Ron", true, 3323.45m, new DateTime(1984, 4, 8), Guid.NewGuid(), icon));
+                ids[1] = db.Insert<User, int>(new User(0, 1, "Harry", true, 6534.32m, new DateTime(1984, 4, 8), Guid.NewGuid(), icon));
+            });
+
+            dbContext.DeleteIf<User>(x => ids.Contains(x.Id));
+        }
         #region data types
         [Test]
         public void GuidTest()

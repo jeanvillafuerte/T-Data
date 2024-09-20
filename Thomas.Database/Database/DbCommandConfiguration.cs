@@ -30,7 +30,7 @@ namespace Thomas.Database
         }
 
         readonly internal bool EligibleForAddOracleCursors() => MethodHandled == MethodHandled.FetchListQueryString || MethodHandled == MethodHandled.FetchOneQueryString || IsTuple();
-
+        readonly internal bool IsExecuteNonQuery() => MethodHandled == MethodHandled.Execute;
         public override int GetHashCode()
         {
             var hash = 17;

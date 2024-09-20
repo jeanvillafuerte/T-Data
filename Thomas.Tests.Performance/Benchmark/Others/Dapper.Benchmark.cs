@@ -43,7 +43,7 @@ namespace Thomas.Tests.Performance.Benchmark.Others
         public dynamic QueryBufferedDynamic()
         {
             var _connection = new SqlConnection(StringConnection);
-            var item = _connection.Query($"select * from {TableName} where Id > @Id", new { Id = 1 }, buffered: true).First();
+            var item = _connection.Query($"select * from {TableName} where Id > @Id", new { Id = 0 }, buffered: true).First();
             _connection.Close();
             return item;
         }

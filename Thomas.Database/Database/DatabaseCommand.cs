@@ -79,43 +79,39 @@ namespace Thomas.Database
         {
             _configuration = configuration;
             _bufferSize = options.BufferSize;
-            _script = string.IsNullOrEmpty(script) ? throw new ScriptNotProvidedException() : script;
+            _script = script;
             _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
             _filter = filter;
             _command = command;
 
-            bool hasFilter = filter != null;
-            bool isTransaction = transaction != null;
+            Type filterType = null;
+            bool hasFilter = false;
+            bool isTransaction = false;
             var operationKey = 17;
-            unchecked
-            {
-                operationKey = (operationKey * 23) + _script.GetHashCode();
-                operationKey = (operationKey * 23) + _provider.GetHashCode();
-                operationKey = (operationKey * 23) + configuration.GetHashCode();
-            }
 
-            if (isTransaction)
+            if (transaction != null)
             {
+                isTransaction = true;
                 _transaction = transaction;
                 _connection = _command.Connection;
                 _command.Parameters.Clear();
+                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+            }
 
-                unchecked
+            unchecked
+            {
+                if (filter != null)
                 {
-                    operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+                    hasFilter = true;
+                    filterType = filter.GetType();
+                    operationKey = (operationKey * 23) + filterType.GetHashCode();
                 }
-            }
 
-            Type filterType = null;
-            if (hasFilter)
-            {
-                filterType = filter.GetType();
-                _preparationQueryKey = (operationKey * 23) + filterType.GetHashCode();
-            }
-            else
-            {
+                operationKey = (operationKey * 23) + _script.GetHashCode();
+                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
                 _preparationQueryKey = operationKey;
             }
 
@@ -132,7 +128,7 @@ namespace Thomas.Database
                 _commandBehavior = configuration.CommandBehavior;
 
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
-                bool isExecuteNonQuery = configuration.MethodHandled == MethodHandled.Execute;
+                bool isExecuteNonQuery = configuration.IsExecuteNonQuery();
 
                 bool expectBindValueParameters;
                 bool canPrepareStatement = false;
@@ -148,19 +144,15 @@ namespace Thomas.Database
                     DbParameterInfo[] localParameters = null;
                     (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
 
-                    if (localParameters?.Any(x => x.IsOutput) == true && !isExecuteNonQuery)
+                    if (!isExecuteNonQuery && localParameters?.Any(x => x.IsOutput) == true)
                         throw new PostgreSQLInvalidRequestCallException();
 
-                    canPrepareStatement = expectBindValueParameters = localParameters.Any(x => x.IsInput);
                     transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
                 }
                 else
                 {
                     if (isStoreProcedure)
                     {
-                        if (_provider == SqlProvider.Sqlite)
-                            throw new SqLiteStoreProcedureNotSupportedException();
-
                         expectBindValueParameters = false;
                         _commandType = CommandType.StoredProcedure;
                     }
@@ -171,13 +163,13 @@ namespace Thomas.Database
                         _commandType = CommandType.Text;
                     }
 
-                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, in isStoreProcedure, in canPrepareStatement);
+                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, in canPrepareStatement);
                     DbParameterInfo[] localParameters = null;
                     (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
                 }
 
                 if (buffered)
-                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, null, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, transformedScript));
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, null, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, in transformedScript));
             }
         }
 
@@ -200,26 +192,23 @@ namespace Thomas.Database
             _commandType = CommandType.Text;
             _commandBehavior = configuration.CommandBehavior;
 
-            bool hasFilter = parameters != null && parameters.Length > 0;
-            bool isTransaction = transaction != null;
+            bool isTransaction = false;
             var operationKey = 17;
+
+            if (transaction != null)
+            {
+                isTransaction = true;
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+            }
+
             unchecked
             {
                 operationKey = (operationKey * 23) + _script.GetHashCode();
                 operationKey = (operationKey * 23) + _provider.GetHashCode();
                 operationKey = (operationKey * 23) + configuration.GetHashCode();
-            }
-
-            if (isTransaction)
-            {
-                _transaction = transaction;
-                _connection = _command.Connection;
-                _command.Parameters.Clear();
-
-                unchecked
-                {
-                    operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
-                }
             }
 
             _preparationQueryKey = operationKey;
@@ -243,7 +232,7 @@ namespace Thomas.Database
                     _values = convertedParameters.Select(x => x.Value).ToArray();
                 }
 
-                var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, false, true);
+                var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, isTransaction, false, true);
                 _commandSetupDelegate2 = DatabaseProvider.GetCommandMetaData2(in commandConfiguration, convertedParameters);
 
                 if (buffered)
