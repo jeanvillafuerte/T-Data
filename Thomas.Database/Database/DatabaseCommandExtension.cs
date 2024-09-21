@@ -618,5 +618,5 @@ namespace Thomas.Database
 
     #endregion specific readers
 
-}
+    }
 }

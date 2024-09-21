@@ -21,9 +21,6 @@ namespace Thomas.Database.Core.QueryGenerator
     internal interface IParameterHandler
     {
         void AddInParam(in Type propertyType, object value, string dbType, out string paramName);
-        void AddInParam(in PropertyInfo propertyInfo);
-        void AddInParam(in PropertyInfo propertyInfo, out string paramName);
-        void AddOutParam(DbColumn column, out string paramName);
     }
 
     internal sealed class SQLGenerator<T> : IParameterHandler
@@ -374,8 +371,6 @@ namespace Thomas.Database.Core.QueryGenerator
             var parameterName = $"p{counter}";
             paramName = Formatter.BindVariable + parameterName;
 
-            DatabaseHelperProvider.GetEnumValue(Formatter.Provider, propertyType);
-
             var convertedValue = TypeConversionRegistry.ConvertInParameterValue(Formatter.Provider, value, propertyType, true);
 
             DbParametersToBind.AddLast(new DbParameterInfo(
@@ -389,65 +384,6 @@ namespace Thomas.Database.Core.QueryGenerator
                 convertedValue.GetType(),
                 DatabaseHelperProvider.GetEnumValue(Formatter.Provider, propertyType),
                 convertedValue,
-                null));
-        }
-
-        public void AddInParam(in PropertyInfo propertyInfo)
-        {
-            var paramName = Formatter.BindVariable + propertyInfo.Name;
-
-            TypeConversionRegistry.TryGetInParameterConverter(Formatter.Provider, propertyInfo.PropertyType, out var converter);
-
-            DbParametersToBind.AddLast(new DbParameterInfo(
-                propertyInfo.Name,
-                paramName,
-                0,
-                propertyInfo.PropertyType == typeof(decimal) ? 18 : 0,
-                propertyInfo.PropertyType == typeof(decimal) ? 6 : 0,
-                ParameterDirection.Input,
-                propertyInfo,
-                null,
-                DatabaseHelperProvider.GetEnumValue(Formatter.Provider, propertyInfo.PropertyType),
-                null,
-                converter));
-        }
-
-        public void AddInParam(in PropertyInfo propertyInfo, out string paramName)
-        {
-            paramName = Formatter.BindVariable + propertyInfo.Name;
-
-            TypeConversionRegistry.TryGetInParameterConverter(Formatter.Provider, propertyInfo.PropertyType, out var converter);
-
-            DbParametersToBind.AddLast(new DbParameterInfo(
-                propertyInfo.Name,
-                paramName,
-                0,
-                propertyInfo.PropertyType == typeof(decimal) ? 18 : 0,
-                propertyInfo.PropertyType == typeof(decimal) ? 6 : 0,
-                ParameterDirection.Input,
-                null,
-                propertyInfo.PropertyType,
-                DatabaseHelperProvider.GetEnumValue(Formatter.Provider, propertyInfo.PropertyType),
-                null,
-                converter));
-        }
-
-        public void AddOutParam(DbColumn column, out string paramBindName)
-        {
-            var counter = DbParametersToBind.Count + 1;
-            var paramName = $"p{counter}";
-            paramBindName = Formatter.BindVariable + paramName;
-            DbParametersToBind.AddLast(new DbParameterInfo(
-                paramName,
-                paramBindName,
-                0,
-                0,
-                0,
-                ParameterDirection.Output,
-                null,
-                column.Property.PropertyType,
-                DatabaseHelperProvider.GetEnumValue(Formatter.Provider, column.Property.PropertyType),
-                null,
                 null));
         }
 

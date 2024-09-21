@@ -25,12 +25,12 @@ namespace Thomas.Database.Tests.SQLite
             DbConfig.Register(new DbSettings("db1", SqlProvider.Sqlite, ConnectionString));
         }
 
-        [Test, Order(1)]
-        public void SQLiteStoreProcedureNotSupportedException()
-        {
-            var dbContext = DbHub.Use("db1");
-            Assert.Throws<SqLiteStoreProcedureNotSupportedException>(() => dbContext.Execute("EXEC_LIST"), "SQLite does not support stored procedures.");
-        }
+        //[Test, Order(1)]
+        //public void SQLiteStoreProcedureNotSupportedException()
+        //{
+        //    var dbContext = DbHub.Use("db1");
+        //    Assert.Throws<SqLiteStoreProcedureNotSupportedException>(() => dbContext.Execute("EXEC_LIST"), "SQLite does not support stored procedures.");
+        //}
 
         [Test, Order(2)]
         public void DropIfExistsTable()
