@@ -169,7 +169,7 @@ namespace Thomas.Tests.Performance.Benchmark
         }
 
         [Benchmark(Description = "TryFetchOne<> T with nullables")]
-        public DbOpResult<PersonWithNullables> TryFetchOne()
+        public DbOpResult<PersonWithNullables> TryFetchOne2()
         {
             return DbHub.Use("db").TryFetchOne<PersonWithNullables>($"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {TableName} WHERE Id = 1;");
         }

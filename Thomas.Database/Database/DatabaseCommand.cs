@@ -381,6 +381,9 @@ namespace Thomas.Database
         {
             _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
             var list = new List<T>();
@@ -393,6 +396,9 @@ namespace Thomas.Database
 
         public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             if (await _reader.NextResultAsync(cancellationToken))
             {
                 var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);

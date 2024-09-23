@@ -58,9 +58,11 @@ namespace Thomas.Database.Core.Provider
         public static bool IsCancelatedOperationException(in Exception exception)
         {
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-            return exception.Message.AsSpan().Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase);
+            var message = exception.Message.AsSpan();
+            return message.Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("ORA-01013", StringComparison.OrdinalIgnoreCase);
 #else
-            return exception?.Message.Contains("Operation cancelled by user") ?? false;
+            return exception.Message.Contains("Operation cancelled by user") || exception.Message.Contains("ORA-01013");
 #endif
         }
 

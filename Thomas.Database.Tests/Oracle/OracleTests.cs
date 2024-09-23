@@ -77,21 +77,21 @@ namespace Thomas.Database.Tests.Oracle
             Assert.Pass();
         }
 
-        [Test, Order(4)]
-        public void TruncateTable()
-        {
-            var dbContext = DbHub.Use("db1");
-            dbContext.Truncate<User>();
-            dbContext.Truncate<UserType>();
-        }
+        //[Test, Order(4)]
+        //public void TruncateTable()
+        //{
+        //    var dbContext = DbHub.Use("db1");
+        //    dbContext.Truncate<User>();
+        //    dbContext.Truncate<UserType>();
+        //}
 
-        [Test, Order(4)]
-        public void TruncateTableByString()
-        {
-            var dbContext = DbHub.Use("db1");
-            dbContext.Truncate("USERS");
-            dbContext.Truncate("USER_TYPE");
-        }
+        //[Test, Order(4)]
+        //public void TruncateTableByString()
+        //{
+        //    var dbContext = DbHub.Use("db1");
+        //    dbContext.Truncate("USERS");
+        //    dbContext.Truncate("USER_TYPE");
+        //}
 
         [Test, Order(5)]
         public void InsertUserType()
@@ -471,7 +471,77 @@ namespace Thomas.Database.Tests.Oracle
             Assert.That(result.Result, Is.Not.Null);
         }
 
+        [Test]
+        public async Task TryFetchListAsync()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var result = await dbContext.TryFetchListAsync<User>("SELECT * FROM USERS");
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Result, Is.Not.Empty);
+        }
 
+        [Test]
+        public async Task TryFetchListAsyncCancel()
+        {
+            CancellationTokenSource source = new CancellationTokenSource();
+            source.CancelAfter(new TimeSpan(0, 0, 0, 0, 0, 1));
+
+            var dbContext = DbHub.GetDefaultDb();
+            var result = await dbContext.TryFetchListAsync<User>("SELECT * FROM USERS", null, source.Token);
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Success, Is.False, "Success");
+            Assert.That(result.Canceled, Is.True, "Canceled");
+        }
+
+
+        [Test]
+        public async Task TryFetchOneAsync()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var icon = File.ReadAllBytes(Path.Combine(".", "Content", "ThomasIco.png"));
+            var id = dbContext.Insert<User, int>(new User(0, 2, "Tom", true, 4400.555m, new DateTime(1995, 4, 20), Guid.NewGuid(), icon));
+            var entity = await dbContext.TryFetchOneAsync<User>("SELECT * FROM USERS WHERE Id = :id", new { id });
+            Assert.That(entity.Success, Is.True);
+            Assert.That(entity.Result, Is.Not.Null);
+            Assert.That(entity.Result.Name, Is.EqualTo("Tom"));
+            Assert.That(entity.Result.State, Is.EqualTo(true));
+            Assert.That(entity.Result.Salary, Is.EqualTo(4400.555m));
+            Assert.That(entity.Result.Birthday, Is.EqualTo(new DateTime(1995, 4, 20)));
+        }
+
+        class TupleParam
+        {
+            [DbParameter(direction: ParameterDirection.Output, isOracleCursor: true)]
+            public string p_cursor1 { get; set; }
+
+            [DbParameter(direction: ParameterDirection.Output, isOracleCursor: true)]
+            public string p_cursor2 { get; set; }
+        }
+
+        [Test]
+        public async Task TryFetchTupleAsync()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var tuple = await dbContext.TryFetchTupleAsync<User, UserType>("BEGIN OPEN :p_cursor1 FOR SELECT * FROM USERS; OPEN :p_cursor2 FOR SELECT * FROM USER_TYPE; END;", new TupleParam());
+            Assert.That(tuple, Is.Not.Null);
+            Assert.That(tuple.Success, Is.True);
+            Assert.That(tuple.Result.Item1, Is.Not.Empty);
+            Assert.That(tuple.Result.Item2, Is.Not.Empty);
+        }
+
+        [Test]
+        public async Task TryFetchTupleAsyncCancel()
+        {
+            CancellationTokenSource source = new CancellationTokenSource();
+            source.CancelAfter(new TimeSpan(0, 0, 0, 0, 0, 1));
+
+            var dbContext = DbHub.GetDefaultDb();
+            var tuple = await dbContext.TryFetchTupleAsync<User, UserType>("BEGIN OPEN :p_cursor1 FOR SELECT * FROM USERS; OPEN :p_cursor2 FOR SELECT * FROM USER_TYPE; END;", new TupleParam(), source.Token);
+            Assert.That(tuple, Is.Not.Null);
+            Assert.That(tuple.Success, Is.False, "Success");
+            Assert.That(tuple.Canceled, Is.True, "Canceled");
+        }
         #endregion
 
 

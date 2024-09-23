@@ -2,6 +2,7 @@
 
 namespace Thomas.Database
 {
+    public sealed class SignatureNotFoundException : Exception { }
     public sealed class DuplicateSignatureException : Exception { }
 
     public sealed class DBProviderNotFoundException : Exception {

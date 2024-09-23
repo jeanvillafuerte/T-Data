@@ -11,12 +11,20 @@ namespace Thomas.Database.Configuration
         private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>(Environment.ProcessorCount * 2, 10);
         internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>(Environment.ProcessorCount * 2, 10);
 
+        /// <summary>
+        /// Clears all the configurations and tables.
+        /// </summary>
         public static void Clear()
         {
             dictionary.Clear();
             Tables.Clear();
         }
 
+        /// <summary>
+        /// Registers a new database configuration.
+        /// </summary>
+        /// <param name="config">The database settings to register.</param>
+        /// <exception cref="DuplicateSignatureException">Thrown when a configuration with the same signature already exists.</exception>
         public static void Register(in DbSettings config)
         {
             var key = HashHelper.GenerateHash(config.Signature);

@@ -428,6 +428,9 @@ namespace Thomas.Database.Core.Provider
                             attributes = GetDbParameterAttribute(item.Property);
                         }
 
+                        if (!attributes.IsOracleCursor)
+                            hasOutputParameters = attributes.IsOutput || hasOutputParameters;
+
                         if (enumValue == 0 && options.Provider != SqlProvider.Sqlite)
                         {
                             if (options.Provider == SqlProvider.Oracle && attributes.IsOracleCursor)
@@ -458,8 +461,6 @@ namespace Thomas.Database.Core.Provider
                             dbType: enumValue,
                             value: null,
                             converter: typeConverter);
-
-                        hasOutputParameters = attributes.IsOutput || hasOutputParameters;
                     }
 
                     if (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle && table != null)
