@@ -13,7 +13,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
         static void SeedDataBase(string db, int rows, string tableName)
         {
-            DbFactory.GetDbContext(db, buffered: false).ExecuteBlock((service) =>
+            DbHub.Use(db, buffered: false).ExecuteBlock((service) =>
             {
                 string tableScriptDefinition = $@"IF (OBJECT_ID('{tableName}') IS NULL)
                                                 BEGIN
@@ -36,7 +36,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
                                                 END";
 
-                var result = service.ExecuteOp(tableScriptDefinition, null);
+                var result = service.TryExecute(tableScriptDefinition, null);
 
                 if (!result.Success)
                 {
@@ -45,42 +45,42 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
                 var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_{tableName}]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_{tableName}] AS' END ";
 
-                result = service.ExecuteOp(checkSp1, null);
+                result = service.TryExecute(checkSp1, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-                result = service.ExecuteOp(checkSp2, null);
+                result = service.TryExecute(checkSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var checkSp3 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byAge]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byAge] AS' END ";
 
-                result = service.ExecuteOp(checkSp3, null);
+                result = service.TryExecute(checkSp3, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp = $"ALTER PROCEDURE get_{tableName}(@age SMALLINT) AS SELECT * FROM {tableName} WHERE Age = @age";
 
-                result = service.ExecuteOp(createSp, null);
+                result = service.TryExecute(createSp, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {tableName} WHERE Id = @id";
 
-                result = service.ExecuteOp(createSp2, null);
+                result = service.TryExecute(createSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp3 = $"ALTER PROCEDURE get_byAge(@age INT, @total INT OUTPUT) AS SELECT * FROM {tableName} WHERE Age = @age SELECT @total = COUNT(1) FROM {tableName} WHERE Age = @age";
 
-                result = service.ExecuteOp(createSp3);
+                result = service.TryExecute(createSp3);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
@@ -94,7 +94,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 								SET @IDX = @IDX + 1;
 							END";
 
-                var dataResult = service.ExecuteOp(data, null);
+                var dataResult = service.TryExecute(data, null);
 
                 if (!dataResult.Success)
                 {
@@ -103,7 +103,7 @@ namespace Thomas.Tests.Performance.Legacy.Setup
 
                 var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{tableName}_01 on {tableName} (Age)";
 
-                result = service.ExecuteOp(createIndexByAge, null);
+                result = service.TryExecute(createIndexByAge, null);
 
                 if (!result.Success)
                 {

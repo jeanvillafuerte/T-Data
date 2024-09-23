@@ -5,12 +5,17 @@ using Thomas.Database.Configuration;
 
 namespace Thomas.Cache
 {
-    public static class CachedDbFactory
+    public static class CachedDbHub
     {
-        public static ICachedDatabase GetDbContext(string signature, bool buffered = true)
+        public static ICachedDatabase Use(string signature, bool buffered = true)
         {
-            var config = DbConfigurationFactory.Get(signature);
+            var config = DbConfig.Get(signature);
             return new CachedDatabase(DbDataCache.Instance, new Lazy<IDatabase>(() => new DbBase(in config, in buffered)), config.SQLValues);
+        }
+
+        public static void Clear()
+        {
+            DbDataCache.Instance.Clear();
         }
     }
 }

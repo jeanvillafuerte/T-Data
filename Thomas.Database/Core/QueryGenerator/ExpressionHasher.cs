@@ -8,15 +8,12 @@ namespace Thomas.Database.Helpers
 {
     internal static class ExpressionHasher
     {
-        public static int GetHashCode<T>(Expression<Func<T, bool>> expr, SqlProvider provider, bool includeValues = true)
+        public static int GetPredicateHashCode<T>(in Expression<Func<T, bool>> expr, in SqlProvider provider, in bool includeValues = true)
         {
-            unchecked
-            {
-                int hash = 17;
-                hash = (hash * 23) + provider.GetHashCode();
-                hash = (hash * 23) + expr.Body.NodeType.GetHashCode();
-                return GetHashCode(expr.Body, hash, includeValues, provider);
-            }
+            int hash = 17;
+            hash = (hash * 23) + provider.GetHashCode();
+            hash = (hash * 23) + expr.Body.NodeType.GetHashCode();
+            return GetHashCode(expr.Body, hash, includeValues, provider);
         }
 
         private static int GetHashCode(Expression expr, int hash, bool includeValues, SqlProvider provider, MemberInfo member = null)
@@ -44,11 +41,7 @@ namespace Thomas.Database.Helpers
                 {
                     var instantiator = Expression.Lambda<Func<DateTime>>(newExpression).Compile();
                     var value = instantiator();
-
-                    unchecked
-                    {
-                        return (hash * 23) + value.GetHashCode();
-                    }
+                    return (hash * 23) + value.GetHashCode();
                 }
 
                 return (hash * 23) + newExpression.Type.GetHashCode();
@@ -74,8 +67,7 @@ namespace Thomas.Database.Helpers
             var tempHash = GetHashCode(binExpr.Left, hash, includeValues, provider);
             hash = (hash * 23) + tempHash;
             tempHash = GetHashCode(binExpr.Right, hash, includeValues, provider);
-            hash = (hash * 23) + tempHash;
-            return hash;
+            return (hash * 23) + tempHash;
         }
 
         public static int MemberExpression(MemberExpression memberExpression, int hash, bool includeValues, SqlProvider provider)

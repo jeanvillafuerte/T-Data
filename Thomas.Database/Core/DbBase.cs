@@ -22,6 +22,7 @@ namespace Thomas.Database
 {
     public sealed class DbBase : IDatabase
     {
+
         internal readonly DbSettings Options;
         private readonly ISqlFormatter Formatter;
         private DbTransaction _transaction;
@@ -49,6 +50,7 @@ namespace Thomas.Database
         public async Task ExecuteBlockAsync(Func<IDatabase, Task> func)
         {
             await using var command = new DatabaseCommand(in Options);
+            await command.OpenConnectionAsync(CancellationToken.None);
             _command = command.CreateEmptyCommand();
             await func(this);
         }
@@ -56,6 +58,11 @@ namespace Thomas.Database
         public async Task ExecuteBlockAsync(Func<IDatabase, CancellationToken, Task> func, CancellationToken cancellationToken)
         {
             await using var command = new DatabaseCommand(in Options);
+            await command.OpenConnectionAsync(CancellationToken.None);
+
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             _command = command.CreateEmptyCommand();
             await func(this, cancellationToken);
         }
@@ -156,6 +163,59 @@ namespace Thomas.Database
             return TransactionResult.Rollbacked;
         }
 
+        public async Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, Task<T>> func)
+        {
+            await using var command = new DatabaseCommand(in Options);
+            try
+            {
+                _transaction = await command.BeginTransactionAsync(CancellationToken.None);
+                _command = command.CreateEmptyCommand();
+                _command.Transaction = _transaction;
+
+                var result = await func(this);
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                await _transaction.CommitAsync();
+#else
+                _transaction.Commit();
+#endif
+                return result;
+            }
+            catch (Exception)
+            {
+                if (!_transactionCompleted && _transaction?.Connection != null)
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                    await _transaction.RollbackAsync();
+#else
+                    _transaction.Rollback();
+#endif
+                throw;
+            }
+            finally
+            {
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                if (_transaction != null)
+                    await _transaction.DisposeAsync();
+
+                if (_command?.Connection?.State == ConnectionState.Open)
+                    await _command.Connection.DisposeAsync();
+
+                if (_command != null)
+                    await _command.DisposeAsync();
+#else
+                if (_transaction != null)
+                    _transaction.Dispose();
+
+                if (_command?.Connection?.State == ConnectionState.Open)
+                    _command.Connection.Dispose();
+
+                if (_command != null)
+                    _command.Dispose();
+#endif
+                _transaction = null;
+                _command = null;
+            }
+        }
+
         public async Task<T> ExecuteTransactionAsync<T>(Func<IDatabase, CancellationToken, Task<T>> func, CancellationToken cancellationToken)
         {
             await using var command = new DatabaseCommand(in Options);
@@ -166,6 +226,9 @@ namespace Thomas.Database
                 _command.Transaction = _transaction;
 
                 var result = await func(this, cancellationToken);
+
+                if (cancellationToken.IsCancellationRequested)
+                    throw new TaskCanceledException();
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await _transaction.CommitAsync(cancellationToken);
 #else
@@ -209,6 +272,60 @@ namespace Thomas.Database
             }
         }
 
+        public async Task<bool> ExecuteTransaction(Func<IDatabase, Task<TransactionResult>> func)
+        {
+            await using var command = new DatabaseCommand(in Options);
+            try
+            {
+                _transaction = await command.BeginTransactionAsync(CancellationToken.None);
+                _command = command.CreateEmptyCommand();
+                _command.Transaction = _transaction;
+                var result = await func(this);
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                await _transaction.CommitAsync();
+#else
+                _transaction.Commit();
+#endif
+                return result == TransactionResult.Committed;
+            }
+            catch (Exception)
+            {
+                if (!_transactionCompleted && _transaction?.Connection != null)
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                    await _transaction.RollbackAsync();
+#else
+                    _transaction.Rollback();
+#endif
+                throw;
+            }
+            finally
+            {
+                if (_transaction != null)
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                    await _transaction.DisposeAsync();
+#else
+                    _transaction.Dispose();
+#endif
+
+                if (_command?.Connection?.State == ConnectionState.Open)
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                    await _command.Connection.DisposeAsync();
+#else
+                    _command.Connection.Dispose();
+#endif
+
+                if (_command != null)
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                    await _command.DisposeAsync();
+#else
+                    _command.Dispose();
+#endif
+
+                _transaction = null;
+                _command = null;
+            }
+        }
+
         public async Task<bool> ExecuteTransaction(Func<IDatabase, CancellationToken, Task<TransactionResult>> func, CancellationToken cancellationToken)
         {
             await using var command = new DatabaseCommand(in Options);
@@ -218,6 +335,9 @@ namespace Thomas.Database
                 _command = command.CreateEmptyCommand();
                 _command.Transaction = _transaction;
                 var result = await func(this, cancellationToken);
+
+                if (cancellationToken.IsCancellationRequested)
+                    throw new TaskCanceledException();
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await _transaction.CommitAsync(cancellationToken);
 #else
@@ -263,10 +383,13 @@ namespace Thomas.Database
             }
         }
 
-        public async Task<TransactionResult> CommitAsync()
+        public async Task<TransactionResult> CommitAsync(CancellationToken cancellationToken)
         {
             if (_transaction == null)
                 throw new InvalidOperationException("Transaction not started");
+
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
 
             _transactionCompleted = true;
 
@@ -277,6 +400,10 @@ namespace Thomas.Database
             _transaction.Commit();
             return await Task.FromResult(TransactionResult.Committed);
 #endif
+        }
+        public async Task<TransactionResult> CommitAsync()
+        {
+            return await this.CommitAsync(CancellationToken.None);
         }
 
         public async Task<TransactionResult> RollbackAsync()
@@ -294,7 +421,7 @@ namespace Thomas.Database
             return await Task.FromResult(TransactionResult.Rollbacked);
 #endif
         }
-#endregion transaction
+        #endregion transaction
 
         #region without result data
 
@@ -314,7 +441,7 @@ namespace Thomas.Database
             return affected;
         }
 
-        public DbOpResult ExecuteOp(in string script, in object parameters = null)
+        public DbOpResult TryExecute(in string script, in object parameters = null)
         {
             DbOpResult response;
 
@@ -330,7 +457,12 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<DbOpAsyncResult> ExecuteOpAsync(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult> TryExecuteAsync(string script, object parameters = null)
+        {
+            return await TryExecuteAsync(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult> TryExecuteAsync(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult response;
 
@@ -338,10 +470,14 @@ namespace Thomas.Database
             {
                 await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
                 command.Prepare();
+
+                if (cancellationToken.IsCancellationRequested)
+                    throw new TaskCanceledException();
+
                 response = await command.ExecuteNonQueryAsync(cancellationToken);
                 command.SetValuesOutFields();
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult>();
             }
@@ -357,6 +493,10 @@ namespace Thomas.Database
         {
             await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
+
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             var affected = await command.ExecuteNonQueryAsync(cancellationToken);
             command.SetValuesOutFields();
             return affected;
@@ -365,6 +505,22 @@ namespace Thomas.Database
         public async Task<int> ExecuteAsync(string script, object parameters = null)
         {
             return await ExecuteAsync(script, parameters, CancellationToken.None);
+        }
+
+        public DbOpResult<T> TryExecuteScalar<T>(in string script, in object parameters = null)
+        {
+            DbOpResult<T> response;
+
+            try
+            {
+                response = ExecuteScalar<T>(in script, in parameters);
+            }
+            catch (Exception ex)
+            {
+                response = ErrorDetailMessage(in script, in ex, in parameters);
+            }
+
+            return response;
         }
 
         public T ExecuteScalar<T>(in string script, in object parameters = null)
@@ -376,40 +532,40 @@ namespace Thomas.Database
             return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
         }
 
-        #endregion without result data
-
-        #region single row result
-
-        private static readonly DbCommandConfiguration QuerySingleConfig = new DbCommandConfiguration(
-                                                                           commandBehavior: CommandBehavior.SingleRow | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToSingleQueryString,
-                                                                           keyAsReturnValue: false,
-                                                                           skipAutoGeneratedColumn: false,
-                                                                           generateParameterWithKeys: false);
-
-        public T ToSingle<T>(in string script, in object parameters = null)
+        public async Task<T> ExecuteScalarAsync<T>(string script, object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
+            return await ExecuteScalarAsync<T>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<T> ExecuteScalarAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            var item = command.ReadListItems<T>().FirstOrDefault();
+
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
+            var rawValue = await command.ExecuteScalarAsync(cancellationToken);
             command.SetValuesOutFields();
-            return item;
+            return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
         }
 
-        public T ToSingle<T>(Expression<Func<T, bool>> where = null)
+        public async Task<DbOpAsyncResult<T>> TryExecuteScalarAsync<T>(string script, object parameters = null)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            var script = generator.GenerateSelectWhere(in where, SqlOperation.SelectSingle, out var filter);
-            return ToSingle<T>(in script, in filter);
+            return await TryExecuteScalarAsync<T>(script, parameters, CancellationToken.None);
         }
 
-        public DbOpResult<T> ToSingleOp<T>(in string script, in object parameters = null)
+        public async Task<DbOpAsyncResult<T>> TryExecuteScalarAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
-            DbOpResult<T> response;
+            DbOpAsyncResult<T> response;
 
             try
             {
-                response = ToSingle<T>(in script, in parameters);
+                response = await ExecuteScalarAsync<T>(script, parameters, cancellationToken);
+            }
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
+            {
+                response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<T>>();
             }
             catch (Exception ex)
             {
@@ -419,27 +575,91 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<T> ToSingleAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        #endregion without result data
+
+        #region single row result
+
+        private static readonly DbCommandConfiguration QuerySingleConfig = new DbCommandConfiguration(
+                                                                           commandBehavior: CommandBehavior.SingleRow | CommandBehavior.SequentialAccess,
+                                                                           methodHandled: MethodHandled.FetchOneQueryString,
+                                                                           keyAsReturnValue: false,
+                                                                           skipAutoGeneratedColumn: false,
+                                                                           generateParameterWithKeys: false);
+
+        public T FetchOne<T>(in string script, in object parameters = null)
         {
-            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
+            var item = command.ReadListItems<T>().FirstOrDefault();
+            command.SetValuesOutFields();
+            return item;
+        }
+
+        public T FetchOne<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
+        {
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectSingle, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
             return command.ReadListItems<T>().FirstOrDefault();
         }
 
-        public async Task<T> ToSingleAsync<T>(string script, object parameters = null)
+        public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            return await ToSingleAsync<T>(script, parameters, CancellationToken.None);
+            return await FetchOneAsync<T>(where, selector, CancellationToken.None);
         }
 
-        public async Task<DbOpAsyncResult<T>> ToSingleOpAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken)
+        {
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(where, selector, SqlOperation.SelectSingle, out var values);
+            await using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return (await command.ReadListItemsAsync<T>(cancellationToken)).FirstOrDefault();
+        }
+
+        public DbOpResult<T> TryFetchOne<T>(in string script, in object parameters = null)
+        {
+            DbOpResult<T> response;
+
+            try
+            {
+                response = FetchOne<T>(in script, in parameters);
+            }
+            catch (Exception ex)
+            {
+                response = ErrorDetailMessage(in script, in ex, in parameters);
+            }
+
+            return response;
+        }
+
+        public async Task<T> FetchOneAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        {
+            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            return (await command.ReadListItemsAsync<T>(cancellationToken)).FirstOrDefault();
+        }
+
+        public async Task<T> FetchOneAsync<T>(string script, object parameters = null)
+        {
+            return await FetchOneAsync<T>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<T>> TryFetchOneAsync<T>(string script, object parameters = null)
+        {
+            return await TryFetchOneAsync<T>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<T>> TryFetchOneAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<T> response;
 
             try
             {
-                response = await ToSingleAsync<T>(script, parameters, cancellationToken);
+                response = await FetchOneAsync<T>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<T>>();
             }
@@ -457,12 +677,12 @@ namespace Thomas.Database
 
         private static readonly DbCommandConfiguration QueryListConfig = new DbCommandConfiguration(
                                                                         commandBehavior: CommandBehavior.SingleResult | CommandBehavior.SequentialAccess,
-                                                                        methodHandled: MethodHandled.ToListQueryString,
+                                                                        methodHandled: MethodHandled.FetchListQueryString,
                                                                         keyAsReturnValue: false,
                                                                         skipAutoGeneratedColumn: false,
                                                                         generateParameterWithKeys: false);
 
-        public List<T> ToList<T>(in string script, in object parameters = null)
+        public List<T> FetchList<T>(in string script, in object parameters = null)
         {
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
@@ -471,20 +691,22 @@ namespace Thomas.Database
             return result;
         }
 
-        public List<T> ToList<T>(Expression<Func<T, bool>> where = null)
+        public List<T> FetchList<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            string script = generator.GenerateSelectWhere(in where, SqlOperation.SelectList, out var filter);
-            return ToList<T>(in script, in filter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            string script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectList, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return command.ReadListItems<T>();
         }
 
-        public DbOpResult<List<T>> ToListOp<T>(in string script, in object parameters = null)
+        public DbOpResult<List<T>> TryFetchList<T>(in string script, in object parameters = null)
         {
             DbOpResult<List<T>> response;
 
             try
             {
-                response = ToList<T>(in script, in parameters);
+                response = FetchList<T>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -494,7 +716,7 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<List<T>> ToListAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<List<T>> FetchListAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
             await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
 
@@ -507,32 +729,39 @@ namespace Thomas.Database
             return result;
         }
 
-        public async Task<List<T>> ToListAsync<T>(string script, object parameters = null)
+        public async Task<List<T>> FetchListAsync<T>(string script, object parameters = null)
         {
-            return await ToListAsync<T>(script, parameters, CancellationToken.None);
+            return await FetchListAsync<T>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where)
+        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
         {
-            return await ToListAsync<T>(where, CancellationToken.None);
+            return await FetchListAsync(where, selector, CancellationToken.None);
         }
 
-        public async Task<List<T>> ToListAsync<T>(Expression<Func<T, bool>> where, CancellationToken cancellationToken)
+        public async Task<List<T>> FetchListAsync<T>(Expression<Func<T, bool>> where, Expression<Func<T, object>> selector, CancellationToken cancellationToken)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
-            var script = generator.GenerateSelectWhere(where, SqlOperation.SelectList, out var filter);
-            return await ToListAsync<T>(script, filter, cancellationToken);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateSelect(where, selector, SqlOperation.SelectList, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            return await command.ReadListItemsAsync<T>(cancellationToken);
         }
 
-        public async Task<DbOpAsyncResult<List<T>>> ToListOpAsync<T>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object parameters = null)
+        {
+            return await TryFetchListAsync<T>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<List<T>> response;
 
             try
             {
-                response = await ToListAsync<T>(script, parameters, cancellationToken);
+                response = await FetchListAsync<T>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<List<T>>>();
             }
@@ -555,6 +784,20 @@ namespace Thomas.Database
             return (command.Dispose, command.FetchData<T>(batchSize));
         }
 
+        public (Action, IAsyncEnumerable<List<T>>) FetchDataAsync<T>(string script, object parameters, int batchSize = 1000)
+        {
+            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            return (command.Dispose, command.FetchDataAsync<T>(batchSize, CancellationToken.None));
+        }
+
+        public (Action, IAsyncEnumerable<List<T>>) FetchDataAsync<T>(string script, object parameters, int batchSize, CancellationToken cancellationToken)
+        {
+            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            return (command.Dispose, command.FetchDataAsync<T>(batchSize, cancellationToken));
+        }
+
         #endregion streaming
 
         #region Multiple result set
@@ -566,18 +809,18 @@ namespace Thomas.Database
 
         private static readonly DbCommandConfiguration QueryTuple2Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_2,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_2,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>>> ToTupleOp<T1, T2>(in string script, in object parameters = null)
+        public DbOpResult<Tuple<List<T1>, List<T2>>> TryFetchTuple<T1, T2>(in string script, in object parameters = null)
         {
             DbOpResult<Tuple<List<T1>, List<T2>>> response;
 
             try
             {
-                response = ToTuple<T1, T2>(in script, in parameters);
+                response = FetchTuple<T1, T2>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -587,17 +830,17 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>> ToTuple<T1, T2>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>> FetchTuple<T1, T2>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return ExecuteTransaction((db) =>
                 {
-                    var cursorResult = db.ToList<CursorName>(in _script, in _parameters);
-                    var t1 = db.ToList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
-                    var t2 = db.ToList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
                     return new Tuple<List<T1>, List<T2>>(t1, t2);
                 });
             }
@@ -614,17 +857,17 @@ namespace Thomas.Database
             }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>>> ToTupleAsync<T1, T2>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>>> FetchTupleAsync<T1, T2>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return await ExecuteTransactionAsync(async (db, cancelToken) =>
                 {
-                    var cursorResult = await db.ToListAsync<CursorName>(_script, _parameters, cancelToken);
-                    var t1 = await db.ToListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
-                    var t2 = await db.ToListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
                     return new Tuple<List<T1>, List<T2>>(t1, t2);
                 }, cancellationToken);
             }
@@ -640,23 +883,27 @@ namespace Thomas.Database
 
                 return new Tuple<List<T1>, List<T2>>(t1, t2);
             }
-           
         }
 
-        public async Task<Tuple<List<T1>, List<T2>>> ToTupleAsync<T1, T2>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>>> FetchTupleAsync<T1, T2>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> ToTupleOpAsync<T1, T2>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> TryFetchTupleAsync<T1, T2>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> TryFetchTupleAsync<T1, T2>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<Tuple<List<T1>, List<T2>>> response;
 
             try
             {
-                response = await ToTupleAsync<T1, T2>(script, parameters, cancellationToken);
+                response = await FetchTupleAsync<T1, T2>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>>();
             }
@@ -670,18 +917,18 @@ namespace Thomas.Database
 
         private static readonly DbCommandConfiguration QueryTuple3Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_3,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_3,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleOp<T1, T2, T3>(in string script, in object parameters = null)
+        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>> TryFetchTuple<T1, T2, T3>(in string script, in object parameters = null)
         {
             DbOpResult<Tuple<List<T1>, List<T2>, List<T3>>> response;
 
             try
             {
-                response = ToTuple<T1, T2, T3>(in script, in parameters);
+                response = FetchTuple<T1, T2, T3>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -691,18 +938,18 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>> ToTuple<T1, T2, T3>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>, List<T3>> FetchTuple<T1, T2, T3>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return ExecuteTransaction((db) =>
                 {
-                    var cursorResult = db.ToList<CursorName>(in _script, in _parameters);
-                    var t1 = db.ToList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
-                    var t2 = db.ToList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
-                    var t3 = db.ToList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var t3 = db.FetchList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
                     return new Tuple<List<T1>, List<T2>, List<T3>>(t1, t2, t3);
                 });
             }
@@ -721,15 +968,20 @@ namespace Thomas.Database
             }
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> ToTupleOp<T1, T2, T3>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> TryFetchTupleAsync<T1, T2, T3>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2, T3>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> TryFetchTupleAsync<T1, T2, T3>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>> response;
 
             try
             {
-                response = await ToTupleAsync<T1, T2, T3>(script, parameters, cancellationToken);
+                response = await FetchTupleAsync<T1, T2, T3>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>>();
             }
@@ -741,18 +993,18 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleAsync<T1, T2, T3>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> FetchTupleAsync<T1, T2, T3>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return await ExecuteTransactionAsync( async (db, cancelToken) =>
                 {
-                    var cursorResult = await db.ToListAsync<CursorName>(_script, _parameters, cancelToken);
-                    var t1 = await db.ToListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
-                    var t2 = await db.ToListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
-                    var t3 = await db.ToListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var t3 = await db.FetchListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
                     return new Tuple<List<T1>, List<T2>, List<T3>>(t1, t2, t3);
                 }, cancellationToken);
             }
@@ -772,25 +1024,25 @@ namespace Thomas.Database
             
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> ToTupleAsync<T1, T2, T3>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>>> FetchTupleAsync<T1, T2, T3>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2, T3>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2, T3>(script, parameters, CancellationToken.None);
         }
 
         private static readonly DbCommandConfiguration QueryTuple4Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_4,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_4,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleOp<T1, T2, T3, T4>(in string script, in object parameters)
+        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> TryFetchTuple<T1, T2, T3, T4>(in string script, in object parameters)
         {
             DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> response;
 
             try
             {
-                response = ToTuple<T1, T2, T3, T4>(in script, in parameters);
+                response = FetchTuple<T1, T2, T3, T4>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -800,19 +1052,19 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>> ToTuple<T1, T2, T3, T4>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>> FetchTuple<T1, T2, T3, T4>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return ExecuteTransaction((db) =>
                 {
-                    var cursorResult = db.ToList<CursorName>(in _script, in _parameters);
-                    var t1 = db.ToList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
-                    var t2 = db.ToList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
-                    var t3 = db.ToList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
-                    var t4 = db.ToList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var t3 = db.FetchList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
+                    var t4 = db.FetchList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
                     return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>>(t1, t2, t3, t4);
                 });
             }
@@ -833,15 +1085,20 @@ namespace Thomas.Database
             
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> ToTupleOp<T1, T2, T3, T4>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> TryFetchTupleAsync<T1, T2, T3, T4>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2, T3, T4>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> TryFetchTupleAsync<T1, T2, T3, T4>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> response;
 
             try
             {
-                response = await ToTupleAsync<T1, T2, T3, T4>(script, parameters, cancellationToken);
+                response = await FetchTupleAsync<T1, T2, T3, T4>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>>();
             }
@@ -853,19 +1110,19 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> FetchTupleAsync<T1, T2, T3, T4>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return await ExecuteTransactionAsync( async (db, cancelToken) =>
                 {
-                    var cursorResult = await db.ToListAsync<CursorName>(_script, _parameters, cancelToken);
-                    var t1 = await db.ToListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
-                    var t2 = await db.ToListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
-                    var t3 = await db.ToListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
-                    var t4 = await db.ToListAsync<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"", null, cancelToken);
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var t3 = await db.FetchListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
+                    var t4 = await db.FetchListAsync<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"", null, cancelToken);
                     return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>>(t1, t2, t3, t4);
                 }, cancellationToken);
             }
@@ -885,25 +1142,25 @@ namespace Thomas.Database
             }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> ToTupleAsync<T1, T2, T3, T4>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> FetchTupleAsync<T1, T2, T3, T4>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2, T3, T4>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2, T3, T4>(script, parameters, CancellationToken.None);
         }
 
         private static readonly DbCommandConfiguration QueryTuple5Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_5,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_5,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleOp<T1, T2, T3, T4, T5>(in string script, in object parameters = null)
+        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> TryFetchTuple<T1, T2, T3, T4, T5>(in string script, in object parameters = null)
         {
             DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> response;
 
             try
             {
-                response = ToTuple<T1, T2, T3, T4, T5>(in script, in parameters);
+                response = FetchTuple<T1, T2, T3, T4, T5>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -913,20 +1170,20 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>> ToTuple<T1, T2, T3, T4, T5>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>> FetchTuple<T1, T2, T3, T4, T5>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql)
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
                 return ExecuteTransaction((db) =>
                 {
-                    var cursorResult = db.ToList<CursorName>(in _script, in _parameters);
-                    var t1 = db.ToList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
-                    var t2 = db.ToList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
-                    var t3 = db.ToList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
-                    var t4 = db.ToList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
-                    var t5 = db.ToList<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"");
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var t3 = db.FetchList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
+                    var t4 = db.FetchList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
+                    var t5 = db.FetchList<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"");
                     return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>(t1, t2, t3, t4, t5);
                 });
             }
@@ -947,15 +1204,20 @@ namespace Thomas.Database
             }
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> ToTupleOp<T1, T2, T3, T4, T5>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2, T3, T4, T5>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> response;
 
             try
             {
-                response = await ToTupleAsync<T1, T2, T3, T4, T5>(script, parameters, cancellationToken);
+                response = await FetchTupleAsync<T1, T2, T3, T4, T5>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>>();
             }
@@ -967,41 +1229,59 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> FetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters, CancellationToken cancellationToken)
         {
-            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
-            command.Prepare();
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            {
+                var _script = script;
+                var _parameters = parameters;
+                return await ExecuteTransactionAsync(async (db, cancelToken) =>
+                {
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var t3 = await db.FetchListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
+                    var t4 = await db.FetchListAsync<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"", null, cancelToken);
+                    var t5 = await db.FetchListAsync<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"", null, cancelToken);
+                    return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>(t1, t2, t3, t4, t5);
+                }, cancellationToken);
+            }
+            else
+            {
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                command.Prepare();
 
-            var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
-            var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
-            var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
-            var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
-            var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
+                var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
+                var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
+                var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
+                var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
+                var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
 
-            command.SetValuesOutFields();
+                command.SetValuesOutFields();
 
-            return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>(t1, t2, t3, t4, t5);
+                return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>(t1, t2, t3, t4, t5);
+            }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> ToTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> FetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2, T3, T4, T5>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2, T3, T4, T5>(script, parameters, CancellationToken.None);
         }
 
         private static readonly DbCommandConfiguration QueryTuple6Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_6,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_6,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleOp<T1, T2, T3, T4, T5, T6>(in string script, in object parameters = null)
+        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> TryFetchTuple<T1, T2, T3, T4, T5, T6>(in string script, in object parameters = null)
         {
             DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> response;
 
             try
             {
-                response = ToTuple<T1, T2, T3, T4, T5, T6>(in script, in parameters);
+                response = FetchTuple<T1, T2, T3, T4, T5, T6>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -1011,32 +1291,55 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> ToTuple<T1, T2, T3, T4, T5, T6>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> FetchTuple<T1, T2, T3, T4, T5, T6>(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
-            command.Prepare();
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            {
+                var _script = script;
+                var _parameters = parameters;
+                return ExecuteTransaction((db) =>
+                {
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var t3 = db.FetchList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
+                    var t4 = db.FetchList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
+                    var t5 = db.FetchList<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"");
+                    var t6 = db.FetchList<T6>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[5].get_data}\"");
+                    return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+                });
+            }
+            else
+            {
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
+                command.Prepare();
 
-            var t1 = command.ReadListItems<T1>();
-            var t2 = command.ReadListNextItems<T2>();
-            var t3 = command.ReadListNextItems<T3>();
-            var t4 = command.ReadListNextItems<T4>();
-            var t5 = command.ReadListNextItems<T5>();
-            var t6 = command.ReadListNextItems<T6>();
+                var t1 = command.ReadListItems<T1>();
+                var t2 = command.ReadListNextItems<T2>();
+                var t3 = command.ReadListNextItems<T3>();
+                var t4 = command.ReadListNextItems<T4>();
+                var t5 = command.ReadListNextItems<T5>();
+                var t6 = command.ReadListNextItems<T6>();
 
-            command.SetValuesOutFields();
-
-            return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+                command.SetValuesOutFields();
+                return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+            }
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>> ToTupleOp<T1, T2, T3, T4, T5, T6>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, CancellationToken.None);
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters, CancellationToken cancellationToken)
         {
             DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> response;
 
             try
             {
-                response = await ToTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, cancellationToken);
+                response = await FetchTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>>();
             }
@@ -1048,42 +1351,61 @@ namespace Thomas.Database
             return response;
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters, CancellationToken cancellationToken)
         {
-            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
-            command.Prepare();
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            {
+                var _script = script;
+                var _parameters = parameters;
+                return await ExecuteTransactionAsync(async (db, cancelToken) =>
+                {
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var t3 = await db.FetchListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
+                    var t4 = await db.FetchListAsync<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"", null, cancelToken);
+                    var t5 = await db.FetchListAsync<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"", null, cancelToken);
+                    var t6 = await db.FetchListAsync<T6>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[5].get_data}\"", null, cancelToken);
+                    return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+                }, cancellationToken);
+            }
+            else
+            {
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                command.Prepare();
 
-            var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
-            var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
-            var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
-            var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
-            var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
-            var t6 = await command.ReadListNextItemsAsync<T6>(cancellationToken);
+                var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
+                var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
+                var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
+                var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
+                var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
+                var t6 = await command.ReadListNextItemsAsync<T6>(cancellationToken);
 
-            command.SetValuesOutFields();
+                command.SetValuesOutFields();
 
-            return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+                return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(t1, t2, t3, t4, t5, t6);
+            }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> ToTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2, T3, T4, T5, T6>(script, parameters, CancellationToken.None);
         }
 
         private static readonly DbCommandConfiguration QueryTuple7Config = new DbCommandConfiguration(
                                                                            commandBehavior: CommandBehavior.Default | CommandBehavior.SequentialAccess,
-                                                                           methodHandled: MethodHandled.ToTupleQueryString_7,
+                                                                           methodHandled: MethodHandled.FetchTupleQueryString_7,
                                                                            keyAsReturnValue: false,
                                                                            skipAutoGeneratedColumn: false,
                                                                            generateParameterWithKeys: false);
 
-        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null)
+        public DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> TryFetchTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null)
         {
             DbOpResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> response;
 
             try
             {
-                response = ToTuple<T1, T2, T3, T4, T5, T6, T7>(in script, in parameters);
+                response = FetchTuple<T1, T2, T3, T4, T5, T6, T7>(in script, in parameters);
             }
             catch (Exception ex)
             {
@@ -1093,56 +1415,95 @@ namespace Thomas.Database
             return response;
         }
 
-        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> ToTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null)
+        public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> FetchTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple7Config, in _buffered, in _transaction, in _command);
-            command.Prepare();
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            {
+                var _script = script;
+                var _parameters = parameters;
+                return ExecuteTransaction((db) =>
+                {
+                    var cursorResult = db.FetchList<CursorName>(in _script, in _parameters);
+                    var t1 = db.FetchList<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"");
+                    var t2 = db.FetchList<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"");
+                    var t3 = db.FetchList<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"");
+                    var t4 = db.FetchList<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"");
+                    var t5 = db.FetchList<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"");
+                    var t6 = db.FetchList<T6>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[5].get_data}\"");
+                    var t7 = db.FetchList<T7>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[6].get_data}\"");
+                    return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+                });
+            }
+            else
+            {
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
+                command.Prepare();
 
-            var t1 = command.ReadListItems<T1>();
-            var t2 = command.ReadListNextItems<T2>();
-            var t3 = command.ReadListNextItems<T3>();
-            var t4 = command.ReadListNextItems<T4>();
-            var t5 = command.ReadListNextItems<T5>();
-            var t6 = command.ReadListNextItems<T6>();
-            var t7 = command.ReadListNextItems<T7>();
+                var t1 = command.ReadListItems<T1>();
+                var t2 = command.ReadListNextItems<T2>();
+                var t3 = command.ReadListNextItems<T3>();
+                var t4 = command.ReadListNextItems<T4>();
+                var t5 = command.ReadListNextItems<T5>();
+                var t6 = command.ReadListNextItems<T6>();
+                var t7 = command.ReadListNextItems<T7>();
 
-            command.SetValuesOutFields();
-
-            return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+                command.SetValuesOutFields();
+                return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+            }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters, CancellationToken cancellationToken)
         {
-            await using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple7Config, in _buffered, in _transaction, in _command);
-            command.Prepare();
+            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            {
+                var _script = script;
+                var _parameters = parameters;
+                return await ExecuteTransactionAsync(async (db, cancelToken) =>
+                {
+                    var cursorResult = await db.FetchListAsync<CursorName>(_script, _parameters, cancelToken);
+                    var t1 = await db.FetchListAsync<T1>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[0].get_data}\"", null, cancelToken);
+                    var t2 = await db.FetchListAsync<T2>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[1].get_data}\"", null, cancelToken);
+                    var t3 = await db.FetchListAsync<T3>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[2].get_data}\"", null, cancelToken);
+                    var t4 = await db.FetchListAsync<T4>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[3].get_data}\"", null, cancelToken);
+                    var t5 = await db.FetchListAsync<T5>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[4].get_data}\"", null, cancelToken);
+                    var t6 = await db.FetchListAsync<T6>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[5].get_data}\"", null, cancelToken);
+                    var t7 = await db.FetchListAsync<T7>($"/*{_script}*/FETCH ALL FROM \"{cursorResult[6].get_data}\"", null, cancelToken);
+                    return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+                }, cancellationToken);
+            }
+            else
+            {
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                command.Prepare();
 
-            var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
-            var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
-            var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
-            var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
-            var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
-            var t6 = await command.ReadListNextItemsAsync<T6>(cancellationToken);
-            var t7 = await command.ReadListNextItemsAsync<T7>(cancellationToken);
+                var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
+                var t2 = await command.ReadListNextItemsAsync<T2>(cancellationToken);
+                var t3 = await command.ReadListNextItemsAsync<T3>(cancellationToken);
+                var t4 = await command.ReadListNextItemsAsync<T4>(cancellationToken);
+                var t5 = await command.ReadListNextItemsAsync<T5>(cancellationToken);
+                var t6 = await command.ReadListNextItemsAsync<T6>(cancellationToken);
+                var t7 = await command.ReadListNextItemsAsync<T7>(cancellationToken);
 
-            command.SetValuesOutFields();
+                command.SetValuesOutFields();
 
-            return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+                return new Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(t1, t2, t3, t4, t5, t6, t7);
+            }
         }
 
-        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters = null)
+        public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters = null)
         {
-            return await ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, CancellationToken.None);
+            return await FetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, CancellationToken.None);
         }
 
-        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>> ToTupleOp<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters, CancellationToken cancellationToken)
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters, CancellationToken cancellationToken)
         {
             var response = new DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>();
 
             try
             {
-                response.Result = await ToTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, cancellationToken);
+                response.Result = await FetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, cancellationToken);
             }
-            catch (Exception ex) when (ex is TaskCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(ex))
             {
                 response = DbOpAsyncResult.OperationCanceled<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>>();
             }
@@ -1152,6 +1513,11 @@ namespace Thomas.Database
             }
 
             return response;
+        }
+
+        public async Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters = null)
+        {
+            return await TryFetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(script, parameters, CancellationToken.None);
         }
 
         #endregion Multiple result set
@@ -1208,9 +1574,9 @@ namespace Thomas.Database
                                                                    skipAutoGeneratedColumn: true,
                                                                    generateParameterWithKeys: false);
 
-        public void Add<T>(T entity)
+        public void Insert<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateInsert(generateKeyValue: false);
             using var command = new DatabaseCommand(in Options, in script, entity, in AddConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
@@ -1224,9 +1590,9 @@ namespace Thomas.Database
                                                                            skipAutoGeneratedColumn: true,
                                                                            generateParameterWithKeys: false);
 
-        public TE Add<T, TE>(T entity)
+        public TE Insert<T, TE>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
 
             if (Options.SqlProvider == SqlProvider.MySql && Options.PrepareStatements)
             {
@@ -1270,7 +1636,7 @@ namespace Thomas.Database
 
         public void Update<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateUpdate();
             using var command = new DatabaseCommand(in Options, in script, entity, in UpdateConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
@@ -1286,10 +1652,99 @@ namespace Thomas.Database
 
         public void Delete<T>(T entity)
         {
-            var generator = new SQLGenerator<T>(in Formatter);
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateDelete();
             using var command = new DatabaseCommand(in Options, in script, entity, in DeleteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
+            command.ExecuteNonQuery();
+        }
+
+        //public void Truncate<T>(bool forceResetAutoIncrement = false)
+        //{
+        //    var generator = new SQLGenerator<T>(in Formatter, false);
+        //    var tableName = generator.GetTableName();
+        //    Truncate(tableName, forceResetAutoIncrement);
+        //}
+
+        //public void Truncate(string tableName, bool forceResetAutoIncrement = false)
+        //{
+        //    if (Options.SqlProvider == SqlProvider.Sqlite)
+        //    {
+        //        Execute($@"DELETE FROM {tableName}");
+
+        //        //remove from sqlite_sequence
+        //        //TODO: ensure work for most cases then execute a safe delete
+        //        if (forceResetAutoIncrement)
+        //        {
+        //            var exists = ExecuteScalar<int?>($@"SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'");
+        //            if (exists.HasValue)
+        //                Execute($@"DELETE FROM sqlite_sequence WHERE name = '{tableName}'");
+        //        }
+        //    }
+        //    else
+        //    {
+        //        Execute($@"TRUNCATE TABLE {tableName}");
+
+        //        if (forceResetAutoIncrement)
+        //        {
+        //            //generate code for reset auto increment columns without knowing what they are by getting sequence names and reset them
+        //            switch (Options.SqlProvider)
+        //            {
+        //                case SqlProvider.SqlServer:
+        //                    Execute($@"DBCC CHECKIDENT ('{tableName}', RESEED, 0)");
+        //                    break;
+
+        //                case SqlProvider.MySql:
+        //                    Execute($@"ALTER TABLE {tableName} AUTO_INCREMENT = 1");
+        //                    break;
+
+        //                case SqlProvider.PostgreSql:
+        //                    var sequences = FetchList<CursorName>($@"SELECT 'ALTER SEQUENCE ' || pg_get_serial_sequence(c.table_name, c.column_name) || ' RESTART WITH ' || S.start_value 
+        //                                                            FROM information_schema.columns c
+        //                                                            INNER JOIN information_schema.sequences S ON pg_get_serial_sequence(c.table_name, c.column_name) = S.sequence_schema || '.' || S.sequence_name
+        //                                                            WHERE UPPER(c.table_name) LIKE '%{tableName.ToUpper()}%' AND c.column_default LIKE 'nextval%'");
+        //                    if (sequences.Count > 0)
+        //                    {
+        //                        var script = string.Join(";", sequences.Select(x => x.get_data));
+        //                        Execute(script);
+        //                    }
+        //                    break;
+
+        //                case SqlProvider.Oracle:
+        //                    Execute($@"SELECT 'ALTER TABLE {tableName} MODIFY (id GENERATED BY DEFAULT ON NULL AS IDENTITY (START WITH 1))' FROM DUAL");
+        //                    break;
+
+        //                default:
+        //                    throw new NotSupportedException("This operation is not supported for the current provider");
+        //            }
+        //        }
+        //    }
+        //}
+
+        public void UpdateIf<T>(Expression<Func<T, bool>> condition, params (Expression<Func<T, object>> field, object value)[] updates)
+        {
+            if (condition == null)
+                throw new RequestNotPermittedException("Update operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
+
+            if (updates == null || updates.Length == 0)
+                throw new Exception("No updates were provided");
+
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateUpdate(in condition, out var values, updates);
+            using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
+            command.ExecuteNonQuery();
+        }
+
+        public void DeleteIf<T>(Expression<Func<T, bool>> condition)
+        {
+            if (condition == null)
+                throw new RequestNotPermittedException("Delete operation without a predicate is not allowed. Please specify a condition to prevent unintended data loss.");
+
+            var generator = new SQLGenerator<T>(in Formatter, in _buffered);
+            var script = generator.GenerateDelete(condition, SqlOperation.Delete, out var values);
+            using var command = new DatabaseCommand(in Options, in script, in QueryExecuteConfig, in _buffered, in values, in _transaction, in _command);
+            command.Prepare2();
             command.ExecuteNonQuery();
         }
 

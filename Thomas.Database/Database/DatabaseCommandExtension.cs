@@ -12,7 +12,6 @@ using Thomas.Database.Core.Provider;
 using Thomas.Database.Configuration;
 using Thomas.Database.Core.FluentApi;
 using Label = Sigil.Label;
-using System.Buffers;
 
 namespace Thomas.Database
 {
@@ -279,22 +278,23 @@ namespace Thomas.Database
                     break;
             }
 
+            int columnIndex = 0;
             for (int index = 0; index < fields.Length; index++)
             {
                 var field = fields[index];
                 var local = locals[index];
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.Name}>", StringComparison.InvariantCultureIgnoreCase));
+                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.PropertyInfo.Name}>", StringComparison.InvariantCultureIgnoreCase));
 #else
-                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.Name}>"));
+                var column = columns.FirstOrDefault(x => field.Name.Contains($"<{x.PropertyInfo.Name}>"));
 #endif
                 if (column == null)
                     continue;
 
                 //when column not found we need to set default value
-                Label notNullLabel = emitter.DefineLabel("notNull" + index);
-                Label endLabel = emitter.DefineLabel("end" + index);
+                Label notNullLabel = emitter.DefineLabel("notNull" + columnIndex);
+                Label endLabel = emitter.DefineLabel("end" + columnIndex);
 
                 Type underlyingType = Nullable.GetUnderlyingType(field.FieldType);
 
@@ -302,7 +302,7 @@ namespace Thomas.Database
                 {
                     emitter.LoadArgument(0)
                                     .CastClass(dbDataReader)
-                                    .LoadConstant(index)
+                                    .LoadConstant(columnIndex)
                                     .CallVirtual(dbDataReader.GetMethod("IsDBNull"));
 
                     //check if not null
@@ -336,7 +336,7 @@ namespace Thomas.Database
                     // Assume the data is already in the correct position in the reader, and fill the byte array
                     emitter.LoadArgument(0)
                                         .CastClass(dbDataReader)
-                                        .LoadConstant(index)
+                                        .LoadConstant(columnIndex)
                                         .LoadConstant(0L)
                                         .LoadLocal(bufferLocal)
                                         .LoadConstant(0)
@@ -359,12 +359,13 @@ namespace Thomas.Database
                         emitter.MarkLabel(endLabel);
                     }
 
+                    columnIndex++;
                     continue;
                 }
                 else if (getMethodName.Equals("GetBytes", StringComparison.Ordinal))
                 {
                     emitter.LoadArgument(0)
-                        .LoadConstant(index)
+                        .LoadConstant(columnIndex)
                         .LoadConstant(bufferSize > 0 ? bufferSize : 8192)
                         .Call(ReadStreamMethod);
                 }
@@ -372,7 +373,7 @@ namespace Thomas.Database
                 {
                     emitter.LoadArgument(0)
                             .CastClass(dbDataReader)
-                            .LoadConstant(index)
+                            .LoadConstant(columnIndex)
                             .Call(dbDataReader.GetMethod(getMethodName, new[] { typeof(int) }));
                 }
 
@@ -385,6 +386,8 @@ namespace Thomas.Database
                 {
                     emitter.MarkLabel(endLabel);
                 }
+
+                columnIndex++;
             }
 
             foreach (var local in locals)
@@ -521,11 +524,11 @@ namespace Thomas.Database
             var table = reader.GetSchemaTable();
             var columnSchema = new LinkedList<PropertyTypeInfo>();
 
-            if (!DbConfigurationFactory.Tables.TryGetValue(type.FullName!, out var configuratedTable))
+            if (!DbConfig.Tables.TryGetValue(type.FullName!, out var configuratedTable))
             {
                 var dbTable = new DbTable { Name = type.Name!, Columns = new LinkedList<Thomas.Database.Core.FluentApi.DbColumn>() };
                 dbTable.AddFieldsAsColumns(type);
-                DbConfigurationFactory.Tables.TryAdd(type.FullName!, dbTable);
+                DbConfig.Tables.TryAdd(type.FullName!, dbTable);
                 configuratedTable = dbTable;
             }
             
@@ -595,35 +598,25 @@ namespace Thomas.Database
         #region specific readers
         private static byte[] ReadStream(DbDataReader reader, int index, int bufferSize) //default 8KB
         {
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-
+            byte[] buffer = new byte[bufferSize];
             long dataIndex = 0;
-            long bytesRead;
-
             using MemoryStream memoryStream = new MemoryStream();
+            long bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
 
-            try
+            while (bytesRead == bufferSize)
             {
-                bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
-
-                while (bytesRead == bufferSize)
-                {
-                    memoryStream.Write(buffer, 0, (int)bytesRead);
-                    dataIndex += bytesRead;
-                    bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
-                }
-
                 memoryStream.Write(buffer, 0, (int)bytesRead);
+                dataIndex += bytesRead;
+                bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
+            }
 
-                return memoryStream.ToArray();
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            memoryStream.Write(buffer, 0, (int)bytesRead);
+
+            return memoryStream.ToArray();
+            
         }
 
     #endregion specific readers
 
-}
+    }
 }

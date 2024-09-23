@@ -69,19 +69,19 @@ namespace Thomas.Tests.Performance.Legacy
             TableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            DbConfigurationFactory.Register(new DbSettings(db1, SqlProvider.SqlServer, cnx1));
-            DbConfigurationFactory.Register(new DbSettings(db2, SqlProvider.SqlServer, cnx2));
+            DbConfig.Register(new DbSettings(db1, SqlProvider.SqlServer, cnx1));
+            DbConfig.Register(new DbSettings(db2, SqlProvider.SqlServer, cnx2));
 
             rowsGenerated = int.Parse(len);
             DataBaseManager.LoadDatabases(rowsGenerated, TableName);            
-            Database2 = DbFactory.GetDbContext(db2);
-            CachedResultDatabase = CachedDbFactory.GetDbContext(db2);
+            Database2 = DbHub.Use(db2);
+            CachedResultDatabase = CachedDbHub.Use(db2);
 
             //custom table configuration made possible querying using expression 
             var tableBuilder = new TableBuilder();
             DbTable dbTable = tableBuilder.AddTable<Person>(x => x.Id);
             dbTable.AddFieldsAsColumns<Person>().DbName(TableName);
-            DbFactory.AddDbBuilder(tableBuilder);
+            DbHub.AddDbBuilder(tableBuilder);
         }
 
         static void RunTestsDatabase(string db, string databaseName, int rows)
@@ -106,7 +106,7 @@ namespace Thomas.Tests.Performance.Legacy
                 Task.Run(() => new Tests.Procedures(databaseName).ExecuteCachedDatabase(db, TableName, rows))
                 );
 
-            CachedDbFactory.GetDbContext(db).Clear();
+            CachedDbHub.Clear();
         }
         
         static void RunWriteOperations(string db, string databaseName, int rows)
@@ -117,20 +117,20 @@ namespace Thomas.Tests.Performance.Legacy
         static void RunTestsDatabaseAsync(string db, string databaseName, int rows)
         {
             Task.WaitAll(
-                 Task.Run(async () => await new Tests.Expression(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Single(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.List(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Tuple(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Procedures(databaseName).ExecuteAsync(db, TableName, rows)),
-                 Task.Run(async () => await new Tests.Error(databaseName).ExecuteAsync(db, TableName, rows))
+                 Task.Run(() => new Tests.Expression(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Single(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.List(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Tuple(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Procedures(databaseName).ExecuteAsync(db, TableName, rows)),
+                 Task.Run(() => new Tests.Error(databaseName).ExecuteAsync(db, TableName, rows))
                  );
         }
 
         static void DropTables()
         {
-            DbFactory.GetDbContext("db1", buffered: false).Execute($"DROP TABLE {TableName}", null);
-            DbFactory.GetDbContext("db2", buffered: false).Execute($"DROP TABLE {TableName}", null);
-            CachedResultDatabase.Clear();
+            DbHub.Use("db1", buffered: false).Execute($"DROP TABLE {TableName}", null);
+            DbHub.Use("db2", buffered: false).Execute($"DROP TABLE {TableName}", null);
+            CachedDbHub.Clear();
             DbBase.Clear();
         }
 

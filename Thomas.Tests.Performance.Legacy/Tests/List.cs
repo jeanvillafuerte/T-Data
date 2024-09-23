@@ -14,54 +14,54 @@ namespace Thomas.Tests.Performance.Legacy.Tests
 
         public void Execute(string db, string tableName, int expectedItems = 0)
         {
-            PerformOperation(() => DbFactory.GetDbContext(db).ToList<Person>($"SELECT * FROM {tableName} WHERE Id > @Id", new { Id = 0 }), expectedItems, "ToList<>");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToListOp<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}"), expectedItems, "ToListOp<>");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToList<Person>($@"get_{tableName}", new { age = 5 }), null, "ToList<> Store Procedure");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToListOp<Person>($@"get_{tableName}", new { age = 5 }), null, "ToList<> Store Procedure");
+            PerformOperation(() => DbHub.Use(db).FetchList<Person>($"SELECT * FROM {tableName} WHERE Id > @Id", new { Id = 0 }), expectedItems, "FetchList<>");
+            PerformOperation(() => DbHub.Use(db).TryFetchList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}"), expectedItems, "TryFetchList<>");
+            PerformOperation(() => DbHub.Use(db).FetchList<Person>($@"get_{tableName}", new { age = 5 }), null, "FetchList<> Store Procedure");
+            PerformOperation(() => DbHub.Use(db).TryFetchList<Person>($@"get_{tableName}", new { age = 5 }), null, "TryFetchList<> Store Procedure");
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return DbFactory.GetDbContext(db).ToList<Person>("get_byAge", st);
-            }, null, "ToList<> by SP");
+                return DbHub.Use(db).FetchList<Person>("get_byAge", st);
+            }, null, "FetchList<> by SP");
         }
 
-        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
+        public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
             var query = $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListAsync<Person>(query, null, CancellationToken.None), expectedItems: expectedItems, operationName: "ToListAsync<>");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>(query, null, CancellationToken.None), null, "ToListOpAsync<>");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None), null, "ToListAsync<> Store Procedure");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None), null, "ToListOpAsync<> Store Procedure");
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() => DbHub.Use(db).FetchListAsync<Person>(query, null, CancellationToken.None), expectedItems: expectedItems, operationName: "FetchListAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchListAsync<Person>(query, null, CancellationToken.None), "TryFetchListAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).FetchListAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None), "FetchListAsync<> Store Procedure");
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchListAsync<Person>($@"get_{tableName}", new { age = 5 }, CancellationToken.None), "TryFetchListAsync<> Store Procedure");
+            PerformOperationAsync(() =>
             {
                 var st = new ListResult(age: 35);
-                return DbFactory.GetDbContext(db).ToListOpAsync<Person>("get_byAge", st, CancellationToken.None);
-            }, null, "ToListOpAsync<> Store Procedure 2");
+                return DbHub.Use(db).TryFetchListAsync<Person>("get_byAge", st, CancellationToken.None);
+            }, "TryFetchListAsync<> Store Procedure 2");
 
-            await PerformOperationAsync(() =>
+            PerformOperationAsync(() =>
             {
                 CancellationTokenSource source = new CancellationTokenSource();
                 source.CancelAfter(100);
-                return DbFactory.GetDbContext(db).ToListOpAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, source.Token);
-            }, null, "ToListOpAsync<> Cancelled", true);
+                return DbHub.Use(db).TryFetchListAsync<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, source.Token);
+            }, "TryFetchListAsync<> Cancelled", true);
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}"), expectedItems, "ToList<>");
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, refresh: true), expectedItems, "ToList<> (refresh)");
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToList<Person>($@"get_{tableName}", new { age = 5 }), null, "ToList<> By SP");
+            PerformOperation(() => CachedDbHub.Use(db).FetchList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}"), expectedItems, "FetchList<>");
+            PerformOperation(() => CachedDbHub.Use(db).FetchList<Person>($@"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}", null, refresh: true), expectedItems, "FetchList<> (refresh)");
+            PerformOperation(() => CachedDbHub.Use(db).FetchList<Person>($@"get_{tableName}", new { age = 5 }), null, "FetchList<> By SP");
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return CachedDbFactory.GetDbContext(db).ToList<Person>("get_byAge", st);
-            }, null, "ToList<> by SP with output");
+                return CachedDbHub.Use(db).FetchList<Person>("get_byAge", st);
+            }, null, "FetchList<> by SP with output");
 
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return CachedDbFactory.GetDbContext(db).ToList<Person>("get_byAge", st);
-            }, null, "ToList<> (refresh) by SP with output");
+                return CachedDbHub.Use(db).FetchList<Person>("get_byAge", st);
+            }, null, "FetchList<> (refresh) by SP with output");
         }
     }
 }

@@ -113,15 +113,15 @@ namespace Thomas.Database.Core.QueryGenerator
             return true;
         }
 
-        private IEnumerable<T> GetValues<T>(ConstantExpression expression)
+        private static IEnumerable<TE> GetValues<TE>(ConstantExpression expression)
         {
-            var instantiator = Expression.Lambda<Func<IEnumerable<T>>>(expression).Compile();
+            var instantiator = Expression.Lambda<Func<IEnumerable<TE>>>(expression).Compile();
             return instantiator();
         }
 
-        private void AddArrayConstantValues<T>(Type type, ConstantExpression expression)
+        private void AddArrayConstantValues<TE>(Type type, ConstantExpression expression)
         {
-            foreach (var value in GetValues<T>(expression))
+            foreach (var value in GetValues<TE>(expression))
                 _parameterHandler.AddInParam(type, value, null, out var _);
         }
 

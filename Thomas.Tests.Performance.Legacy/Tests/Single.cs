@@ -15,21 +15,21 @@ namespace Thomas.Tests.Performance.Legacy.Tests
         public void Execute(string db, string tableName, int expectedItems = 0)
         {
             var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperation(() => DbFactory.GetDbContext(db).ToSingle<Person>(query), null, "ToSingle<>");
-            PerformOperation(() => DbFactory.GetDbContext(db).ToSingleOp<Person>(query), null, "ToSingleOp<>");
+            PerformOperation(() => DbHub.Use(db).FetchOne<Person>(query), "FetchOne<>");
+            PerformOperation(() => DbHub.Use(db).TryFetchOne<Person>(query), "TryFetchOne<>");
         }
 
-        public async Task ExecuteAsync(string db, string tableName, int expectedItems = 0)
+        public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
             var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleAsync<Person>(query, null, CancellationToken.None), null, "ToSingleAsync<>");
-            await PerformOperationAsync(() => DbFactory.GetDbContext(db).ToSingleOpAsync<Person>(query, null, CancellationToken.None), null, "ToSingleOpAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).FetchOneAsync<Person>(query, null, CancellationToken.None), "FetchOneAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>(query, null, CancellationToken.None), "TryFetchOneAsync<>");
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)
         {
             var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperation(() => CachedDbFactory.GetDbContext(db).ToSingle<Person>(query), null, "ToSingle<>");
+            PerformOperation(() => CachedDbHub.Use(db).FetchOne<Person>(query), "FetchOne<>");
         }
     }
 }

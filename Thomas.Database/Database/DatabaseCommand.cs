@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 using Thomas.Database.Core.Provider;
 using Thomas.Database.Configuration;
 
-using static Thomas.Database.Core.Provider.DatabaseHelperProvider;
-
 [assembly: InternalsVisibleTo("Thomas.Database.Tests")]
 namespace Thomas.Database
 {
@@ -22,8 +20,10 @@ namespace Thomas.Database
         private readonly SqlProvider _provider;
         private readonly int _timeout;
         private readonly object _filter;
+        private readonly object[] _values;
         private readonly int _preparationQueryKey;
         private readonly Func<object, string, string, DbCommand, DbCommand> _commandSetupDelegate;
+        private readonly Func<object[], string, string, DbCommand, DbCommand> _commandSetupDelegate2;
         private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
         private readonly int _bufferSize;
@@ -35,7 +35,7 @@ namespace Thomas.Database
         private DbConnection _connection;
         private readonly DbTransaction _transaction;
 
-        // output parameters
+        //output parameters
         internal IEnumerable<IDbDataParameter> OutParameters
         {
             get
@@ -79,43 +79,39 @@ namespace Thomas.Database
         {
             _configuration = configuration;
             _bufferSize = options.BufferSize;
-            _script = string.IsNullOrEmpty(script) ? throw new ScriptNotProvidedException() : script;
+            _script = script;
             _connectionString = options.StringConnection;
             _provider = options.SqlProvider;
             _timeout = options.ConnectionTimeout;
             _filter = filter;
             _command = command;
 
-            bool hasFilter = _filter != null;
-            bool isTransaction = transaction != null;
+            Type filterType = null;
+            bool hasFilter = false;
+            bool isTransaction = false;
             var operationKey = 17;
-            unchecked
-            {
-                operationKey = (operationKey * 23) + _script.GetHashCode();
-                operationKey = (operationKey * 23) + _provider.GetHashCode();
-                operationKey = (operationKey * 23) + configuration.GetHashCode();
-            }
 
-            if (isTransaction)
+            if (transaction != null)
             {
+                isTransaction = true;
                 _transaction = transaction;
                 _connection = _command.Connection;
                 _command.Parameters.Clear();
+                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+            }
 
-                unchecked
+            unchecked
+            {
+                if (filter != null)
                 {
-                    operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+                    hasFilter = true;
+                    filterType = filter.GetType();
+                    operationKey = (operationKey * 23) + filterType.GetHashCode();
                 }
-            }
 
-            Type filterType = null;
-            if (hasFilter)
-            {
-                filterType = filter.GetType();
-                _preparationQueryKey = (operationKey * 23) + filterType.GetHashCode();
-            }
-            else
-            {
+                operationKey = (operationKey * 23) + _script.GetHashCode();
+                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
                 _preparationQueryKey = operationKey;
             }
 
@@ -132,9 +128,8 @@ namespace Thomas.Database
                 _commandBehavior = configuration.CommandBehavior;
 
                 var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
-                bool isExecuteNonQuery = configuration.MethodHandled == MethodHandled.Execute;
+                bool isExecuteNonQuery = configuration.IsExecuteNonQuery();
 
-                LoaderConfiguration commandConfiguration;
                 bool expectBindValueParameters;
                 bool canPrepareStatement = false;
                 string transformedScript = null;
@@ -144,23 +139,20 @@ namespace Thomas.Database
                     _commandType = CommandType.Text;
                     isStoreProcedure = false;
 
-                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out var parameters);
+                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
 
-                    if (parameters.Any(x => x.IsOutput) && !isExecuteNonQuery)
+                    DbParameterInfo[] localParameters = null;
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
+
+                    if (!isExecuteNonQuery && localParameters?.Any(x => x.IsOutput) == true)
                         throw new PostgreSQLInvalidRequestCallException();
 
-                    expectBindValueParameters = parameters.Any(x => x.IsInput);
-                    canPrepareStatement = expectBindValueParameters;
-                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in parameters, in isExecuteNonQuery);
+                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
                 }
                 else
                 {
                     if (isStoreProcedure)
                     {
-                        if (_provider == SqlProvider.Sqlite)
-                            throw new SqLiteStoreProcedureNotSupportedException();
-
                         expectBindValueParameters = false;
                         _commandType = CommandType.StoredProcedure;
                     }
@@ -171,12 +163,80 @@ namespace Thomas.Database
                         _commandType = CommandType.Text;
                     }
 
-                    commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, transaction != null, in isStoreProcedure, in canPrepareStatement);
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, out _);
+                    var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, in canPrepareStatement);
+                    DbParameterInfo[] localParameters = null;
+                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, ref localParameters);
                 }
 
                 if (buffered)
-                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, transformedScript));
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, null, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, in transformedScript));
+            }
+        }
+
+        public DatabaseCommand(
+            in DbSettings options,
+            in string script,
+            in DbCommandConfiguration configuration,
+            in bool buffered,
+            in object[] parameters = null,
+            in DbTransaction transaction = null,
+            in DbCommand command = null)
+        {
+            _configuration = configuration;
+            _bufferSize = options.BufferSize;
+            _script = script;
+            _connectionString = options.StringConnection;
+            _provider = options.SqlProvider;
+            _timeout = options.ConnectionTimeout;
+            _command = command;
+            _commandType = CommandType.Text;
+            _commandBehavior = configuration.CommandBehavior;
+
+            bool isTransaction = false;
+            var operationKey = 17;
+
+            if (transaction != null)
+            {
+                isTransaction = true;
+                _transaction = transaction;
+                _connection = _command.Connection;
+                _command.Parameters.Clear();
+                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
+            }
+
+            unchecked
+            {
+                operationKey = (operationKey * 23) + _script.GetHashCode();
+                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
+            }
+
+            _preparationQueryKey = operationKey;
+
+            if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
+            {
+                if (parameters is DbParameterInfo[] convertedParameters)
+                    _values = convertedParameters.Select(x => x.Value).ToArray();
+                else
+                    _values = parameters;
+
+                _commandSetupDelegate2 = commandMetadata.LoadParametersDelegate2;
+                _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
+            }
+            else
+            {
+                DbParameterInfo[] convertedParameters = null;
+                if (parameters != null && parameters.Length > 0)
+                {
+                    convertedParameters = (DbParameterInfo[])parameters;
+                    _values = convertedParameters.Select(x => x.Value).ToArray();
+                }
+
+                var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, isTransaction, false, true);
+                _commandSetupDelegate2 = DatabaseProvider.GetCommandMetaData2(in commandConfiguration, convertedParameters);
+
+                if (buffered)
+                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(null, in _commandSetupDelegate2, null, in configuration.CommandBehavior, in _commandType, null));
             }
         }
 
@@ -185,7 +245,7 @@ namespace Thomas.Database
             int cursorsToAdd = 0;
 
             if (options.SqlProvider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
-                cursorsToAdd = new[] { MethodHandled.ToSingleQueryString, MethodHandled.ToListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
+                cursorsToAdd = new[] { MethodHandled.FetchOneQueryString, MethodHandled.FetchListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
 
             return new LoaderConfiguration(
                 keyAsReturnValue: in configuration.KeyAsReturnValue,
@@ -238,6 +298,12 @@ namespace Thomas.Database
             _connection.Open();
         }
 
+        internal async Task OpenConnectionAsync(CancellationToken cancellationToken)
+        {
+            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            await _connection.OpenAsync(cancellationToken);
+        }
+
         internal DbTransaction BeginTransaction()
         {
             _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
@@ -272,8 +338,27 @@ namespace Thomas.Database
             }
         }
 
+        internal void Prepare2()
+        {
+            if (_connection == null)
+            {
+                _command = _commandSetupDelegate2(_values, _connectionString, _script, null);
+                _connection = _command.Connection;
+            }
+            else
+            {
+                _command.CommandText = _script;
+                _command.CommandType = _commandType;
+                _command.CommandTimeout = _timeout;
+                _ = _commandSetupDelegate2(_values, null, null, _command);
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public object ExecuteScalar() => _command.ExecuteScalar();
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public async Task<object> ExecuteScalarAsync(CancellationToken cancellationToken) => await _command.ExecuteScalarAsync(cancellationToken);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
@@ -296,6 +381,9 @@ namespace Thomas.Database
         {
             _reader = await _command.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
 
             var list = new List<T>();
@@ -308,6 +396,9 @@ namespace Thomas.Database
 
         public async Task<List<T>> ReadListNextItemsAsync<T>(CancellationToken cancellationToken)
         {
+            if (cancellationToken.IsCancellationRequested)
+                throw new TaskCanceledException();
+
             if (await _reader.NextResultAsync(cancellationToken))
             {
                 var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize);
@@ -347,6 +438,33 @@ namespace Thomas.Database
             var list = new List<T>(batchSize);
 
             while (_reader.Read())
+            {
+                counter++;
+                list.Add(parser(_reader));
+
+                if (counter == batchSize)
+                {
+                    yield return list;
+                    list.Clear();
+                    counter = 0;
+                }
+            }
+
+            if (counter > 0)
+                yield return list;
+        }
+
+        public async IAsyncEnumerable<List<T>> FetchDataAsync<T>(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            _reader = await _command!.ExecuteReaderAsync(_commandBehavior, cancellationToken);
+
+            var parser = GetParserTypeDelegate<T>(in _reader, in _preparationQueryKey, in _provider, in _bufferSize, in batchSize);
+
+            int counter = 0;
+
+            var list = new List<T>(batchSize);
+
+            while (await _reader.ReadAsync(cancellationToken))
             {
                 counter++;
                 list.Add(parser(_reader));

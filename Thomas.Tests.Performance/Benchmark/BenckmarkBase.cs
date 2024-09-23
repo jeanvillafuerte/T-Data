@@ -33,7 +33,7 @@ namespace Thomas.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            DbConfigurationFactory.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
+            DbConfig.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
             SetDataBase(int.Parse(len), out var tableName);
 
             var tableBuilder = new TableBuilder();
@@ -41,7 +41,7 @@ namespace Thomas.Tests.Performance.Benchmark
 #if NETCOREAPP
             tableBuilder.AddTable<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
 #endif
-            DbFactory.AddDbBuilder(tableBuilder);
+            DbHub.AddDbBuilder(tableBuilder);
         }
 
         void SetDataBase(int length, out string tableName)
@@ -49,7 +49,7 @@ namespace Thomas.Tests.Performance.Benchmark
             tableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             TableName = tableName;
 
-            DbFactory.GetDbContext("db", buffered: false).ExecuteBlock((service) =>
+            DbHub.Use("db", buffered: false).ExecuteBlock((service) =>
             {
                 string tableScriptDefinition = $@"IF (OBJECT_ID('{TableName}') IS NULL)
                                                 BEGIN
@@ -72,7 +72,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
                                                 END";
 
-                var result = service.ExecuteOp(tableScriptDefinition, null);
+                var result = service.TryExecute(tableScriptDefinition, null);
 
                 if (!result.Success)
                 {
@@ -81,28 +81,28 @@ namespace Thomas.Tests.Performance.Benchmark
 
                 var checkSp1 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_persons]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_persons] AS' END ";
 
-                result = service.ExecuteOp(checkSp1, null);
+                result = service.TryExecute(checkSp1, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var checkSp2 = $"IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[get_byId]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [get_byId] AS' END ";
 
-                result = service.ExecuteOp(checkSp2, null);
+                result = service.TryExecute(checkSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp1 = $"ALTER PROCEDURE get_persons(@age SMALLINT) AS SELECT * FROM {TableName} WHERE Age = @age";
 
-                result = service.ExecuteOp(createSp1, null);
+                result = service.TryExecute(createSp1, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
 
                 var createSp2 = $"ALTER PROCEDURE get_byId(@id INT, @username VARCHAR(25) OUTPUT) AS SELECT @username = UserName FROM {TableName} WHERE Id = @id";
 
-                result = service.ExecuteOp(createSp2, null);
+                result = service.TryExecute(createSp2, null);
 
                 if (!result.Success)
                     throw new Exception(result.ErrorMessage);
@@ -116,7 +116,7 @@ namespace Thomas.Tests.Performance.Benchmark
 								SET @IDX = @IDX + 1;
 							END";
 
-                var dataResult = service.ExecuteOp(data, null);
+                var dataResult = service.TryExecute(data, null);
 
                 if (!dataResult.Success)
                 {
@@ -125,7 +125,7 @@ namespace Thomas.Tests.Performance.Benchmark
 
                 var createIndexByAge = $"CREATE NONCLUSTERED INDEX IDX_{TableName}_01 on {TableName} (Age)";
 
-                result = service.ExecuteOp(createIndexByAge, null);
+                result = service.TryExecute(createIndexByAge, null);
 
                 if (!result.Success)
                 {
@@ -138,7 +138,7 @@ namespace Thomas.Tests.Performance.Benchmark
         {
             if (CleanData)
             {
-                DbFactory.GetDbContext("db", buffered: false).Execute($"DROP TABLE {TableName}", null);
+                DbHub.Use("db", buffered: false).Execute($"DROP TABLE {TableName}", null);
             }
         }
     }

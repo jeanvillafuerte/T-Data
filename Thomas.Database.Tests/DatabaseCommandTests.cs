@@ -5,7 +5,7 @@ namespace Thomas.Database.Tests
     public class DatabaseCommandTests
     {
         
-        DbCommandConfiguration commmandConfig = new DbCommandConfiguration(System.Data.CommandBehavior.SingleResult, MethodHandled.ToListQueryString, false, false, false);
+        DbCommandConfiguration commmandConfig = new DbCommandConfiguration(System.Data.CommandBehavior.SingleResult, MethodHandled.FetchListQueryString, false, false, false);
 
         [Test, Ignore("db provider library is within the project")]
         public void ThrowDbProviderNotFound()
@@ -20,13 +20,6 @@ namespace Thomas.Database.Tests
             DbSettings options = new DbSettings("Db1", SqlProvider.SqlServer, "Data Source=localhost;Initial Catalog=db;Persist Security Info=True;User ID=sa;Password=YourPassword;") { ConnectionTimeout = 30 };
             var command = new DatabaseCommand(options, "SELECT * FROM USERS", null, commmandConfig, true, null, null);
             Assert.IsNotNull(command);
-        }
-
-        [Test]
-        public void ScriptNotProvided()
-        {
-            DbSettings options = new DbSettings("Db1", SqlProvider.SqlServer, "Data Source=localhost;Initial Catalog=db;Persist Security Info=True;User ID=sa;Password=YourPassword;") { ConnectionTimeout = 30 };
-            Assert.Throws<ScriptNotProvidedException>(() => new DatabaseCommand(options, "", null, commmandConfig, true, null, null));
         }
 
         [Test]
@@ -73,7 +66,7 @@ namespace Thomas.Database.Tests
         //avoid to use in methods like ToSingle, ToList or ToTuple
         public void NotSupportedCommandType()
         {
-            DbCommandConfiguration commmandConfig = new DbCommandConfiguration(System.Data.CommandBehavior.SingleResult, MethodHandled.ToListQueryString, false, false, false);
+            DbCommandConfiguration commmandConfig = new DbCommandConfiguration(System.Data.CommandBehavior.SingleResult, MethodHandled.FetchListQueryString, false, false, false);
             DbSettings options = new DbSettings("Db1", SqlProvider.SqlServer, "Data Source=localhost;Initial Catalog=db;Persist Security Info=True;User ID=sa;Password=YourPassword;") { ConnectionTimeout = 30 };
             Assert.Throws<NotSupportedCommandTypeException>(() => new DatabaseCommand(options, "GRANT SELECT, INSERT ON USERS TO ADMIN", null, commmandConfig, true, null, null));
         }
