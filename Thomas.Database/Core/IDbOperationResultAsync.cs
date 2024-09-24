@@ -39,7 +39,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<T>> TryExecuteScalarAsync<T>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<T>> TryExecuteScalarAsync<T>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to execute a scalar script asynchronously with a cancellation token.
@@ -62,7 +62,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<T>> TryFetchOneAsync<T>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<T>> TryFetchOneAsync<T>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch one result asynchronously with a cancellation token.
@@ -85,7 +85,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch a list of results asynchronously with a cancellation token.
@@ -108,7 +108,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> TryFetchTupleAsync<T1, T2>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>>>> TryFetchTupleAsync<T1, T2>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch a tuple of two lists of results asynchronously with a cancellation token.
@@ -131,7 +131,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> TryFetchTupleAsync<T1, T2, T3>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>>>> TryFetchTupleAsync<T1, T2, T3>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch a tuple of three lists of results asynchronously with a cancellation token.
@@ -154,7 +154,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> TryFetchTupleAsync<T1, T2, T3, T4>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>> TryFetchTupleAsync<T1, T2, T3, T4>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch a tuple of four lists of results asynchronously with a cancellation token.
@@ -177,7 +177,7 @@ namespace Thomas.Database.Core
         /// If using a defined class, consider applying the <see cref="Thomas.Database.Attributes.DbParameterAttribute"/> to manage additional parameter info.
         /// </param>
         /// <returns>A task representing the asynchronous operation result</returns>
-        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5>(string script, object? parameters = null);
+        Task<DbOpAsyncResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>> TryFetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters = null);
 
         /// <summary>
         /// Tries to fetch a tuple of five lists of results asynchronously with a cancellation token.

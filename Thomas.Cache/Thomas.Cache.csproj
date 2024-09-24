@@ -3,28 +3,26 @@
   <PropertyGroup>
     <TargetFrameworks>net472;netstandard2.0;net5.0;net6.0;net7.0;net8.0</TargetFrameworks>
     <LangVersion>8.0</LangVersion>
-    <!--<ImplicitUsings>enable</ImplicitUsings>-->
-    <Nullable>enable</Nullable>
     <Title>ThomasDataAdapter Cache Layer</Title>
     <Authors>Jean Villafuerte</Authors>
     <Product>ThomasDataAdapter</Product>
+    <Description>ThomasDataAdapter Cache Layer to boost performance with dynamic cache refresh capabilities.</Description>
+    <Copyright>2024 © Jean Villafuerte</Copyright>
     <PackageProjectUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</PackageProjectUrl>
+    <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
     <PackageIcon>ThomasIco.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/jeanvillafuerte/ThomasDataAdapter</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageTags>database, micro-orm, thomasAdapter</PackageTags>
-    <PackageReleaseNotes>Features released 3.1.1:
+    <PackageReleaseNotes>Features released 2.1.0:
 
-- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
-- Expanded transaction support through the use of lambda expressions.
-- Enhanced attribute configuration for DbParameter, including parameter direction, size, and precision.
-- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
-- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
-- Full support for record types.</PackageReleaseNotes>
-    <Version>2.0.2</Version>
-    <Copyright>2024 © Jean Villafuerte</Copyright>
+- Cache data management to boost performance with dynamic cache refresh capabilities.
+- Refresh data from anywhere by single string key
+- Query string and query expression support</PackageReleaseNotes>
+    <Version>2.1.0</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>False</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,6 +34,21 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Roslynator.Analyzers" Version="4.12.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.CodeFixes" Version="4.12.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

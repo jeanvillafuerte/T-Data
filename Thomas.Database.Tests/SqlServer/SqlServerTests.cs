@@ -4,9 +4,9 @@ using Thomas.Database.Core.FluentApi;
 using Thomas.Database.Core.QueryGenerator;
 using Thomas.Database.Attributes;
 
-namespace Thomas.Database.Tests.SqlServer
+namespace Thomas.Database.Tests.SQLServer
 {
-    public class SqlServerTests : IDatabaseProvider
+    public class SQLServerTests : IDatabaseProvider
     {
         public string ConnectionString => Environment.GetEnvironmentVariable("SqlServerCnx") ?? "Data Source=localhost;Initial Catalog=tempdb;Persist Security Info=True;User ID=sa;Password=Mssql_Test;TrustServerCertificate=true;packet size=2048;ApplicationIntent=ReadOnly;Min Pool Size=32;Max Pool Size=64;Pooling=true";
 

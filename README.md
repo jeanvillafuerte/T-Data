@@ -7,13 +7,15 @@ Join us in refining a library designed to streamline database interactions effor
 
 ### 🎯 Features:
 
-- Support for NET CORE and NET FRAMEWORK
-- Enhanced integration of both typed and anonymous types with query parameters for a more streamlined process.
-- Expanded transaction support through the use of lambda expressions.
-- Attribute configuration for DbParameter, including parameter direction, size, and precision.
-- Unique signature creation for database settings, enabling static instantiation of database contexts on demand.
-- Advanced optional caching layer designed to improve application performance by managing storage, updates, and deletions of cache, including the ability to refresh cache dynamically through a key identifier based on specific queries, expressions, and parameters.
-- Full support for record types.
+- Seamless compatibility with both .NET Core and .NET Framework.
+- Type-safe data results for enhanced reliability.
+- Streamlined query integration with full support for both typed and anonymous parameters.
+- Flexible transaction handling with lambda-based expressions.
+- Customizable DbParameter attributes, including direction, size, and precision.
+- Unique database signature for instant static context creation.
+- Cache data management to boost performance with dynamic cache refresh capabilities.
+- Full compatibility with record types.
+- Zero dependencies.
 
 ### Supported database providers
 - Microsoft.Data.SqlClient
@@ -56,7 +58,7 @@ DbConfig.Register(new DbSettings {
 ### Expression configuration
 ```c#
    var builder = new TableBuilder();
-   builder.Configure<User>(key: x => x.Id).AddFieldsAsColumns<User>().DbName("system_user");
+   builder.AddTable<User>(key: x => x.Id).AddFieldsAsColumns<User>().DbName("system_user");
    DbConfig.AddDbBuilder(builder);
 ```
 
@@ -120,20 +122,20 @@ Experience really good performance without the hassle of managing DbConnection. 
 Note: Tested with Docker MSSQL locally
 
 ``` ini
-BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4112/23H2/2023Update/SunValley3)
+BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4169/23H2/2023Update/SunValley3)
 13th Gen Intel Core i9-13900H, 1 CPU, 20 logical and 14 physical cores
-.NET SDK 8.0.304
+.NET SDK 8.0.400
   [Host]     : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
   DefaultJob : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
 
-
-| Detailed Runtime           | Type                       | Method                      | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
-|--------------------------- |--------------------------- |---------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchOne<>                    | 464.3 us | 51.84 us | 18.82 us | 2,153.8 | 0.4883 |   7.81 KB |
-| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | QuerySingle<T>              | 482.0 us | 68.35 us | 23.82 us | 2,074.7 | 0.4883 |   8.26 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchList<>                    | 516.8 us | 24.02 us | 10.28 us | 1,935.0 | 1.9531 |  25.12 KB |
-| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | Query<T>                    | 536.9 us | 63.32 us | 22.45 us | 1,862.5 | 0.9766 |  23.63 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'FetchList<> Expression' | 588.5 us | 66.56 us | 23.20 us | 1,699.2 | 1.9531 |  26.02 KB |
+| Detailed Runtime           | Type                       | Method                   | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
+|--------------------------- |--------------------------- |------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchOne<>               | 398.2 us |  4.01 us |  5.13 us | 2,511.3 | 0.4883 |   8.09 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | QuerySingle<T>           | 406.7 us |  6.78 us |  7.25 us | 2,459.0 | 0.4883 |   7.43 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchListRecord<>        | 447.2 us |  9.42 us |  8.80 us | 2,236.3 | 1.9531 |  25.02 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchList<>              | 465.0 us |  7.68 us |  9.20 us | 2,150.3 | 1.9531 |  25.53 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | Query<T>                 | 513.8 us | 49.20 us | 16.87 us | 1,946.4 | 1.9531 |   30.3 KB |
+| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'FetchList<> Expression' | 529.4 us | 60.12 us | 20.50 us | 1,889.0 | 1.9531 |  27.65 KB |
 ```
 
 ### Best practices
@@ -196,4 +198,3 @@ There are some considerations at development time:
 Be aware of the following limitations:
 
 - Currently limited to specific DB library providers, with plans to expand support in the future.
-- Depend on [Sigil](https://github.com/kevin-montrose/Sigil) a powerful reflection.emit ILGenerator. However, I consider remove it.
