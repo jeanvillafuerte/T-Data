@@ -2,9 +2,9 @@
 {
     internal interface IDbDataCache
     {
-        void AddOrUpdate(int key, IQueryResult result);
-        bool TryGet<T>(int key, out QueryResult<T>? result);
-        void Clear(int key);
+        void AddOrUpdate(in int key, IQueryResult result);
+        bool TryGet<T>(in int key, out QueryResult<T> result);
+        void Clear(in int key);
         void Clear();
     }
 }

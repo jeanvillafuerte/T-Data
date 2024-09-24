@@ -1,28 +1,31 @@
-﻿using System.Linq.Expressions;
+﻿using System;
+using System.Linq.Expressions;
 using Thomas.Database;
 
 namespace Thomas.Cache.MemoryCache
 {
     internal interface IQueryResult
     {
-        string Query { get; set; }
-        object? Params { get; set; }
-        MethodHandled MethodHandled { get; set; }
-        Expression? Where { get; set; }
+        string Query { get; }
+        object Params { get; }
+        MethodHandled MethodHandled { get; }
+        Expression Where { get; }
+        Expression Selector { get; }
         bool IsTuple { get; }
     }
 
     internal sealed class QueryResult<T> : IQueryResult
     {
-        public string Query { get; set; }
-        public object? Params { get; set; }
-        public T Data { get; set; }
-        public Expression? Where { get; set; }
-        public MethodHandled MethodHandled { get; set; }
+        public string Query { get; }
+        public object Params { get; }
+        public T Data { get; }
+        public Expression Where { get; }
+        public Expression Selector { get; }
+        public MethodHandled MethodHandled { get; }
 
         public bool IsTuple => (int)MethodHandled >= 5;
 
-        public QueryResult(MethodHandled methodHandled, string query, object? parameters, T data)
+        public QueryResult(in MethodHandled methodHandled, in string query, in object parameters, in T data)
         {
             MethodHandled = methodHandled;
             Query = query;
@@ -30,13 +33,14 @@ namespace Thomas.Cache.MemoryCache
             Data = data;
         }
 
-        public QueryResult(MethodHandled methodHandled, string query, object? parameters, T data, Expression where = null)
+        public QueryResult(in MethodHandled methodHandled, in string query, in object parameters, in T data, in Expression where = null, in Expression selector = null)
         {
             MethodHandled = methodHandled;
             Query = query;
             Params = parameters;
             Data = data;
             Where = where;
+            Selector = selector;
         }
     }
 }

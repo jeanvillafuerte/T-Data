@@ -6,7 +6,7 @@ using Thomas.Database.Attributes;
 
 namespace Thomas.Database.Tests.MySQL
 {
-    public class MySqlTests : IDatabaseProvider
+    public class MySQLTests : IDatabaseProvider
     {
         public string ConnectionString => Environment.GetEnvironmentVariable("MySqlCnx") ?? "Server=localhost;Database=test;Uid=root;Pwd=Mysql_Test;";
 

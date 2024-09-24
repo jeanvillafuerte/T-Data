@@ -54,7 +54,7 @@ namespace Thomas.Database.Tests
 
         #region first time call to database
         [Test, Order(1)]
-        public void GetAllUsersFromDbAndSaveInCache()
+        public void FetchUsersFromDbAndSaveInCache()
         {
             var dbContext = CachedDbHub.Use("db1");
             var users = dbContext.FetchList<User>();
@@ -65,7 +65,7 @@ namespace Thomas.Database.Tests
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
-        public void GetOneUserFromDbAndSaveInCache(int id)
+        public void FetchUserUserFromDbAndSaveInCache(int id)
         {
             var dbContext = CachedDbHub.Use("db1");
             var users = dbContext.FetchList<User>(x => x.Id == id);
@@ -73,7 +73,7 @@ namespace Thomas.Database.Tests
         }
 
         [Test, Order(3)]
-        public void GetTupleFromDbAndSaveInCache()
+        public void FetchTupleFromDbAndSaveInCache()
         {
             var dbContext = CachedDbHub.Use("db1");
             var users = dbContext.FetchTuple<User, User>("SELECT * FROM USERS; SELECT * FROM USERS");
@@ -82,7 +82,7 @@ namespace Thomas.Database.Tests
         }
 
         [Test, Order(4)]
-        public void GetUserFromDbByKeyAndSaveInCache()
+        public void FetchUserFromDbByKeyAndSaveInCache()
         {
             var filter = "Sample 1";
             var user = CachedDbHub.Use("db1").FetchOne<User>(x => x.Name == filter, key: "FILTER_1");
@@ -90,7 +90,7 @@ namespace Thomas.Database.Tests
         }
 
         [Test, Order(5)]
-        public void GetUsersFromDbByKeyAndSaveInCache()
+        public void FetchUsersFromDbByKeyAndSaveInCache()
         {
             var users = CachedDbHub.Use("db1").FetchList<UserNullableRecord>(x => x.Birthday == null, key: "FILTER_2");
             Assert.That(users.Count, Is.EqualTo(13));
@@ -98,7 +98,7 @@ namespace Thomas.Database.Tests
 
         const string Tuple2Query = "SELECT * FROM USERS WHERE ID > @user_id; SELECT * FROM USERS WHERE Name like CONCAT('%',@filter_name,'%')";
         [Test, Order(6)]
-        public void GetTupleFromDbByKeyAndSaveInCache()
+        public void FetchTupleFromDbByKeyAndSaveInCache()
         {
             var tuple = CachedDbHub.Use("db1").FetchTuple<UserNullableRecord, UserNullableRecord>(Tuple2Query, new { user_id = 0, filter_name = "sample" }, key: "FILTER_3");
             Assert.That(tuple.Item1.Count, Is.EqualTo(13));
@@ -107,7 +107,7 @@ namespace Thomas.Database.Tests
 
         const string Tuple3Query = "SELECT * FROM USERS WHERE ID > @user_id; SELECT * FROM USERS WHERE Name like CONCAT('%',@filter_name,'%'); SELECT * FROM USERS WHERE ID > @user_id";
         [Test, Order(7)]
-        public void GetTuple3FromDbByKeyAndSaveInCache()
+        public void FetchTuple3FromDbByKeyAndSaveInCache()
         {
             var tuple = CachedDbHub.Use("db1").FetchTuple<UserNullableRecord, UserNullableRecord, UserNullableRecord>(Tuple3Query, new { user_id = 0, filter_name = "sample" }, key: "FILTER_4");
             Assert.That(tuple.Item1.Count, Is.EqualTo(13));
@@ -117,7 +117,7 @@ namespace Thomas.Database.Tests
         #endregion
 
         [Test, Timeout(5), Order(8)]
-        public void GetAllUsersFromCache()
+        public void FetchListUsersFromCache()
         {
             var users = CachedDbHub.Use("db1").FetchList<User>();
             Assert.That(users.Count, Is.EqualTo(13));
@@ -127,14 +127,14 @@ namespace Thomas.Database.Tests
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
-        public void GetOneUserFromCache(int id)
+        public void FetchListUserFromCache(int id)
         {
             var users = CachedDbHub.Use("db1").FetchList<User>(x => x.Id == id);
             Assert.That(users.Count, Is.EqualTo(1));
         }
 
         [Test, Timeout(3), Order(8)]
-        public void GetTupleFromCache()
+        public void FetchTupleFromCache()
         {
             var users = CachedDbHub.Use("db1").FetchTuple<User, User>("SELECT * FROM USERS; SELECT * FROM USERS");
             Assert.That(users.Item1.Count, Is.EqualTo(13));
@@ -142,7 +142,7 @@ namespace Thomas.Database.Tests
         }
 
         [Test, Timeout(3), Order(8)]
-        public void GetUserFromCacheByKey()
+        public void FetchUserFromCacheByKey()
         {
             var filter = "Sample 1";
             var user = CachedDbHub.Use("db1").FetchOne<User>(x => x.Name == filter, key: "FILTER_1");
@@ -150,7 +150,7 @@ namespace Thomas.Database.Tests
         }
 
         [Test, Timeout(3), Order(8)]
-        public void GetTuple3FromCache()
+        public void FetchTuple3FromCache()
         {
             var tuple = CachedDbHub.Use("db1").FetchTuple<UserNullableRecord, UserNullableRecord, UserNullableRecord>(Tuple3Query, new { user_id = 0, filter_name = "sample" }, key: "FILTER_4");
             Assert.That(tuple.Item1.Count, Is.EqualTo(13));
@@ -160,7 +160,7 @@ namespace Thomas.Database.Tests
 
 
         [Test, Timeout(3), Order(8)]
-        public void GetUsersFromCacheByKey()
+        public void FetchUsersFromCacheByKey()
         {
             var users = CachedDbHub.Use("db1").FetchList<UserNullableRecord>(x => x.Birthday == null, key: "FILTER_2");
             Assert.That(users.Count, Is.EqualTo(13));
@@ -168,7 +168,7 @@ namespace Thomas.Database.Tests
 
 
         [Test, Timeout(3), Order(8)]
-        public void GetTupleFromCacheByKey()
+        public void FetchTupleFromCacheByKey()
         {
             var users = CachedDbHub.Use("db1").FetchTuple<UserNullableRecord, UserNullableRecord>(Tuple2Query, new { user_id = 0, filter_name = "sample" }, key: "FILTER_3");
             Assert.That(users.Item1.Count, Is.EqualTo(13));

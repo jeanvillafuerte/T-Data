@@ -12,6 +12,8 @@ namespace Thomas.Database.Core.Provider
         public readonly Action<object, DbCommand, DbDataReader> LoadOutParametersDelegate;
         public readonly CommandBehavior CommandBehavior;
         public readonly CommandType CommandType;
+
+        //for postgresql store procedure calls
         public readonly string TransformedScript;
 
         public CommandMetaData(in Func<object, string, string, DbCommand, DbCommand> loadParametersDelegate, in Func<object[], string, string, DbCommand, DbCommand> loadParametersDelegate2, in Action<object, DbCommand, DbDataReader> loadOutParametersDelegate, in CommandBehavior commandBehavior, in CommandType commandType, in string script)
