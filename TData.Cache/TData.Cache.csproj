@@ -1,0 +1,54 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net472;netstandard2.0;net5.0;net6.0;net7.0;net8.0</TargetFrameworks>
+    <LangVersion>8.0</LangVersion>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <Title>T-Data Cache Layer</Title>
+    <Authors>Jean Villafuerte</Authors>
+    <Product>TData</Product>
+    <Description>T-Data Cache Layer to boost performance with dynamic cache refresh capabilities.</Description>
+    <Copyright>2024 © Jean Villafuerte</Copyright>
+    <PackageProjectUrl>https://github.com/jeanvillafuerte/T-Data</PackageProjectUrl>
+    <PackageIcon>TDataIco.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/jeanvillafuerte/T-Data</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>database, micro-orm, t-data, mssql, oracle, mysql, sqlite, postgres</PackageTags>
+    <PackageReleaseNotes>Features released 2.1.0:
+
+- Cache data management to boost performance with dynamic cache refresh capabilities.
+- Refresh data from anywhere by single string key
+- Query string and query expression support</PackageReleaseNotes>
+    <Version>1.0.0</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>False</PackageRequireLicenseAcceptance>
+    <PackageId>T-DataCache</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\TDataIco.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TData\TData.csproj" />
+  </ItemGroup>
+
+</Project>
