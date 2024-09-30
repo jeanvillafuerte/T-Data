@@ -1,8 +1,8 @@
-# ![](./ThomasIco.png "ThomasDataAdapter") _**ThomasDataAdapter**_
+# ![](./TDataIco.png "T-Data") _**T-Data**_
 
 ## Simplified setup for robust database operations by relief having to manage connection, commands or transactions
 
-### 🌟 Join Us in Shaping the Future of ThomasDataAdapter! 🌟
+### 🌟 Join Us in Shaping the Future of T-Data! 🌟
 Join us in refining a library designed to streamline database interactions effortlessly. Your insights, tests, and small enhancements can make a big difference. Feel free to fix bugs and suggest features.
 
 ### 🎯 Features:
@@ -128,14 +128,14 @@ BenchmarkDotNet v0.13.12, Windows 11 (10.0.22631.4169/23H2/2023Update/SunValley3
   [Host]     : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
   DefaultJob : .NET 8.0.8 (8.0.824.36612), X64 RyuJIT AVX2
 
-| Detailed Runtime           | Type                       | Method                   | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
-|--------------------------- |--------------------------- |------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchOne<>               | 398.2 us |  4.01 us |  5.13 us | 2,511.3 | 0.4883 |   8.09 KB |
-| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | QuerySingle<T>           | 406.7 us |  6.78 us |  7.25 us | 2,459.0 | 0.4883 |   7.43 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchListRecord<>        | 447.2 us |  9.42 us |  8.80 us | 2,236.3 | 1.9531 |  25.02 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | FetchList<>              | 465.0 us |  7.68 us |  9.20 us | 2,150.3 | 1.9531 |  25.53 KB |
-| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark            | Query<T>                 | 513.8 us | 49.20 us | 16.87 us | 1,946.4 | 1.9531 |   30.3 KB |
-| .NET 8.0.8 (8.0.824.36612) | ThomasDataAdapterBenchmark | 'FetchList<> Expression' | 529.4 us | 60.12 us | 20.50 us | 1,889.0 | 1.9531 |  27.65 KB |
+| Detailed Runtime           | Type             | Method                   | Mean     | StdDev   | Error    | Op/s    | Gen0   | Allocated |
+|--------------------------- |------------------|------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
+| .NET 8.0.8 (8.0.824.36612) | TDataBenchmark   | FetchOne<>               | 398.2 us |  4.01 us |  5.13 us | 2,511.3 | 0.4883 |   8.09 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark  | QuerySingle<T>           | 406.7 us |  6.78 us |  7.25 us | 2,459.0 | 0.4883 |   7.43 KB |
+| .NET 8.0.8 (8.0.824.36612) | TDataBenchmark   | FetchListRecord<>        | 447.2 us |  9.42 us |  8.80 us | 2,236.3 | 1.9531 |  25.02 KB |
+| .NET 8.0.8 (8.0.824.36612) | TDataBenchmark   | FetchList<>              | 465.0 us |  7.68 us |  9.20 us | 2,150.3 | 1.9531 |  25.53 KB |
+| .NET 8.0.8 (8.0.824.36612) | DapperBenckmark  | Query<T>                 | 513.8 us | 49.20 us | 16.87 us | 1,946.4 | 1.9531 |   30.3 KB |
+| .NET 8.0.8 (8.0.824.36612) | TDataBenchmark   | 'FetchList<> Expression' | 529.4 us | 60.12 us | 20.50 us | 1,889.0 | 1.9531 |  27.65 KB |
 ```
 
 ### Best practices

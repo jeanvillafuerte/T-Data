@@ -1,4 +1,4 @@
-name: Thomas Data Adapter Build
+name: T-Data Build
 
 on:
   pull_request:
@@ -44,9 +44,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v1
     - name: .NET Build
-      run: dotnet build ThomasDataAdapter.sln -c Release /p:CI=true
+      run: dotnet build TDataSolution.sln -c Release /p:CI=true
     - name: Library Tests
-      run: dotnet test Thomas.Database.Tests/Thomas.Database.Tests.csproj -c Release --logger GitHubActions /p:CI=true
+      run: dotnet test TData.Tests/TData.Tests.csproj -c Release --logger GitHubActions /p:CI=true
       env:
         MySqlCnx: Server=localhost;Port=${{ job.services.mysql.ports[3306] }};Database=test;Uid=root;Pwd=Mysql_Test;Allow User Variables=true
         OracleCnx: Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=${{ job.services.oracle.ports[1521] }})))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=FREEPDB1)));Persist Security Info=True;User ID=SYS;DBA Privilege=SYSDBA;Password=Oracle_Test;Statement Cache Size=10
