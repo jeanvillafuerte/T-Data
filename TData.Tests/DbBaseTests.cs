@@ -5,6 +5,7 @@ using Oracle.ManagedDataAccess.Client;
 using TData.Configuration;
 using TData.Core.FluentApi;
 using TData.Core.Provider;
+using static TData.Core.Provider.DatabaseProvider;
 
 namespace TData.Tests
 {
@@ -69,10 +70,11 @@ namespace TData.Tests
                 commandType: CommandType.Text,
                 isTransactionOperation: false,
                 prepareStatements: false,
-                canPrepareStatement: true);
+                canPrepareStatement: true,
+                shouldIncludeSequentialBehavior: false);
 
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(User), options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, typeof(User), options, false, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(user, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -151,10 +153,11 @@ namespace TData.Tests
                 commandType: CommandType.Text,
                 isTransactionOperation: false,
                 prepareStatements: false,
-                canPrepareStatement: true);
+                canPrepareStatement: true,
+                shouldIncludeSequentialBehavior: false);
 
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(UserNullableRecord), options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, typeof(UserNullableRecord), options, false, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(user, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -218,10 +221,11 @@ namespace TData.Tests
                 commandType: CommandType.StoredProcedure,
                 isTransactionOperation: false,
                 prepareStatements: false,
-                canPrepareStatement: false);
+                canPrepareStatement: false,
+                shouldIncludeSequentialBehavior: false);
 
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(null, options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, null, options, false,out _, ref parameters);
 
             using var oracleCommand = (OracleCommand)setupCommand(null, OracleConnectionString, "SOME_STORE_PROCEDURE", null);
             
@@ -246,11 +250,12 @@ namespace TData.Tests
                 commandType: CommandType.Text,
                 isTransactionOperation: false,
                 prepareStatements: false,
-                canPrepareStatement: true);
+                canPrepareStatement: true,
+                shouldIncludeSequentialBehavior: false);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, typeof(FilterSalary), options, false, out _, ref parameters);
 
             using var SqlCommand = (SqlCommand)setupCommand(filter, SqlConnectionString, "SOME_SCRIPT", null);
 
@@ -290,11 +295,12 @@ namespace TData.Tests
                 commandType: CommandType.Text,
                 isTransactionOperation: true,
                 prepareStatements: true,
-                canPrepareStatement: true);
+                canPrepareStatement: true,
+                shouldIncludeSequentialBehavior: false);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, typeof(FilterSalary), options, false, out _, ref parameters);
 
             var connection = new SqlConnection(SqlConnectionString);
             connection.Open();
@@ -346,12 +352,13 @@ namespace TData.Tests
                 commandType: CommandType.Text,
                 isTransactionOperation: true,
                 prepareStatements: false,
-                canPrepareStatement: false);
+                canPrepareStatement: false,
+                shouldIncludeSequentialBehavior: false);
 
             var filter = new FilterSalary { SalaryStar = 1000, SalaryEnd = 2000, Total = 0 };
 
             DbParameterInfo[] parameters = null;
-            var setupCommand = (Func<object, string, string, DbCommand, DbCommand>)DatabaseHelperProvider.GetSetupCommandDelegate(typeof(FilterSalary), options, out _, ref parameters);
+            var setupCommand = (ConfigureCommandDelegate)DatabaseHelperProvider.GetSetupCommandDelegate(true, typeof(FilterSalary), options, false,out _, ref parameters);
 
             var connection = new SqlConnection(SqlConnectionString);
             connection.Open();

@@ -131,15 +131,14 @@ namespace TData.Core.QueryGenerator
                 return true;
             else
             {
-                string paramName;
                 if (member != null && member is FieldInfo fieldInfo)
                 {
                     var value = fieldInfo.GetValue(constantExpression.Value);
-                    _parameterHandler.AddInParam(fieldInfo.FieldType, value, null, out paramName);
+                    _parameterHandler.AddInParam(fieldInfo.FieldType, value, null, out _);
                 }
                 else
                 {
-                    _parameterHandler.AddInParam(constantExpression.Type, constantExpression.Value, null, out paramName);
+                    _parameterHandler.AddInParam(constantExpression.Type, constantExpression.Value, null, out _);
                 }
 
                 return true;

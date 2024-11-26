@@ -1,5 +1,4 @@
-﻿using TData;
-using TData.Tests.Performance.Entities;
+﻿using TData.Tests.Performance.Entities;
 
 namespace TData.Tests.Performance.Legacy.Tests
 {

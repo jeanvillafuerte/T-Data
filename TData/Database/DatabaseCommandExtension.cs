@@ -11,7 +11,6 @@ using TData.Core.Provider;
 using TData.Configuration;
 using TData.Core.FluentApi;
 using System.Reflection.Emit;
-using System.Linq.Expressions;
 
 namespace TData
 {
@@ -31,7 +30,7 @@ namespace TData
                 "UInt64" => "GetInt64",
                 "Byte" => "GetByte",
                 "SByte" => "GetByte",
-                "Float" => "GetFloat",
+                "Single" => "GetFloat",
                 "Double" => "GetDouble",
                 "Decimal" => "GetDecimal",
                 "Boolean" => "GetBoolean",
@@ -58,13 +57,14 @@ namespace TData
         private static readonly ConstructorInfo GuidConstructorString = typeof(Guid).GetConstructor(new Type[] { typeof(string) })!;
         private static readonly ConstructorInfo TimeSpanConstructorTicks = typeof(TimeSpan).GetConstructor(new Type[] { typeof(long) })!;
 
-        private static Func<DbDataReader, T> GetParserTypeDelegate<T>(in DbDataReader reader, in int preparationQueryKey, in SqlProvider provider, in int bufferSize = 0, in int batchSize = 0)
+        public delegate T ParserDelegate<T>(in DbDataReader reader);
+        private static ParserDelegate<T> GetParserTypeDelegate<T>(in DbDataReader reader, in int preparationQueryKey, in SqlProvider provider, in int bufferSize = 0, in int batchSize = 0)
         {
             var typeResult = typeof(T);
 
             var key = (preparationQueryKey * 23) + typeResult.GetHashCode();
 
-            if (CacheTypeParser<T>.TryGet(in key, out Func<DbDataReader, T> parser))
+            if (CacheTypeParser<T>.TryGet(in key, out ParserDelegate<T> parser))
                 return parser;
 
             var columnInfoCollection = GetColumnMap(in typeResult, in reader, in provider);
@@ -80,8 +80,13 @@ namespace TData
                     DatabaseProvider.RemoveSequentialAccess(in preparationQueryKey);
             }
 
-            var dynamicMethod = new DynamicMethod($"ParseDataRowTo{typeResult.FullName!.Replace('.', '_')}", typeof(T), new[] { typeof(DbDataReader) }, typeResult.Module, true);
-            var ilGenerator = dynamicMethod.GetILGenerator();
+            var dynamicMethod = new DynamicMethod($"ParseDataRowTo{typeResult.FullName!.Replace('.', '_')}", 
+                                typeof(T), 
+                                new[] { typeof(DbDataReader).MakeByRefType() }, 
+                                typeResult.Module,
+                                true);
+
+            var ilGenerator = dynamicMethod.GetILGenerator(64);
 
             Type dbDataReader = null;
 
@@ -106,24 +111,23 @@ namespace TData
 
             if (IsReadonlyRecordType(in typeResult))
             {
-                GenerateEmitterForReadonlyRecord<T>(ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
+                GenerateEmitterForReadonlyRecord<T>(in ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
             }
             else
             {
-                GenerateEmitterBySetters<T>(ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
+                GenerateEmitterBySetters<T>(in ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
             }
 
-            Type funcType = Expression.GetFuncType(new[] { typeof(DbDataReader), typeof(T) });
-            Func<DbDataReader, T> @delegate = (Func<DbDataReader, T>)dynamicMethod.CreateDelegate(funcType);
+            var @delegate = (ParserDelegate<T>)dynamicMethod.CreateDelegate(typeof(ParserDelegate<T>));
             CacheTypeParser<T>.Set(key, @delegate);
             return @delegate;
         }
 
         //support only class with public setters and parameterless constructor 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        private static void GenerateEmitterBySetters<T>(ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
 #else
-        private static void GenerateEmitterBySetters<T>(ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
 #endif
         {
             if (typeResult.GetConstructor(Type.EmptyTypes) == null)
@@ -147,6 +151,7 @@ namespace TData
                 if (column.AllowNull)
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, index);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod("IsDBNull"));
@@ -182,6 +187,7 @@ namespace TData
 
                     // Assume the data is already in the correct position in the reader, and fill the byte array
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, index);
                     emitter.Emit(OpCodes.Ldc_I4_0);
@@ -212,6 +218,7 @@ namespace TData
                 else if (getMethodName.Equals("GetBytes", StringComparison.Ordinal))
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Ldc_I4, index);
                     emitter.Emit(OpCodes.Ldc_I4, bufferSize > 0 ? bufferSize : 8192);
                     emitter.Emit(OpCodes.Call, ReadStreamMethod);
@@ -219,6 +226,7 @@ namespace TData
                 else
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, index);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod(getMethodName, new[] { typeof(int) }));
@@ -249,16 +257,21 @@ namespace TData
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
+private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
 #else
-        private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
 #endif
         {
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).ToArray();
             var constructor = type.GetConstructor(fields.Select(x => x.FieldType).ToArray()) ?? throw new InvalidOperationException($"Cannot find readonly record constructor for {type.Name}");
 
             var columns = columnInfoCollection.ToArray();
-            var locals = fields.Select(f => emitter.DeclareLocal(f.FieldType)).ToList();
+            var locals = new List<LocalBuilder>(fields.Length);
+
+            foreach (var field in fields)
+            {
+                locals.Add(emitter.DeclareLocal(field.FieldType));
+            }
 
             int columnIndex = 0;
             for (int index = 0; index < fields.Length; index++)
@@ -283,6 +296,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
                 if (column.AllowNull)
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, columnIndex);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod("IsDBNull"));
@@ -317,6 +331,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
 
                     // Assume the data is already in the correct position in the reader, and fill the byte array
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, columnIndex);
                     emitter.Emit(OpCodes.Ldc_I4_0);
@@ -347,6 +362,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
                 else if (getMethodName.Equals("GetBytes", StringComparison.Ordinal))
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Ldc_I4, columnIndex);
                     emitter.Emit(OpCodes.Ldc_I4, bufferSize > 0 ? bufferSize : 8192);
                     emitter.Emit(OpCodes.Call, ReadStreamMethod);
@@ -354,6 +370,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
                 else
                 {
                     emitter.Emit(OpCodes.Ldarg_0);
+                    emitter.Emit(OpCodes.Ldind_Ref);
                     emitter.Emit(OpCodes.Castclass, dbDataReader);
                     emitter.Emit(OpCodes.Ldc_I4, columnIndex);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod(getMethodName, new[] { typeof(int) }));
@@ -614,7 +631,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
                    sourceType.IsValueType && sourceType.IsPrimitive;
         }
 
-        private class PropertyTypeInfo
+        internal class PropertyTypeInfo
         {
             public Type Source { get; set; }
             public PropertyInfo PropertyInfo { get; set; }
@@ -653,7 +670,7 @@ private static void GenerateEmitterForReadonlyRecord<T>(ILGenerator emitter, in 
             
         }
 
-    #endregion specific readers
+        #endregion specific readers
 
     }
 }

@@ -526,6 +526,21 @@ namespace TData.Tests.Oracle
             Assert.That(tuple.Success, Is.False, "Success");
             Assert.That(tuple.Canceled, Is.True, "Canceled");
         }
+
+        [Test]
+        public void FetchData()
+        {
+            var dbContext = DbHub.GetDefaultDb();
+            var (dispose, iterator) = dbContext.FetchData<User>("SELECT * FROM USERS", null, 5);
+
+            foreach (var list in iterator)
+            {
+                Assert.That(list.Count, Is.LessThanOrEqualTo(5));
+            }
+
+            dispose();
+            Assert.Pass();
+        }
         #endregion
 
 

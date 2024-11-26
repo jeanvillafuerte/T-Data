@@ -16,10 +16,12 @@ namespace TData.Core.Provider
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
         
+        public delegate DbCommand ConfigureCommandDelegate(in object command, in string connectionString, in string commandText, in DbCommand existingCommand);
+        public delegate DbCommand ConfigureCommandDelegate2(in object[] command, in string connectionString, in string commandText, in DbCommand existingCommand);
 
-        public static (Func<object, string, string, DbCommand, DbCommand>, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, ref DbParameterInfo[] parameters)
+        public static (ConfigureCommandDelegate, Action<object, DbCommand, DbDataReader>) GetCommandMetaData(in LoaderConfiguration options, in bool isExecuteNonQuery, in Type type, in bool addPagingParams, ref DbParameterInfo[] parameters)
         {
-            var loadParametersDelegate = (Func<object, string, string, DbCommand, DbCommand>)GetSetupCommandDelegate(in type, in options, out var hasOutputParams, ref parameters);
+            var loadParametersDelegate = (ConfigureCommandDelegate)GetSetupCommandDelegate(true, in type, in options, in addPagingParams, out var hasOutputParams, ref parameters);
 
             Action<object, DbCommand, DbDataReader> loadOutParameterDelegate = null;
 
@@ -29,17 +31,17 @@ namespace TData.Core.Provider
             return (loadParametersDelegate, loadOutParameterDelegate);
         }
 
-        public static Func<object[], string, string, DbCommand, DbCommand> GetCommandMetaData2(in LoaderConfiguration options, in DbParameterInfo[] parameters)
+        public static ConfigureCommandDelegate2 GetCommandMetaData2(in LoaderConfiguration options, in DbParameterInfo[] parameters)
         {
             DbParameterInfo[] localParameters = parameters;
-            return (Func<object[], string, string, DbCommand, DbCommand>)GetSetupCommandDelegate(null, in options, out var hasOutputParams, ref localParameters);
+            return (ConfigureCommandDelegate2)GetSetupCommandDelegate(false, null, in options, false, out var hasOutputParams, ref localParameters);
         }
 
         public static void RemoveSequentialAccess(in int key)
         {
-            if (DatabaseHelperProvider.CommandMetadata.TryGetValue(key, out var metadata))
+            if (CommandMetadata.TryGetValue(key, out var metadata))
             {
-                DatabaseHelperProvider.CommandMetadata.TryUpdate(key, metadata.CloneNoCommandSequential(), metadata);
+                CommandMetadata.TryUpdate(key, metadata.CloneNoCommandSequential(), metadata);
             }
         }
 

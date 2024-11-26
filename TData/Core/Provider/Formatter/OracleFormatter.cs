@@ -65,5 +65,10 @@ namespace TData.Core.Provider.Formatter
         {
             return $"DELETE {tableName} {alias}";
         }
+
+        public string PagingQuery(in string query)
+        {
+            return $"{query} OFFSET :{DatabaseHelperProvider.OFFSET_PARAMETER} ROWS FETCH NEXT :{DatabaseHelperProvider.PAGESIZE_PARAMETER} ROWS ONLY";
+        }
     }
 }
