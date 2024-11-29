@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Data;
-using TData;
 using TData.Attributes;
 
 namespace TData.Tests.Performance.Entities
 {
-    [Serializable]
     public class Person
     {
         public int Id { get; set; }
@@ -22,7 +20,6 @@ namespace TData.Tests.Performance.Entities
         public DateTime? LastUpdate { get; set; }
     }
 
-    [Serializable]
     public class PersonWithNullables
     {
         public int? Id { get; set; }
@@ -39,7 +36,6 @@ namespace TData.Tests.Performance.Entities
         public DateTime LastUpdate { get; set; }
     }
 
-    [Serializable]
     public class SearchTerm
     {
         public SearchTerm(int id)
@@ -53,7 +49,6 @@ namespace TData.Tests.Performance.Entities
         public string UserName { get; set; }
     }
 
-    [Serializable]
     public class ListResult
     {
         public ListResult(int age)

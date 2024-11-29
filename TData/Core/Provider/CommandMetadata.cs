@@ -26,10 +26,5 @@ namespace TData.Core.Provider
             CommandBehavior = shouldIncludeSequentialBehavior ? commandBehavior & CommandBehavior.SequentialAccess : commandBehavior;
             TransformedScript = script;
         }
-
-        public CommandMetaData CloneNoCommandSequential()
-        {
-            return new CommandMetaData(in LoadParametersDelegate, in LoadParametersDelegate2, in LoadOutParametersDelegate, CommandBehavior &~ CommandBehavior.SequentialAccess, in CommandType, in TransformedScript, false);
-        }
     }
 }

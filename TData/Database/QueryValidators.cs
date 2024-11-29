@@ -7,7 +7,7 @@ namespace TData
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
         internal static bool IsStoredProcedure(ReadOnlySpan<char> input)
 #else
-        internal static bool IsStoredProcedure(string input)
+        internal static bool IsStoredProcedure(in string input)
 #endif
         {
             var asd = new[] { ' ', '\t', '\n', '\r' };

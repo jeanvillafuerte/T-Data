@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using TData.Core.Provider;
@@ -12,7 +10,7 @@ using TData.Database;
 using TData.DbResult;
 using static TData.Core.Provider.DatabaseProvider;
 
-[assembly: InternalsVisibleTo("TData.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
 namespace TData
 {
     internal partial class DatabaseCommand : IDisposable
@@ -34,9 +32,9 @@ namespace TData
         private readonly CommandBehavior _commandBehavior;
         private readonly int _bufferSize;
         private readonly DbCommandConfiguration _configuration;
-        private DbDataReader _reader;
 
         //object to share in transaction context
+        private DbDataReader _reader;
         internal DbCommand _command;
         private DbConnection _connection;
         private readonly DbTransaction _transaction;
@@ -117,7 +115,7 @@ namespace TData
                 }
 
                 operationKey = (operationKey * 23) + _script.GetHashCode();
-                operationKey = (operationKey * 23) + _provider.GetHashCode();
+                operationKey = (operationKey * 23) + (int)_provider;
                 operationKey = (operationKey * 23) + configuration.GetHashCode();
                 _preparationQueryKey = operationKey;
             }
@@ -150,12 +148,25 @@ namespace TData
                     commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
 
                     DbParameterInfo[] localParameters = null;
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
+                    (_commandSetupDelegate, _actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
 
-                    if (!isExecuteNonQuery && localParameters?.Any(x => x.IsOutput) == true)
+                    bool existsOutParameter = false;
+                    if (localParameters != null)
+                    {
+                        foreach (var item in localParameters)
+                        {
+                            if (item.IsOutput)
+                            {
+                                existsOutParameter = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isExecuteNonQuery && existsOutParameter)
                         throw new PostgreSQLInvalidRequestCallException();
 
-                    transformedScript = _script = DatabaseProvider.TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
+                    transformedScript = _script = TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
                 }
                 else
                 {
@@ -173,7 +184,7 @@ namespace TData
 
                     commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, in isTransaction, in isStoreProcedure, in canPrepareStatement);
                     DbParameterInfo[] localParameters = null;
-                    (_commandSetupDelegate, _actionOutParameterLoader) = DatabaseProvider.GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
+                    (_commandSetupDelegate, _actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
                 }
 
                 if (buffered)
@@ -220,26 +231,28 @@ namespace TData
             }
 
             _preparationQueryKey = operationKey;
+            DbParameterInfo[] convertedParameters = Array.Empty<DbParameterInfo>();
+            if (parameters is DbParameterInfo[] && parameters.Length > 0)
+            {
+                convertedParameters = (DbParameterInfo[])parameters;
+                _values = new object[convertedParameters.Length];
+                for (int i = 0; i < convertedParameters.Length; i++)
+                {
+                    _values[i] = convertedParameters[i].Value;
+                }
+            }
+            else
+            {
+                _values = parameters;
+            }
 
             if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
             {
-                if (parameters is DbParameterInfo[] convertedParameters)
-                    _values = convertedParameters.Select(x => x.Value).ToArray();
-                else
-                    _values = parameters;
-
                 _commandSetupDelegate2 = commandMetadata.LoadParametersDelegate2;
                 _actionOutParameterLoader = commandMetadata.LoadOutParametersDelegate;
             }
             else
             {
-                DbParameterInfo[] convertedParameters = null;
-                if (parameters != null && parameters.Length > 0)
-                {
-                    convertedParameters = (DbParameterInfo[])parameters;
-                    _values = convertedParameters.Select(x => x.Value).ToArray();
-                }
-
                 var commandConfiguration = GetCommandConfiguration(in options, in _commandType, in configuration, isTransaction, false, true);
                 _commandSetupDelegate2 = DatabaseProvider.GetCommandMetaData2(in commandConfiguration, convertedParameters);
 
@@ -253,7 +266,15 @@ namespace TData
             int cursorsToAdd = 0;
 
             if (options.SqlProvider == SqlProvider.Oracle && isStoreProcedure && configuration.EligibleForAddOracleCursors())
-                cursorsToAdd = new[] { MethodHandled.FetchOneQueryString, MethodHandled.FetchListQueryString }.Contains(configuration.MethodHandled) ? 1 : (int)configuration.MethodHandled - 3;
+            {
+                cursorsToAdd = MethodHandled.FetchOneQueryString == configuration.MethodHandled || configuration.MethodHandled == MethodHandled.FetchListQueryString ? 1 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_2 ? 2 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_3 ? 3 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_4 ? 4 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_5 ? 5 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_6 ? 6 :
+                               configuration.MethodHandled == MethodHandled.FetchTupleQueryString_7 ? 7 : 1 ;
+            }
 
             return new LoaderConfiguration(
                 keyAsReturnValue: in configuration.KeyAsReturnValue,
@@ -298,24 +319,24 @@ namespace TData
                 throw new NotSupportedCommandTypeException();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         internal DbCommand CreateEmptyCommand() => _connection.CreateCommand();
 
         internal void OpenConnection()
         {
-            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection = CreateConnection(in _provider, in _connectionString);
             _connection.Open();
         }
 
         internal async Task OpenConnectionAsync(CancellationToken cancellationToken)
         {
-            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection = CreateConnection(in _provider, in _connectionString);
             await _connection.OpenAsync(cancellationToken);
         }
 
         internal DbTransaction BeginTransaction()
         {
-            _connection = DatabaseProvider.CreateConnection(in _provider, in _connectionString);
+            _connection = CreateConnection(in _provider, in _connectionString);
             _connection.Open();
             return _connection.BeginTransaction();
         }
@@ -369,22 +390,22 @@ namespace TData
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public object ExecuteScalar() => _command.ExecuteScalar();
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public async Task<object> ExecuteScalarAsync(CancellationToken cancellationToken) => await _command.ExecuteScalarAsync(cancellationToken);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public int ExecuteNonQuery() => _command.ExecuteNonQuery();
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken) => await _command.ExecuteNonQueryAsync(cancellationToken);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         private void NextResult() => _reader.NextResult();
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public void SetValuesOutFields()
         {
             if (_actionOutParameterLoader != null)
@@ -528,7 +549,7 @@ namespace TData
             }
         }
 
-        public async IAsyncEnumerable<List<T>> ReadBatchListAsync<T>(int offset, int pageSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+        public async IAsyncEnumerable<List<T>> ReadBatchListAsync<T>(int offset, int pageSize, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var bindVariable = _provider == SqlProvider.PostgreSql  ? "@" : "";
             SetPaging(offset, pageSize, bindVariable);
@@ -600,7 +621,7 @@ namespace TData
                 return list;
             }
 
-            return Enumerable.Empty<T>().ToList();
+            return new List<T>(0);
         }
 
         public List<T> ReadListItems<T>(int expectedRows = 0)
@@ -647,7 +668,7 @@ namespace TData
                 yield return list;
         }
 
-        public async IAsyncEnumerable<List<T>> FetchDataAsync<T>(int batchSize, [EnumeratorCancellation] CancellationToken cancellationToken)
+        public async IAsyncEnumerable<List<T>> FetchDataAsync<T>(int batchSize, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
             _reader = await _command!.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
@@ -691,7 +712,7 @@ namespace TData
                 return list;
             }
 
-            return Enumerable.Empty<T>().ToList();
+            return new List<T>(0);
         }
 
 #endregion reader operations

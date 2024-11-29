@@ -11,6 +11,7 @@ using System.Text;
 using System.Xml;
 using TData.Configuration;
 using TData.Core.Converters;
+using TData.Helpers;
 using static TData.Core.Provider.DatabaseProvider;
 using Column = TData.Core.FluentApi.DbColumn;
 
@@ -353,9 +354,10 @@ namespace TData.Core.Provider
             var il = method.GetILGenerator(64);
 
             LocalBuilder commandInstance = null;
+            LocalBuilder connectionInstance = null;
 
             if (!options.IsTransactionOperation)
-                SetupCommandBase(in il, in options, out commandInstance);
+                SetupCommandBase(in il, in options, out connectionInstance, out commandInstance);
 
             if (allParameters != null && allParameters.Length > 0)
             {
@@ -540,7 +542,7 @@ namespace TData.Core.Provider
                     SetupLoadParameter(in dbCommandType, in commandInstance, in il, allParameters, in options, false);
             }
 
-            PrepareStatement(in options, in il, in commandInstance, in dbCommandType, in dbconnectionType);
+            PrepareStatement(in options, in il, in connectionInstance, in commandInstance, in dbCommandType, in dbconnectionType);
 
             //return command
             if (options.IsTransactionOperation)
@@ -551,7 +553,7 @@ namespace TData.Core.Provider
             }
             else
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
                 il.Emit(OpCodes.Castclass, typeof(DbCommand));
                 il.Emit(OpCodes.Ret);
             }
@@ -563,16 +565,16 @@ namespace TData.Core.Provider
 
         private const int DataRowVersionDefault = (int)DataRowVersion.Default;
 
-        private static void PrepareStatement(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+        private static void PrepareStatement(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder connectionInstance, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
         {
             if (options.ShouldPrepareStatement())
             {
-                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+                OpenConnection(in options, in il, in connectionInstance, in dbConnectionType);
                 PrepareStatementInternal(in options, in il, in commandInstance, in dbCommandType);
             }
             else
             {
-                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+                OpenConnection(in options, in il, in connectionInstance, in dbConnectionType);
             }
 
             static void PrepareStatementInternal(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType)
@@ -586,18 +588,17 @@ namespace TData.Core.Provider
                 }
                 else
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Call, dbCommandType.GetMethod("Prepare"));
                 }
             }
 
-            static void OpenConnection(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+            static void OpenConnection(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder connectionInstance, in Type dbConnectionType)
             {
                 if (!options.IsTransactionOperation)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
-                    il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("Connection", dbConnectionType).GetGetMethod());
-                    il.Emit(OpCodes.Callvirt, typeof(DbConnection).GetMethod("Open"));
+                    il.Emit(OpCodes.Ldloc_0, connectionInstance);
+                    il.Emit(OpCodes.Call, dbConnectionType.GetMethod("Open", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null));
                 }
             }
         }
@@ -626,7 +627,7 @@ namespace TData.Core.Provider
            throw new NotSupportedException($"Conversion not supported from {type.Name} to Enum {dbTypes[type]} in {provider} mapping");
         }
 
-        private static void SetupCommandBase(in ILGenerator il, in LoaderConfiguration options, out LocalBuilder commandInstance)
+        private static void SetupCommandBase(in ILGenerator il, in LoaderConfiguration options, out LocalBuilder connectionInstance, out LocalBuilder commandInstance)
         {
             ConstructorInfo connectionConstructor = null;
             ConstructorInfo commandConstructor = null;
@@ -671,34 +672,34 @@ namespace TData.Core.Provider
                 throw new NotImplementedException($"The provider {options.Provider} library was not found");
 
             //declare connection
-            var connectionInstance = il.DeclareLocal(dbconnectionType);
+            connectionInstance = il.DeclareLocal(dbconnectionType);
             il.Emit(OpCodes.Ldarg_1);
             il.Emit(OpCodes.Ldind_Ref);
             il.Emit(OpCodes.Newobj, connectionConstructor);
-            il.Emit(OpCodes.Stloc, connectionInstance);
+            il.Emit(OpCodes.Stloc_0, connectionInstance);
 
             commandInstance = il.DeclareLocal(dbCommandType);
 
             //instance command
             il.Emit(OpCodes.Ldarg_2);
             il.Emit(OpCodes.Ldind_Ref);
-            il.Emit(OpCodes.Ldloc, connectionInstance);
+            il.Emit(OpCodes.Ldloc_0, connectionInstance);
             il.Emit(OpCodes.Newobj, commandConstructor);
-            il.Emit(OpCodes.Stloc, commandInstance);
+            il.Emit(OpCodes.Stloc_1, commandInstance);
 
             //set command type
             if (options.CommandType != CommandType.Text)
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
-                il.Emit(OpCodes.Ldc_I4, (int)options.CommandType);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
+                ReflectionEmitHelper.EmitInt32Value(in il, (int)options.CommandType);
                 il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("CommandType").GetSetMethod(true));
             }
 
             //set timeout
             if (options.Timeout > 0)
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
-                il.Emit(OpCodes.Ldc_I4, options.Timeout);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
+                ReflectionEmitHelper.EmitInt32Value(in il, in options.Timeout);
                 il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("CommandTimeout").GetSetMethod(true));
             }
 
@@ -707,18 +708,18 @@ namespace TData.Core.Provider
             {
                 if (options.AdditionalOracleRefCursors == 0)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Ldc_I4_1);
                     il.EmitCall(OpCodes.Callvirt, OracleDbCommandBindByName, null);
                 }
 
-                il.Emit(OpCodes.Ldloc, commandInstance);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
                 il.Emit(OpCodes.Ldc_I4_M1);
                 il.EmitCall(OpCodes.Callvirt, OracleDbCommandInitialLONGFetchSize, null);
 
                 if (options.FetchSize > 0)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Ldc_I8, (long)options.FetchSize);
                     il.EmitCall(OpCodes.Call, OracleDbCommandFetchSize, null);
                 }
@@ -774,13 +775,18 @@ namespace TData.Core.Provider
             }
 
             int index = 0;
+            int offsetIndex = options.IsTransactionOperation ? 0 : 1; //skip the connection and command parameters index
             foreach (var parameter in parameters)
             {
                 LocalBuilder localValue = null;
                 LocalBuilder convertedValue = null;
 
+                int valueLocalIndex = 0;
+                int convertedValueLocalIndex = 0;
+
                 if (parameter.IsInput)
                 {
+                    valueLocalIndex = index == 0 && !options.IsTransactionOperation ? offsetIndex + 1 : offsetIndex;
                     localValue = il.DeclareLocal(typeof(object));
 
                     if (parameter.PagingParameter)
@@ -793,7 +799,7 @@ namespace TData.Core.Provider
                         EmitValue(in il, in parameter, in isExpressionRequest, in index);
                     }
 
-                    il.Emit(OpCodes.Stloc, localValue);
+                    il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in valueLocalIndex), localValue);
 
                     if (parameter.Converter != null)
                     {
@@ -802,7 +808,7 @@ namespace TData.Core.Provider
 
                         if (isNullableType)
                         {
-                           il.Emit(OpCodes.Ldloc, localValue);
+                           il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in valueLocalIndex), localValue);
                            il.Emit(OpCodes.Ldnull);
                            il.Emit(OpCodes.Ceq);
                            il.Emit(OpCodes.Brfalse_S, convertNotNull);
@@ -812,15 +818,17 @@ namespace TData.Core.Provider
                         var localConverter = il.DeclareLocal(converterType);
                         var constructorInfo = converterType.GetConstructor(Type.EmptyTypes);
                         il.Emit(OpCodes.Newobj, constructorInfo);
-                        il.Emit(OpCodes.Stloc, localConverter);
+                        var convertedIndex = valueLocalIndex + 1;
+                        il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedIndex), localConverter);
 
-                        il.Emit(OpCodes.Ldloc, localConverter);
-                        il.Emit(OpCodes.Ldloc, localValue);
-                        il.Emit(OpCodes.Callvirt, GetMethodInfoConverterClass(converterType));
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in convertedIndex), localConverter);
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in valueLocalIndex), localValue);
+                        il.Emit(OpCodes.Callvirt, GetMethodInfoConverterClass(in converterType));
 
                         //declare convertedValue variable
+                        convertedValueLocalIndex = convertedIndex + 1;
                         convertedValue = il.DeclareLocal(typeof(object));
-                        il.Emit(OpCodes.Stloc, convertedValue);
+                        il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedValueLocalIndex), convertedValue);
 
                         //close if
                         if (isNullableType)
@@ -829,28 +837,30 @@ namespace TData.Core.Provider
 
                             //if false load DbNull.Value into the convertedValue
                             il.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
-                            il.Emit(OpCodes.Stloc, convertedValue);
+                            il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedValueLocalIndex), convertedValue);
                         }
                     }
                 }
 
+                var effectiveLocalIndex = convertedValueLocalIndex > 0 ? convertedValueLocalIndex : valueLocalIndex;
+                var effectiveLocal = convertedValue ?? localValue;
                 if (options.Provider == SqlProvider.Sqlite)
                 {
-                    BuildSqliteParameter(in il, in parameter, value: convertedValue ?? localValue);
+                    BuildSqliteParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
                 else if (options.Provider == SqlProvider.PostgreSql)
                 {
-                    BuildPostgresParameter(in il, in parameter, convertedValue ?? localValue);
+                    BuildPostgresParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
                 else
                 {
                     il.Emit(OpCodes.Ldstr, parameter.Name);
-                    il.Emit(OpCodes.Ldc_I4, parameter.DbType);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Size);
-                    il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.DbType);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Size);
+                    ReflectionEmitHelper.EmitInt32Value(in il, (int)parameter.Direction);
                     il.Emit(OpCodes.Ldc_I4_1);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Scale);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Precision);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Scale);
                     il.Emit(OpCodes.Ldnull);
                     il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
 
@@ -860,14 +870,15 @@ namespace TData.Core.Provider
                     }
                     else
                     {
-                        il.Emit(OpCodes.Ldloc, convertedValue ?? localValue);
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), effectiveLocal);
                     }
                 }
 
                 il.Emit(OpCodes.Newobj, parameterConstructor);
 
                 var dbParameterInstance = il.DeclareLocal(dbParameterType);
-                il.Emit(OpCodes.Stloc, dbParameterInstance);
+                int parameterLocalIndex = (effectiveLocalIndex == 0 ? offsetIndex : effectiveLocalIndex) + 1;
+                il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in parameterLocalIndex), dbParameterInstance);
                 
 
                 if (options.IsTransactionOperation)
@@ -878,14 +889,14 @@ namespace TData.Core.Provider
                 }
                 else
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                 }
 
                 il.Emit(OpCodes.Callvirt, parametersProperty);
-                il.Emit(OpCodes.Ldloc, dbParameterInstance);
+                il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in parameterLocalIndex), dbParameterInstance);
                 il.Emit(OpCodes.Callvirt, addParameterMethod);
                 il.Emit(OpCodes.Pop);
-
+                offsetIndex = parameterLocalIndex + 1;
                 index++;
             }
         }
@@ -909,14 +920,14 @@ namespace TData.Core.Provider
         * handle default values as null (default) or compatible with DbType that way load parameters could be more fluent
         * recommended use null-able properties for a natural interpretation of null values
         */
-        private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter, in bool isExpressionRequest, in int index)
+        private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter, in bool isExpressionRequest, in int localIndex)
         {
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldind_Ref);
 
             if (isExpressionRequest)
             {
-                il.Emit(OpCodes.Ldc_I4, index);
+                ReflectionEmitHelper.EmitInt32Value(in il, in localIndex);
                 il.Emit(OpCodes.Ldelem_Ref);
 
                 //given is an object[] need to cast values
@@ -998,7 +1009,7 @@ namespace TData.Core.Provider
 
         #endregion
 
-        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
+        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value, in int effectiveLocalIndex)
         {
             //parameterName: string
             //parameterType: NpgsqlTypes
@@ -1016,18 +1027,18 @@ namespace TData.Core.Provider
                 return;
 
             il.Emit(OpCodes.Ldstr, $"@{parameter.Name.ToLower()}");
-            il.Emit(OpCodes.Ldc_I4, parameter.DbType);
-            il.Emit(OpCodes.Ldc_I4, parameter.Size);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.DbType);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Size);
             il.Emit(OpCodes.Ldnull);
-            il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
+            ReflectionEmitHelper.EmitInt32Value(in il, (int)parameter.Direction);
             il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-            il.Emit(OpCodes.Ldc_I4, parameter.Scale);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Precision);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Scale);
             il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
-            il.Emit(OpCodes.Ldloc, value);
+            il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), value);
         }
 
-        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
+        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value, in int effectiveLocalIndex)
         {
             //parameterName: string
             //value: object
@@ -1040,11 +1051,11 @@ namespace TData.Core.Provider
             }
             else
             {
-               il.Emit(OpCodes.Ldloc, value);
+               il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), value);
             }
         }
 
-        public static MethodInfo GetMethodInfoConverterClass(Type type)
+        public static MethodInfo GetMethodInfoConverterClass(in Type type)
         {
             if (!typeof(IInParameterValueConverter).IsAssignableFrom(type))
             {

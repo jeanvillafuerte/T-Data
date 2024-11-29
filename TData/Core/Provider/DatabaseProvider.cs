@@ -34,28 +34,10 @@ namespace TData.Core.Provider
         public static ConfigureCommandDelegate2 GetCommandMetaData2(in LoaderConfiguration options, in DbParameterInfo[] parameters)
         {
             DbParameterInfo[] localParameters = parameters;
-            return (ConfigureCommandDelegate2)GetSetupCommandDelegate(false, null, in options, false, out var hasOutputParams, ref localParameters);
-        }
-
-        public static void RemoveSequentialAccess(in int key)
-        {
-            if (CommandMetadata.TryGetValue(key, out var metadata))
-            {
-                CommandMetadata.TryUpdate(key, metadata.CloneNoCommandSequential(), metadata);
-            }
+            return (ConfigureCommandDelegate2)GetSetupCommandDelegate(false, null, in options, false, out _, ref localParameters);
         }
 
         #endregion build connection
-
-        public static DbCommand CreateCommand(in DbConnection connection, in string script, in CommandType commandType, in int timeout)
-        {
-            var command = connection.CreateCommand();
-            command.CommandText = script;
-            command.CommandTimeout = timeout;
-            command.CommandType = commandType;
-
-            return command;
-        }
 
         public static bool IsCancelatedOperationException(in Exception exception)
         {

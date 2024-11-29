@@ -1,12 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Data.Common;
 using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TData.InternalCache;
@@ -16,8 +11,8 @@ using TData.Core.QueryGenerator;
 using TData.Configuration;
 using TData.DbResult;
 
-[assembly: InternalsVisibleTo("TData.Cache")]
-[assembly: InternalsVisibleTo("TData.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Cache")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
 
 namespace TData
 {
@@ -26,8 +21,8 @@ namespace TData
 
         internal readonly DbSettings Options;
         private readonly ISqlFormatter Formatter;
-        private DbTransaction _transaction;
-        private DbCommand _command;
+        private System.Data.Common.DbTransaction _transaction;
+        private System.Data.Common.DbCommand _command;
         private bool _transactionCompleted;
         private readonly bool _buffered;
 
@@ -615,9 +610,13 @@ namespace TData
         {
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            var item = command.ReadListItems<T>(1).FirstOrDefault();
+            var items = command.ReadListItems<T>(1);
             command.SetValuesOutFields();
-            return item;
+
+            if (items.Count == 0)
+                return default;
+            else
+                return items[0];
         }
 
         public T FetchOne<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
@@ -626,7 +625,11 @@ namespace TData
             var script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectSingle, out var values);
             using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return command.ReadListItems<T>(1).FirstOrDefault();
+            var items = command.ReadListItems<T>(1);
+            if (items.Count == 0)
+                return default;
+            else
+                return items[0];
         }
 
         public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
@@ -643,7 +646,11 @@ namespace TData
 #endif
             using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return (await command.ReadListItemsAsync<T>(cancellationToken, 1)).FirstOrDefault();
+            var items = await command.ReadListItemsAsync<T>(cancellationToken, 1);
+            if (items.Count == 0)
+                return default;
+            else
+                return items[0];
         }
 
         public DbOpResult<T> TryFetchOne<T>(in string script, in object parameters = null)
@@ -669,7 +676,11 @@ namespace TData
 #endif
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            return (await command.ReadListItemsAsync<T>(cancellationToken, 1)).FirstOrDefault();
+            var items = await command.ReadListItemsAsync<T>(cancellationToken, 1);
+            if (items.Count == 0)
+                return default;
+            else
+                return items[0];
         }
 
         public async Task<T> FetchOneAsync<T>(string script, object parameters = null)
@@ -1623,7 +1634,7 @@ namespace TData
                 return ex.Message;
             }
 
-            var stringBuilder = new StringBuilder();
+            var stringBuilder = new System.Text.StringBuilder();
             stringBuilder.AppendLine("Store Procedure/Script:")
                          .AppendLine("\t" + script);
 
@@ -1649,7 +1660,7 @@ namespace TData
             stringBuilder.AppendLine();
             return stringBuilder.ToString();
 
-            static string ErrorFormat(in object val, PropertyInfo info)
+            static string ErrorFormat(in object val, System.Reflection.PropertyInfo info)
             {
                 return "\t" + info.Name + " : " + (info.GetValue(val) ?? "NULL") + " ";
             }
@@ -1708,15 +1719,18 @@ namespace TData
             if (Options.SqlProvider == SqlProvider.Oracle)
             {
                 command.ExecuteNonQuery();
-                var param = command.OutParameters.First();
-                rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
+                foreach(var param in command.OutParameters)
+                {
+                    rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
+                    break;
+                }
             }
             else
             {
                 rawValue = command.ExecuteScalar();
             }
 
-            return (TE)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(TE), true);
+            return (TE)TypeConversionRegistry.ConvertOutParameterValue(in Options.SqlProvider, rawValue, typeof(TE), true);
         }
 
         private static readonly DbCommandConfiguration UpdateConfig = new DbCommandConfiguration(
@@ -1852,7 +1866,7 @@ namespace TData
                 if (type != null)
                 {
                     var genericType = typeof(CacheTypeParser<>).MakeGenericType(type);
-                    var method = genericType.GetMethod("Clear", BindingFlags.NonPublic | BindingFlags.Static);
+                    var method = genericType.GetMethod("Clear", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     method.Invoke(null, null);
                 }
             }
@@ -1862,9 +1876,10 @@ namespace TData
         }
     }
 
+    [Flags]
     public enum TransactionResult : byte
     {
         Committed = 0,
-        Rollbacked = 1
+        Rollbacked = 1 << 0
     }
 }

@@ -3,8 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Oracle = TData.Core.Converters.Oracle;
-using SQLite = TData.Core.Converters.SQLite;
 
 namespace TData.Core.Converters
 {
