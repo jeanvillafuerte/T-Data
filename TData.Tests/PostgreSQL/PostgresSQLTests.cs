@@ -142,6 +142,32 @@ namespace TData.Tests.PostgreSQL
                             $$ LANGUAGE plpgsql;");
                 db.Execute("DROP PROCEDURE IF EXISTS CLONE_USER(IN INTEGER)");
                 db.Execute("CREATE PROCEDURE CLONE_USER(IN user_id INTEGER) AS $$ BEGIN INSERT INTO USERS (USER_TYPE_ID, NAME, STATE, SALARY, BIRTHDAY, USERCODE, ICON) SELECT USER_TYPE_ID, NAME, STATE, SALARY, BIRTHDAY, USERCODE, ICON FROM USERS WHERE ID = user_id; END; $$ LANGUAGE plpgsql;");
+                db.Execute("DROP PROCEDURE IF EXISTS BULK_INSERT_USER_DATA(IN INTEGER)");
+                db.Execute(@"CREATE PROCEDURE BULK_INSERT_USER_DATA(IN total INTEGER)
+                            AS $$
+                            BEGIN
+                                FOR i IN 1..total LOOP
+                                    INSERT INTO USERS (
+                                        USER_TYPE_ID, 
+                                        NAME,
+                                        STATE, 
+                                        SALARY, 
+                                        BIRTHDAY, 
+                                        USERCODE, 
+                                        ICON
+                                    ) 
+                                    VALUES (
+                                        FLOOR(RANDOM() * 10 + 1)::INTEGER,
+                                        SUBSTRING(MD5(RANDOM()::TEXT), 1, 16),
+                                        CASE WHEN RANDOM() > 0.5 THEN B'1' ELSE B'0' END,
+                                        ROUND((RANDOM() * 70000 + 30000)::NUMERIC, 4),
+                                        CURRENT_DATE - (RANDOM() * 50 * 365)::INTEGER,
+                                        GEN_RANDOM_UUID(),
+                                        NULL
+                                    );
+                                END LOOP;
+                            END;
+                            $$ LANGUAGE plpgsql;");
             });
 
             Assert.Pass();
@@ -194,6 +220,56 @@ namespace TData.Tests.PostgreSQL
             var dbContext = DbHub.Use("db1");
             var users = dbContext.FetchList<User>();
             Assert.That(users, Is.Not.Null);
+        }
+
+        [Test, Order(9)]
+        public void InsertDummyRecords()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Execute("BULK_INSERT_USER_DATA", new { total = 5000 });
+            Assert.Pass();
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageList(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedList<User>("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageRows(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedRows("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public async Task FetchPageListAsync(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            await foreach (var items in dbContext.FetchPagedListAsync<User>("SELECT * FROM USERS", offset: 0, pageSize, null, CancellationToken.None))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
         }
 
         [Test]

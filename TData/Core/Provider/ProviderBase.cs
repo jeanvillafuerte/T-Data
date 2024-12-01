@@ -74,7 +74,7 @@ namespace TData.Core.Provider
                     argTypes,
                     connectionType.Module);
 
-                var il = method.GetILGenerator();
+                var il = method.GetILGenerator(64);
 
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Newobj, constructorInfo);
@@ -99,11 +99,12 @@ namespace TData.Core.Provider
         public readonly int DbType;
         public readonly object Value;
         public readonly IInParameterValueConverter Converter;
+        public readonly bool PagingParameter;
 
         public bool IsInput => Direction == ParameterDirection.Input || Direction == ParameterDirection.InputOutput;
         public bool IsOutput => Direction == ParameterDirection.Output || Direction == ParameterDirection.InputOutput || Direction == ParameterDirection.ReturnValue;
 
-        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in int scale, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value, in IInParameterValueConverter converter)
+        public DbParameterInfo(in string name, in string bindName, in int size, in int precision, in int scale, in ParameterDirection direction, in PropertyInfo propertyInfo, in Type propertyType, in int dbType, in object value, in IInParameterValueConverter converter, in bool pagingParameter = false)
         {
             Name = name;
             BindName = bindName;
@@ -116,6 +117,7 @@ namespace TData.Core.Provider
             DbType = dbType;
             Value = value;
             Converter = converter;
+            PagingParameter = pagingParameter;
         }
     }
 }

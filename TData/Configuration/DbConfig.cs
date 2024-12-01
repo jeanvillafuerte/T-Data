@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using TData.Core.FluentApi;
 using TData.Core.Provider;
 
@@ -10,7 +9,7 @@ namespace TData.Configuration
     {
         private static readonly ConcurrentDictionary<int, DbSettings> dictionary = new ConcurrentDictionary<int, DbSettings>(Environment.ProcessorCount * 2, 10);
         internal static ConcurrentDictionary<string, DbTable> Tables = new ConcurrentDictionary<string, DbTable>(Environment.ProcessorCount * 2, 10);
-
+        private static int _defaultSignatureHash;
         /// <summary>
         /// Clears all the configurations and tables.
         /// </summary>
@@ -28,6 +27,7 @@ namespace TData.Configuration
         public static void Register(in DbSettings config)
         {
             var key = HashHelper.GenerateHash(config.Signature);
+            _defaultSignatureHash = key;
             if (!dictionary.TryAdd(key, config))
                 throw new DuplicateSignatureException();
 
@@ -48,7 +48,10 @@ namespace TData.Configuration
         internal static DbSettings Get()
         {
             if (dictionary.Count == 1)
-                return dictionary.Values.First();
+            {
+                dictionary.TryGetValue(_defaultSignatureHash, out var value);
+                return value;
+            }
             else
                 throw new Exception("There is more than one configuration, use the method Get(string signature)");
         }

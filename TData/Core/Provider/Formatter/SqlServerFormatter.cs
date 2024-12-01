@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Text;
 using TData.Core.FluentApi;
 using TData.Core.QueryGenerator;
@@ -13,6 +12,11 @@ namespace TData.Core.Provider.Formatter
         readonly string ISqlFormatter.MinDate => "CONVERT(DATETIME, N'1900-01-01', 102)";
         readonly string ISqlFormatter.MaxDate => "CONVERT(DATETIME, N'9999-12-31', 102)";
         readonly string ISqlFormatter.CurrentDate => "GETDATE()";
+
+        readonly string ISqlFormatter.PagingQuery(in string query)
+        {
+            return $"{query} OFFSET @{DatabaseHelperProvider.OFFSET_PARAMETER} ROWS FETCH NEXT @{DatabaseHelperProvider.PAGESIZE_PARAMETER} ROWS ONLY";
+        }
 
         readonly string ISqlFormatter.Concatenate(params string[] values) => $"CONCAT({string.Join(",", values)})";
 

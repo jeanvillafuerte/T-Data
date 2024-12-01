@@ -1,12 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Data.Common;
 using System.Linq.Expressions;
-using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TData.InternalCache;
@@ -14,9 +9,10 @@ using TData.Core.Converters;
 using TData.Core.Provider;
 using TData.Core.QueryGenerator;
 using TData.Configuration;
+using TData.DbResult;
 
-[assembly: InternalsVisibleTo("TData.Cache")]
-[assembly: InternalsVisibleTo("TData.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Cache")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
 
 namespace TData
 {
@@ -25,8 +21,8 @@ namespace TData
 
         internal readonly DbSettings Options;
         private readonly ISqlFormatter Formatter;
-        private DbTransaction _transaction;
-        private DbCommand _command;
+        private System.Data.Common.DbTransaction _transaction;
+        private System.Data.Common.DbCommand _command;
         private bool _transactionCompleted;
         private readonly bool _buffered;
 
@@ -454,9 +450,7 @@ namespace TData
         {
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            var affected = command.ExecuteNonQuery();
-            command.SetValuesOutFields();
-            return affected;
+            return command.ExecuteNonQuery();
         }
 
         public DbOpResult TryExecute(in string script, in object parameters = null)
@@ -496,7 +490,6 @@ namespace TData
                     throw new TaskCanceledException();
 
                 response = await command.ExecuteNonQueryAsync(cancellationToken);
-                command.SetValuesOutFields();
             }
             catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || DatabaseProvider.IsCancelatedOperationException(in ex))
             {
@@ -521,9 +514,7 @@ namespace TData
             if (cancellationToken.IsCancellationRequested)
                 throw new TaskCanceledException();
 
-            var affected = await command.ExecuteNonQueryAsync(cancellationToken);
-            command.SetValuesOutFields();
-            return affected;
+            return await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         public async Task<int> ExecuteAsync(string script, object parameters = null)
@@ -552,7 +543,6 @@ namespace TData
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             var rawValue = command.ExecuteScalar();
-            command.SetValuesOutFields();
             return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
         }
 
@@ -570,7 +560,6 @@ namespace TData
                 throw new TaskCanceledException();
 
             var rawValue = await command.ExecuteScalarAsync(cancellationToken);
-            command.SetValuesOutFields();
             return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
         }
 
@@ -614,9 +603,7 @@ namespace TData
         {
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            var item = command.ReadListItems<T>().FirstOrDefault();
-            command.SetValuesOutFields();
-            return item;
+            return command.ProcessReaderToSingle<T>();
         }
 
         public T FetchOne<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
@@ -625,7 +612,7 @@ namespace TData
             var script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectSingle, out var values);
             using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return command.ReadListItems<T>().FirstOrDefault();
+            return command.ProcessReaderToSingle<T>();
         }
 
         public async Task<T> FetchOneAsync<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
@@ -642,7 +629,7 @@ namespace TData
 #endif
             using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return (await command.ReadListItemsAsync<T>(cancellationToken)).FirstOrDefault();
+            return await command.ProcessReaderToSingleAsync<T>(cancellationToken);
         }
 
         public DbOpResult<T> TryFetchOne<T>(in string script, in object parameters = null)
@@ -668,7 +655,7 @@ namespace TData
 #endif
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            return (await command.ReadListItemsAsync<T>(cancellationToken)).FirstOrDefault();
+            return await command.ProcessReaderToSingleAsync<T>(cancellationToken);
         }
 
         public async Task<T> FetchOneAsync<T>(string script, object parameters = null)
@@ -712,13 +699,18 @@ namespace TData
                                                                         skipAutoGeneratedColumn: false,
                                                                         generateParameterWithKeys: false);
 
+        internal List<T> FetchList<T>(in string script, in object[] parameters)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in parameters, in _transaction, in _command);
+            command.Prepare2();
+            return command.ProcessReaderToList<T>();
+        }
+
         public List<T> FetchList<T>(in string script, in object parameters = null)
         {
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
-            var result = command.ReadListItems<T>();
-            command.SetValuesOutFields();
-            return result;
+            return command.ProcessReaderToList<T>();
         }
 
         public List<T> FetchList<T>(Expression<Func<T, bool>> where = null, Expression<Func<T, object>> selector = null)
@@ -727,7 +719,7 @@ namespace TData
             string script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectList, out var values);
             using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return command.ReadListItems<T>();
+            return command.ProcessReaderToList<T>();
         }
 
         public DbOpResult<List<T>> TryFetchList<T>(in string script, in object parameters = null)
@@ -752,14 +744,8 @@ namespace TData
             await
 #endif
             using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
-
             command.Prepare();
-
-            var result = await command.ReadListItemsAsync<T>(cancellationToken);
-
-            command.SetValuesOutFields();
-
-            return result;
+            return await command.ProcessReaderToListAsync<T>(cancellationToken);
         }
 
         public async Task<List<T>> FetchListAsync<T>(string script, object parameters = null)
@@ -778,7 +764,7 @@ namespace TData
             var script = generator.GenerateSelect(where, selector, SqlOperation.SelectList, out var values);
             using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
-            return await command.ReadListItemsAsync<T>(cancellationToken);
+            return await command.ProcessReaderToListAsync<T>(cancellationToken);
         }
 
         public async Task<DbOpAsyncResult<List<T>>> TryFetchListAsync<T>(string script, object parameters = null)
@@ -829,6 +815,33 @@ namespace TData
             var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return (command.Dispose, command.FetchDataAsync<T>(batchSize, cancellationToken));
+        }
+
+        public IEnumerable<List<T>> FetchPagedList<T>(string script, int offset, int pageSize, object parameters = null)
+        {
+            var newPaginatedScript = new SQLGenerator<T>(in Formatter).GeneratePagingQuery(script);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            command.Prepare();
+
+            return command.ReadBatchList<T>(offset, pageSize);
+        }
+
+        public IEnumerable<List<TDataRow>> FetchPagedRows(in string script, in int offset, in int pageSize, in object parameters = null)
+        {
+            var newPaginatedScript = new SQLGenerator<TDataRow>(in Formatter).GeneratePagingQuery(in script);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            command.Prepare();
+
+            return command.ReadBatchListDataRow(offset, pageSize);
+        }
+
+        public IAsyncEnumerable<List<T>> FetchPagedListAsync<T>(string script, int offset, int pageSize, object parameters, CancellationToken cancellationToken)
+        {
+            var newPaginatedScript = new SQLGenerator<T>(in Formatter).GeneratePagingQuery(script);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            command.Prepare();
+
+            return command.ReadBatchListAsync<T>(offset, pageSize, cancellationToken);
         }
 
         #endregion streaming
@@ -1582,7 +1595,7 @@ namespace TData
                 return ex.Message;
             }
 
-            var stringBuilder = new StringBuilder();
+            var stringBuilder = new System.Text.StringBuilder();
             stringBuilder.AppendLine("Store Procedure/Script:")
                          .AppendLine("\t" + script);
 
@@ -1608,7 +1621,7 @@ namespace TData
             stringBuilder.AppendLine();
             return stringBuilder.ToString();
 
-            static string ErrorFormat(in object val, PropertyInfo info)
+            static string ErrorFormat(in object val, System.Reflection.PropertyInfo info)
             {
                 return "\t" + info.Name + " : " + (info.GetValue(val) ?? "NULL") + " ";
             }
@@ -1667,15 +1680,18 @@ namespace TData
             if (Options.SqlProvider == SqlProvider.Oracle)
             {
                 command.ExecuteNonQuery();
-                var param = command.OutParameters.First();
-                rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
+                foreach(var param in command.OutParameters)
+                {
+                    rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
+                    break;
+                }
             }
             else
             {
                 rawValue = command.ExecuteScalar();
             }
 
-            return (TE)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(TE), true);
+            return (TE)TypeConversionRegistry.ConvertOutParameterValue(in Options.SqlProvider, rawValue, typeof(TE), true);
         }
 
         private static readonly DbCommandConfiguration UpdateConfig = new DbCommandConfiguration(
@@ -1811,7 +1827,7 @@ namespace TData
                 if (type != null)
                 {
                     var genericType = typeof(CacheTypeParser<>).MakeGenericType(type);
-                    var method = genericType.GetMethod("Clear", BindingFlags.NonPublic | BindingFlags.Static);
+                    var method = genericType.GetMethod("Clear", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     method.Invoke(null, null);
                 }
             }
@@ -1821,9 +1837,10 @@ namespace TData
         }
     }
 
+    [Flags]
     public enum TransactionResult : byte
     {
         Committed = 0,
-        Rollbacked = 1
+        Rollbacked = 1 << 0
     }
 }

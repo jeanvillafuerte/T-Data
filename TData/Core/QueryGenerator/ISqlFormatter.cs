@@ -14,6 +14,7 @@ namespace TData.Core.QueryGenerator
         string GenerateInsert(string tableName, string[] columns, string[] values, DbColumn column, bool returnGenerateId);
         string GenerateDelete(string tableName, string alias);
         string FormatOperator(string left, string right, ExpressionType expression);
+        string PagingQuery(in string query);
     }
 
 }

@@ -60,5 +60,10 @@ namespace TData.Core.Provider.Formatter
         {
             return $"DELETE FROM {tableName} {alias}";
         }
+
+        public string PagingQuery(in string query)
+        {
+            return $"{query} LIMIT @{DatabaseHelperProvider.PAGESIZE_PARAMETER} OFFSET @{DatabaseHelperProvider.OFFSET_PARAMETER}";
+        }
     }
 }

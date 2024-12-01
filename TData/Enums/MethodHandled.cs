@@ -1,19 +1,20 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
 
 namespace TData
 {
-    public enum MethodHandled : byte
+    [Flags]
+    internal enum MethodHandled
     {
         Execute = 0,
-        FetchListExpression = 1,
-        FetchListQueryString = 2,
-        FetchOneExpression = 3,
-        FetchOneQueryString = 4,
-        FetchTupleQueryString_2 = 5,
-        FetchTupleQueryString_3 = 6,
-        FetchTupleQueryString_4 = 7,
-        FetchTupleQueryString_5 = 8,
-        FetchTupleQueryString_6 = 9,
-        FetchTupleQueryString_7 = 10,
+        FetchListExpression = 1 << 0,
+        FetchListQueryString = 1 << 1,
+        FetchOneExpression = 1 << 2,
+        FetchOneQueryString = 1 << 3,
+        FetchTupleQueryString_2 = 1 << 4,
+        FetchTupleQueryString_3 = 1 << 5,
+        FetchTupleQueryString_4 = 1 << 6,
+        FetchTupleQueryString_5 = 1 << 7,
+        FetchTupleQueryString_6 = 1 << 8,
+        FetchTupleQueryString_7 = 1 << 9,
     }
 }

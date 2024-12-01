@@ -9,15 +9,19 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
 using System.Xml;
-using System.Xml.Linq;
 using TData.Configuration;
 using TData.Core.Converters;
+using TData.Helpers;
+using static TData.Core.Provider.DatabaseProvider;
 using Column = TData.Core.FluentApi.DbColumn;
 
 namespace TData.Core.Provider
 {
     internal static partial class DatabaseHelperProvider
     {
+        internal static string OFFSET_PARAMETER = "offSet_tdata";
+        internal static string PAGESIZE_PARAMETER = "pageSize_tdata";
+
         #region SqlServer
 
         internal static readonly Type SqlServerConnectionType = Type.GetType("Microsoft.Data.SqlClient.SqlConnection, Microsoft.Data.SqlClient")!;
@@ -227,7 +231,7 @@ namespace TData.Core.Provider
                 type ?? typeof(DatabaseHelperProvider),
                 true);
 
-            var il = method.GetILGenerator();
+            var il = method.GetILGenerator(64);
 
             if (!isExecuteNonQuery)
             {
@@ -289,7 +293,7 @@ namespace TData.Core.Provider
         /// <param name="allParameters">list of parameter</param>
         /// <returns>instance of specific DbCommand provider with values preloaded</returns>
         /// <exception cref="NotImplementedException"></exception>
-        internal static Delegate GetSetupCommandDelegate(in Type type, in LoaderConfiguration options, out bool hasOutputParameters, ref DbParameterInfo[] allParameters)
+        internal static Delegate GetSetupCommandDelegate(in bool isSingleType, in Type type, in LoaderConfiguration options, in bool addPagingParameters, out bool hasOutputParameters, ref DbParameterInfo[] allParameters)
         {
             hasOutputParameters = false;
 
@@ -335,24 +339,25 @@ namespace TData.Core.Provider
             if (connectionConstructor == null)
                 throw new DBProviderNotFoundException($"The provider {options.Provider} library was not found");
 
-            Type mainInputType = typeof(object);
-
-            if (allParameters != null && allParameters.Length > 0)
-                mainInputType = typeof(object[]);
+            Type mainInputType = isSingleType ? typeof(object) : typeof(object[]);
 
             var method = new DynamicMethod(
                 "SetupCommand" + InternalCounters.GetNextCommandHandlerCounter().ToString(),
                 typeof(DbCommand),
-                new[] { mainInputType, typeof(string), typeof(string), typeof(DbCommand) },
+                new[] { mainInputType.MakeByRefType(), 
+                        typeof(string).MakeByRefType(),
+                        typeof(string).MakeByRefType(), 
+                        typeof(DbCommand).MakeByRefType() },
                 type ?? typeof(DatabaseHelperProvider),
                 true);
 
-            var il = method.GetILGenerator();
+            var il = method.GetILGenerator(64);
 
             LocalBuilder commandInstance = null;
+            LocalBuilder connectionInstance = null;
 
             if (!options.IsTransactionOperation)
-                SetupCommandBase(in il, in options, out commandInstance);
+                SetupCommandBase(in il, in options, out connectionInstance, out commandInstance);
 
             if (allParameters != null && allParameters.Length > 0)
             {
@@ -360,7 +365,9 @@ namespace TData.Core.Provider
             }
             else
             {
-                if (type != null || options.AdditionalOracleRefCursors > 0)
+                var parameters = new LinkedList<DbParameterInfo>();
+
+                if (type != null)
                 {
                     Column[] properties = Array.Empty<Column>();
                     FluentApi.DbTable table = null;
@@ -383,11 +390,6 @@ namespace TData.Core.Provider
                             properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(x => new Column() { Property = x }).ToArray();
                         }
                     }
-
-                    int parameterToAdd = properties.Length + (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle ? 1 : 0) + options.AdditionalOracleRefCursors;
-                    var parameters = new DbParameterInfo[parameterToAdd];
-
-                    int counter = 0;
 
                     foreach (var item in properties)
                     {
@@ -449,7 +451,7 @@ namespace TData.Core.Provider
                         }
 
                     addParam:
-                        parameters[counter++] = new DbParameterInfo(
+                        parameters.AddLast(new DbParameterInfo(
                             name: attributes.Name ?? item.Property.Name,
                             bindName: null,
                             size: attributes.Size,
@@ -460,12 +462,12 @@ namespace TData.Core.Provider
                             propertyType: null,
                             dbType: enumValue,
                             value: null,
-                            converter: typeConverter);
+                            converter: typeConverter));
                     }
 
                     if (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle && table != null)
                     {
-                        parameters[counter++] = new DbParameterInfo(
+                        parameters.AddLast(new DbParameterInfo(
                             name: table.Key.Name,
                             bindName: null,
                             size: 0,
@@ -476,72 +478,103 @@ namespace TData.Core.Provider
                             propertyType: table.Key.Property.PropertyType,
                             dbType: options.Provider == SqlProvider.Sqlite ? 0 : GetEnumValue(in options.Provider, table.Key.Property.PropertyType),
                             value: null,
-                            converter: null);
+                            converter: null));
 
                         hasOutputParameters = true;
                     }
-
-                    if (options.AdditionalOracleRefCursors > 0)
-                    {
-                        for (int i = 1; i <= options.AdditionalOracleRefCursors; i++)
-                        {
-                            parameters[counter++] = new DbParameterInfo(
-                                name: $"C_CURSOR{i}",
-                                bindName: null,
-                                size: 0,
-                                precision: 0,
-                                scale: 0,
-                                direction: ParameterDirection.Output,
-                                propertyInfo: null,
-                                propertyType: null,
-                                dbType: 121,
-                                value: null,
-                                converter: null);
-                        }
-                    }
-
-                    SetupLoadParameter(in dbCommandType, in commandInstance, in il, parameters, in options, false);
-
-                    allParameters = parameters;
                 }
-                else
+
+                if (options.AdditionalOracleRefCursors > 0)
                 {
-                    allParameters = Array.Empty<DbParameterInfo>();
+                    for (int i = 1; i <= options.AdditionalOracleRefCursors; i++)
+                    {
+                        parameters.AddLast(new DbParameterInfo(
+                            name: $"C_CURSOR{i}",
+                            bindName: null,
+                            size: 0,
+                            precision: 0,
+                            scale: 0,
+                            direction: ParameterDirection.Output,
+                            propertyInfo: null,
+                            propertyType: null,
+                            dbType: 121,
+                            value: null,
+                            converter: null));
+                    }
                 }
+
+                if (addPagingParameters)
+                {
+                    var integerType = GetEnumValue(in options.Provider, typeof(int));
+
+                    parameters.AddLast(new DbParameterInfo(
+                       name: OFFSET_PARAMETER,
+                       bindName: null,
+                       size: 0,
+                       precision: 0,
+                       scale: 0,
+                       direction: ParameterDirection.Input,
+                       propertyInfo: null,
+                       propertyType: null,
+                       dbType: integerType,
+                       value: null,
+                       converter: null,
+                       pagingParameter: true));
+
+                    parameters.AddLast(new DbParameterInfo(
+                       name: PAGESIZE_PARAMETER,
+                       bindName: null,
+                       size: 0,
+                       precision: 0,
+                       scale: 0,
+                       direction: ParameterDirection.Input,
+                       propertyInfo: null,
+                       propertyType: null,
+                       dbType: integerType,
+                       value: null,
+                       converter: null,
+                       pagingParameter: true));
+                }
+
+                allParameters = parameters.Count == 0 ? Array.Empty<DbParameterInfo>() : parameters.ToArray();
+
+                if (allParameters.Length > 0)
+                    SetupLoadParameter(in dbCommandType, in commandInstance, in il, allParameters, in options, false);
             }
 
-            PrepareStatement(in options, in il, in commandInstance, in dbCommandType, in dbconnectionType);
+            PrepareStatement(in options, in il, in connectionInstance, in commandInstance, in dbCommandType, in dbconnectionType);
 
             //return command
             if (options.IsTransactionOperation)
             {
                 il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Ldind_Ref);
                 il.Emit(OpCodes.Ret);
             }
             else
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
                 il.Emit(OpCodes.Castclass, typeof(DbCommand));
                 il.Emit(OpCodes.Ret);
             }
 
-            Type funcType = Expression.GetFuncType(new [] { mainInputType, typeof(string), typeof(string), typeof(DbCommand), typeof(DbCommand) } );
+            Type delegateType = isSingleType ? typeof(ConfigureCommandDelegate) : typeof(ConfigureCommandDelegate2);
 
-            return method.CreateDelegate(funcType);
+            return method.CreateDelegate(delegateType);
         }
 
         private const int DataRowVersionDefault = (int)DataRowVersion.Default;
 
-        private static void PrepareStatement(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+        private static void PrepareStatement(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder connectionInstance, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
         {
             if (options.ShouldPrepareStatement())
             {
-                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+                OpenConnection(in options, in il, in connectionInstance, in dbConnectionType);
                 PrepareStatementInternal(in options, in il, in commandInstance, in dbCommandType);
             }
             else
             {
-                OpenConnection(in options, in il, in commandInstance, in dbCommandType, in dbConnectionType);
+                OpenConnection(in options, in il, in connectionInstance, in dbConnectionType);
             }
 
             static void PrepareStatementInternal(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType)
@@ -550,22 +583,22 @@ namespace TData.Core.Provider
                if (options.IsTransactionOperation)
                 {
                     il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Ldind_Ref);
                     il.Emit(OpCodes.Callvirt, typeof(DbCommand).GetMethod("Prepare"));
                 }
                 else
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Call, dbCommandType.GetMethod("Prepare"));
                 }
             }
 
-            static void OpenConnection(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder commandInstance, in Type dbCommandType, in Type dbConnectionType)
+            static void OpenConnection(in LoaderConfiguration options, in ILGenerator il, in LocalBuilder connectionInstance, in Type dbConnectionType)
             {
                 if (!options.IsTransactionOperation)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
-                    il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("Connection", dbConnectionType).GetGetMethod());
-                    il.Emit(OpCodes.Callvirt, typeof(DbConnection).GetMethod("Open"));
+                    il.Emit(OpCodes.Ldloc_0, connectionInstance);
+                    il.Emit(OpCodes.Call, dbConnectionType.GetMethod("Open", BindingFlags.Instance | BindingFlags.Public, null, Type.EmptyTypes, null));
                 }
             }
         }
@@ -594,7 +627,7 @@ namespace TData.Core.Provider
            throw new NotSupportedException($"Conversion not supported from {type.Name} to Enum {dbTypes[type]} in {provider} mapping");
         }
 
-        private static void SetupCommandBase(in ILGenerator il, in LoaderConfiguration options, out LocalBuilder commandInstance)
+        private static void SetupCommandBase(in ILGenerator il, in LoaderConfiguration options, out LocalBuilder connectionInstance, out LocalBuilder commandInstance)
         {
             ConstructorInfo connectionConstructor = null;
             ConstructorInfo commandConstructor = null;
@@ -639,32 +672,34 @@ namespace TData.Core.Provider
                 throw new NotImplementedException($"The provider {options.Provider} library was not found");
 
             //declare connection
-            var connectionInstance = il.DeclareLocal(dbconnectionType);
+            connectionInstance = il.DeclareLocal(dbconnectionType);
             il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Ldind_Ref);
             il.Emit(OpCodes.Newobj, connectionConstructor);
-            il.Emit(OpCodes.Stloc, connectionInstance);
+            il.Emit(OpCodes.Stloc_0, connectionInstance);
 
             commandInstance = il.DeclareLocal(dbCommandType);
 
             //instance command
             il.Emit(OpCodes.Ldarg_2);
-            il.Emit(OpCodes.Ldloc, connectionInstance);
+            il.Emit(OpCodes.Ldind_Ref);
+            il.Emit(OpCodes.Ldloc_0, connectionInstance);
             il.Emit(OpCodes.Newobj, commandConstructor);
-            il.Emit(OpCodes.Stloc, commandInstance);
+            il.Emit(OpCodes.Stloc_1, commandInstance);
 
             //set command type
             if (options.CommandType != CommandType.Text)
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
-                il.Emit(OpCodes.Ldc_I4, (int)options.CommandType);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
+                ReflectionEmitHelper.EmitInt32Value(in il, (int)options.CommandType);
                 il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("CommandType").GetSetMethod(true));
             }
 
             //set timeout
             if (options.Timeout > 0)
             {
-                il.Emit(OpCodes.Ldloc, commandInstance);
-                il.Emit(OpCodes.Ldc_I4, options.Timeout);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
+                ReflectionEmitHelper.EmitInt32Value(in il, in options.Timeout);
                 il.Emit(OpCodes.Callvirt, dbCommandType.GetProperty("CommandTimeout").GetSetMethod(true));
             }
 
@@ -673,18 +708,18 @@ namespace TData.Core.Provider
             {
                 if (options.AdditionalOracleRefCursors == 0)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Ldc_I4_1);
                     il.EmitCall(OpCodes.Callvirt, OracleDbCommandBindByName, null);
                 }
 
-                il.Emit(OpCodes.Ldloc, commandInstance);
+                il.Emit(OpCodes.Ldloc_1, commandInstance);
                 il.Emit(OpCodes.Ldc_I4_M1);
                 il.EmitCall(OpCodes.Callvirt, OracleDbCommandInitialLONGFetchSize, null);
 
                 if (options.FetchSize > 0)
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                     il.Emit(OpCodes.Ldc_I8, (long)options.FetchSize);
                     il.EmitCall(OpCodes.Call, OracleDbCommandFetchSize, null);
                 }
@@ -740,16 +775,31 @@ namespace TData.Core.Provider
             }
 
             int index = 0;
+            int offsetIndex = options.IsTransactionOperation ? 0 : 1; //skip the connection and command parameters index
             foreach (var parameter in parameters)
             {
                 LocalBuilder localValue = null;
                 LocalBuilder convertedValue = null;
 
+                int valueLocalIndex = 0;
+                int convertedValueLocalIndex = 0;
+
                 if (parameter.IsInput)
                 {
+                    valueLocalIndex = index == 0 && !options.IsTransactionOperation ? offsetIndex + 1 : offsetIndex;
                     localValue = il.DeclareLocal(typeof(object));
-                    EmitValue(in il, in parameter, in isExpressionRequest, in index);
-                    il.Emit(OpCodes.Stloc, localValue);
+
+                    if (parameter.PagingParameter)
+                    {
+                        //emit zero
+                        il.Emit(OpCodes.Ldc_I4_0);
+                    }
+                    else
+                    {
+                        EmitValue(in il, in parameter, in isExpressionRequest, in index);
+                    }
+
+                    il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in valueLocalIndex), localValue);
 
                     if (parameter.Converter != null)
                     {
@@ -758,7 +808,7 @@ namespace TData.Core.Provider
 
                         if (isNullableType)
                         {
-                           il.Emit(OpCodes.Ldloc, localValue);
+                           il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in valueLocalIndex), localValue);
                            il.Emit(OpCodes.Ldnull);
                            il.Emit(OpCodes.Ceq);
                            il.Emit(OpCodes.Brfalse_S, convertNotNull);
@@ -768,15 +818,17 @@ namespace TData.Core.Provider
                         var localConverter = il.DeclareLocal(converterType);
                         var constructorInfo = converterType.GetConstructor(Type.EmptyTypes);
                         il.Emit(OpCodes.Newobj, constructorInfo);
-                        il.Emit(OpCodes.Stloc, localConverter);
+                        var convertedIndex = valueLocalIndex + 1;
+                        il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedIndex), localConverter);
 
-                        il.Emit(OpCodes.Ldloc, localConverter);
-                        il.Emit(OpCodes.Ldloc, localValue);
-                        il.Emit(OpCodes.Callvirt, GetMethodInfoConverterClass(converterType));
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in convertedIndex), localConverter);
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in valueLocalIndex), localValue);
+                        il.Emit(OpCodes.Callvirt, GetMethodInfoConverterClass(in converterType));
 
                         //declare convertedValue variable
+                        convertedValueLocalIndex = convertedIndex + 1;
                         convertedValue = il.DeclareLocal(typeof(object));
-                        il.Emit(OpCodes.Stloc, convertedValue);
+                        il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedValueLocalIndex), convertedValue);
 
                         //close if
                         if (isNullableType)
@@ -785,28 +837,30 @@ namespace TData.Core.Provider
 
                             //if false load DbNull.Value into the convertedValue
                             il.Emit(OpCodes.Ldsfld, typeof(DBNull).GetField("Value"));
-                            il.Emit(OpCodes.Stloc, convertedValue);
+                            il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in convertedValueLocalIndex), convertedValue);
                         }
                     }
                 }
 
+                var effectiveLocalIndex = convertedValueLocalIndex > 0 ? convertedValueLocalIndex : valueLocalIndex;
+                var effectiveLocal = convertedValue ?? localValue;
                 if (options.Provider == SqlProvider.Sqlite)
                 {
-                    BuildSqliteParameter(in il, in parameter, value: convertedValue ?? localValue);
+                    BuildSqliteParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
                 else if (options.Provider == SqlProvider.PostgreSql)
                 {
-                    BuildPostgresParameter(in il, in parameter, convertedValue ?? localValue);
+                    BuildPostgresParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
                 else
                 {
                     il.Emit(OpCodes.Ldstr, parameter.Name);
-                    il.Emit(OpCodes.Ldc_I4, parameter.DbType);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Size);
-                    il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.DbType);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Size);
+                    ReflectionEmitHelper.EmitInt32Value(in il, (int)parameter.Direction);
                     il.Emit(OpCodes.Ldc_I4_1);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-                    il.Emit(OpCodes.Ldc_I4, parameter.Scale);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Precision);
+                    ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Scale);
                     il.Emit(OpCodes.Ldnull);
                     il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
 
@@ -816,31 +870,33 @@ namespace TData.Core.Provider
                     }
                     else
                     {
-                        il.Emit(OpCodes.Ldloc, convertedValue ?? localValue);
+                        il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), effectiveLocal);
                     }
                 }
 
                 il.Emit(OpCodes.Newobj, parameterConstructor);
 
                 var dbParameterInstance = il.DeclareLocal(dbParameterType);
-                il.Emit(OpCodes.Stloc, dbParameterInstance);
+                int parameterLocalIndex = (effectiveLocalIndex == 0 ? offsetIndex : effectiveLocalIndex) + 1;
+                il.Emit(ReflectionEmitHelper.GetStoreLocalValueOpCode(in parameterLocalIndex), dbParameterInstance);
                 
 
                 if (options.IsTransactionOperation)
                 {
                     il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Ldind_Ref);
                     il.Emit(OpCodes.Castclass, dbCommandType);
                 }
                 else
                 {
-                    il.Emit(OpCodes.Ldloc, commandInstance);
+                    il.Emit(OpCodes.Ldloc_1, commandInstance);
                 }
 
                 il.Emit(OpCodes.Callvirt, parametersProperty);
-                il.Emit(OpCodes.Ldloc, dbParameterInstance);
+                il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in parameterLocalIndex), dbParameterInstance);
                 il.Emit(OpCodes.Callvirt, addParameterMethod);
                 il.Emit(OpCodes.Pop);
-
+                offsetIndex = parameterLocalIndex + 1;
                 index++;
             }
         }
@@ -864,13 +920,14 @@ namespace TData.Core.Provider
         * handle default values as null (default) or compatible with DbType that way load parameters could be more fluent
         * recommended use null-able properties for a natural interpretation of null values
         */
-        private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter, in bool isExpressionRequest, in int index)
+        private static void EmitValue(in ILGenerator il, in DbParameterInfo parameter, in bool isExpressionRequest, in int localIndex)
         {
             il.Emit(OpCodes.Ldarg_0);
+            il.Emit(OpCodes.Ldind_Ref);
 
             if (isExpressionRequest)
             {
-                il.Emit(OpCodes.Ldc_I4, index);
+                ReflectionEmitHelper.EmitInt32Value(in il, in localIndex);
                 il.Emit(OpCodes.Ldelem_Ref);
 
                 //given is an object[] need to cast values
@@ -952,7 +1009,7 @@ namespace TData.Core.Provider
 
         #endregion
 
-        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
+        private static void BuildPostgresParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value, in int effectiveLocalIndex)
         {
             //parameterName: string
             //parameterType: NpgsqlTypes
@@ -970,18 +1027,18 @@ namespace TData.Core.Provider
                 return;
 
             il.Emit(OpCodes.Ldstr, $"@{parameter.Name.ToLower()}");
-            il.Emit(OpCodes.Ldc_I4, parameter.DbType);
-            il.Emit(OpCodes.Ldc_I4, parameter.Size);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.DbType);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Size);
             il.Emit(OpCodes.Ldnull);
-            il.Emit(OpCodes.Ldc_I4, (int)parameter.Direction);
+            ReflectionEmitHelper.EmitInt32Value(in il, (int)parameter.Direction);
             il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Ldc_I4, parameter.Precision);
-            il.Emit(OpCodes.Ldc_I4, parameter.Scale);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Precision);
+            ReflectionEmitHelper.EmitInt32Value(in il, in parameter.Scale);
             il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
-            il.Emit(OpCodes.Ldloc, value);
+            il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), value);
         }
 
-        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value)
+        private static void BuildSqliteParameter(in ILGenerator il, in DbParameterInfo parameter, in LocalBuilder value, in int effectiveLocalIndex)
         {
             //parameterName: string
             //value: object
@@ -994,11 +1051,11 @@ namespace TData.Core.Provider
             }
             else
             {
-               il.Emit(OpCodes.Ldloc, value);
+               il.Emit(ReflectionEmitHelper.GetLoadLocalValueOpCode(in effectiveLocalIndex), value);
             }
         }
 
-        public static MethodInfo GetMethodInfoConverterClass(Type type)
+        public static MethodInfo GetMethodInfoConverterClass(in Type type)
         {
             if (!typeof(IInParameterValueConverter).IsAssignableFrom(type))
             {
@@ -1054,11 +1111,11 @@ namespace TData.Core.Provider
         public readonly SqlProvider Provider;
         public readonly int FetchSize;
         public readonly int AdditionalOracleRefCursors;
-
+        public readonly bool ShouldIncludeSequentialBehavior;
         public readonly int Timeout;
         public readonly CommandType CommandType;
 
-        public LoaderConfiguration(in bool keyAsReturnValue, in bool skipAutoGeneratedColumn, in bool generateParameterWithKeys, in int additionalOracleRefCursors, in SqlProvider provider, in int fetchSize, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements, in bool canPrepareStatement)
+        public LoaderConfiguration(in bool keyAsReturnValue, in bool skipAutoGeneratedColumn, in bool generateParameterWithKeys, in int additionalOracleRefCursors, in SqlProvider provider, in int fetchSize, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements, in bool canPrepareStatement, in bool shouldIncludeSequentialBehavior)
         {
             KeyAsReturnValue = keyAsReturnValue;
             SkipAutoGeneratedColumn = skipAutoGeneratedColumn;
@@ -1071,6 +1128,7 @@ namespace TData.Core.Provider
             CommandType = commandType;
             PrepareStatements = prepareStatements;
             CanPrepareStatement = canPrepareStatement;
+            ShouldIncludeSequentialBehavior = shouldIncludeSequentialBehavior;
         }
 
         internal readonly bool ShouldPrepareStatement()

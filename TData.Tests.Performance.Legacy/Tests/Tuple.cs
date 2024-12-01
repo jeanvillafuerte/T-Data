@@ -1,6 +1,5 @@
 ﻿using System.Threading;
 using TData.Cache;
-using TData;
 using TData.Tests.Performance.Entities;
 
 namespace TData.Tests.Performance.Legacy.Tests

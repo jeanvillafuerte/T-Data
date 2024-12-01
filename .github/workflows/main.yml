@@ -43,6 +43,10 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v1
+    - name: Install .NET 9.x.x
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.x.x'  
     - name: .NET Build
       run: dotnet build TDataSolution.sln -c Release /p:CI=true
     - name: Library Tests

@@ -93,6 +93,87 @@ namespace TData.Tests.SQLite
             Assert.That(icon.Length, Is.EqualTo(user.Icon.Length));
         }
 
+        [Test, Order(9)]
+        public void InsertDummyRecords()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Execute(@"WITH RECURSIVE
+                                    generate_numbers AS (
+                                        SELECT 1 AS n
+                                        UNION ALL
+                                        SELECT n + 1
+                                        FROM generate_numbers
+                                        WHERE n < :total
+                                    )
+                                INSERT INTO USERS (
+                                    USER_TYPE_ID, 
+                                    NAME, 
+                                    STATE, 
+                                    SALARY, 
+                                    BIRTHDAY, 
+                                    USERCODE, 
+                                    ICON
+                                )
+                                SELECT 
+                                    ABS(RANDOM() % 10) + 1 AS USER_TYPE_ID,
+                                    CASE ABS(RANDOM() % 5) 
+                                        WHEN 0 THEN 'John Doe'
+                                        WHEN 1 THEN 'Jane Smith'
+                                        WHEN 2 THEN 'Alice Johnson'
+                                        WHEN 3 THEN 'Bob Brown'
+                                        ELSE 'Charlie Davis'
+                                    END AS NAME,
+                                    ABS(RANDOM() % 2) AS STATE,
+                                    ROUND((30000 + (RANDOM() % 70001)) / 1.0, 4) AS SALARY,
+                                    DATE('now', '-' || ABS(RANDOM() % (50 * 365)) || ' days') AS BIRTHDAY,
+                                    LOWER(HEX(RANDOMBLOB(16))) AS USERCODE,
+                                    NULL AS ICON
+                                FROM generate_numbers", new { total = 5000 });
+            Assert.Pass();
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageList(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedList<User>("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageRows(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedRows("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public async Task FetchPageListAsync(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            await foreach (var items in dbContext.FetchPagedListAsync<User>("SELECT * FROM USERS", offset: 0, pageSize, null, CancellationToken.None))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
         [Test]
         public void UpdateIfSingleColumn()
         {
