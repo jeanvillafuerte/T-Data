@@ -72,6 +72,36 @@ namespace TData.Tests.Oracle
                 db.Execute("CREATE OR REPLACE PROCEDURE GET_USER(id_param INTEGER, rCursor OUT SYS_REFCURSOR) IS BEGIN OPEN rCursor FOR SELECT * FROM USERS WHERE ID = id_param; END;");
                 db.Execute(@"CREATE OR REPLACE PROCEDURE GET_TOTALUSER(total OUT INTEGER, totalSalary OUT NUMBER) IS BEGIN SELECT COUNT(*), SUM(NVL(Salary, 0)) INTO total, totalSalary FROM USERS; END;");
                 db.Execute("CREATE OR REPLACE PROCEDURE GET_DATA(rCursor1 OUT SYS_REFCURSOR, rCursor2 OUT SYS_REFCURSOR) IS BEGIN OPEN rCursor1 FOR SELECT * FROM USERS; OPEN rCursor2 FOR SELECT * FROM USER_TYPE; END;");
+                db.Execute(@"CREATE OR REPLACE PROCEDURE BULK_INSERT_USER_DATA(total INTEGER)
+                                AS
+                                BEGIN
+                                    FOR i IN 1..total LOOP
+                                        INSERT INTO USERS (
+                                            USER_TYPE_ID, 
+                                            NAME, 
+                                            STATE, 
+                                            SALARY, 
+                                            BIRTHDAY, 
+                                            USERCODE, 
+                                            ICON
+                                        ) 
+                                        VALUES (
+                                            TRUNC(DBMS_RANDOM.VALUE(1, 11)),
+                                            CASE TRUNC(DBMS_RANDOM.VALUE(1, 6)) 
+                                                WHEN 1 THEN 'John Doe'
+                                                WHEN 2 THEN 'Jane Smith'
+                                                WHEN 3 THEN 'Alice Johnson'
+                                                WHEN 4 THEN 'Bob Brown'
+                                                WHEN 5 THEN 'Charlie Davis'
+                                            END,
+                                            TRUNC(DBMS_RANDOM.VALUE(0, 2)),
+                                            ROUND(DBMS_RANDOM.VALUE(30000, 100000), 4),
+                                            TRUNC(SYSDATE - DBMS_RANDOM.VALUE(1, 50 * 365)),
+                                            SYS_GUID(),
+                                            NULL);
+                                    END LOOP;
+                                    COMMIT;
+                                END;");
             });
 
             Assert.Pass();
@@ -124,6 +154,56 @@ namespace TData.Tests.Oracle
             var dbContext = DbHub.Use("db1");
             var users = dbContext.FetchList<User>();
             Assert.That(users, Is.Not.Null);
+        }
+
+        [Test, Order(9)]
+        public void InsertDummyRecords()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Execute("BULK_INSERT_USER_DATA", new { total = 5000 });
+            Assert.Pass();
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageList(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedList<User>("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageRows(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedRows("SELECT * FROM USERS", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public async Task FetchPageListAsync(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            await foreach (var items in dbContext.FetchPagedListAsync<User>("SELECT * FROM USERS", offset: 0, pageSize, null, CancellationToken.None))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
         }
 
         [Test]

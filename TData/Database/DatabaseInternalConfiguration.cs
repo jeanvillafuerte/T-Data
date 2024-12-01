@@ -7,7 +7,7 @@ namespace TData.Database
 {
     internal static class DatabaseInternalConfiguration
     {
-        internal static void SetFetchSizeOracleReader(DbDataReader reader, in int batchSize)
+        internal static void SetFetchSizeOracleReader(in DbDataReader reader, in int batchSize)
         {
             var rowSizeProperty = DatabaseHelperProvider.OracleDataReader.GetProperty("RowSize", BindingFlags.Public | BindingFlags.Instance).GetGetMethod();
             var fetchSizeProperty = DatabaseHelperProvider.OracleDataReader.GetProperty("FetchSize", BindingFlags.Public | BindingFlags.Instance).GetSetMethod();

@@ -101,7 +101,7 @@ namespace TData.Core
         Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> FetchTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null);
 
         IEnumerable<List<T>> FetchPagedList<T>(string script, int offset, int pageSize, object parameters = null);
-        IEnumerable<List<TDataRow>> FetchPagedRows(in string script, in int pageSize, in int offset, in object parameters = null);
+        IEnumerable<List<TDataRow>> FetchPagedRows(in string script,in int offset, in int pageSize, in object parameters = null);
         IAsyncEnumerable<List<T>> FetchPagedListAsync<T>(string script, int offset, int pageSize, object parameters, CancellationToken cancellationToken);
     }
 }

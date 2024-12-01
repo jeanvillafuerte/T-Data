@@ -69,6 +69,30 @@ namespace TData.Tests.SQLServer
                 db.Execute("ALTER PROCEDURE GET_TOTALUSER(@total INT OUTPUT, @totalSalary DECIMAL(15,2) OUTPUT) AS SELECT @total = COUNT(*),  @totalSalary = SUM(ISNULL(Salary, 0)) FROM USERS");
                 db.Execute("IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[GET_DATA]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [GET_DATA] AS' END");
                 db.Execute("ALTER PROCEDURE GET_DATA AS SELECT * FROM USERS; SELECT * FROM USER_TYPE");
+                db.Execute("IF NOT EXISTS (SELECT TOP 1 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[BULK_INSERT_USER_DATA]') AND type in (N'P', N'PC')) BEGIN EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [BULK_INSERT_USER_DATA] AS' END");
+                db.Execute(@"ALTER PROCEDURE BULK_INSERT_USER_DATA(@total INT) AS 
+                            DECLARE @IDX INT = 0
+							WHILE @IDX < @total
+							BEGIN
+								INSERT INTO USERS (
+                                        USER_TYPE_ID,
+                                        NAME,
+                                        STATE,
+                                        SALARY,
+                                        BIRTHDAY,
+                                        USERCODE,
+                                        ICON)
+								VALUES 
+                                     (
+                                        FLOOR(1 + (RAND() * 10)),
+                                        CONCAT('User_', FLOOR(1 + (RAND() * 10000))),
+                                        CASE WHEN RAND() < 0.5 THEN 1 ELSE 0 END,
+                                        ROUND(RAND() * 100000, 4),
+                                        DATEADD(DAY, ROUND(RAND() * -12, 0), GETDATE()),
+                                        NEWID(),
+                                        NULL)
+								SET @IDX = @IDX + 1;
+							END;");
             });
             
             Assert.Pass();
@@ -123,6 +147,55 @@ namespace TData.Tests.SQLServer
             Assert.That(users, Is.Not.Null);
         }
 
+        [Test, Order(9)]
+        public void InsertDummyRecords()
+        {
+            var dbContext = DbHub.Use("db1");
+            dbContext.Execute("BULK_INSERT_USER_DATA", new { total = 5000 });
+            Assert.Pass();
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageList(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedList<User>("SELECT * FROM USERS ORDER BY 1", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public void FetchPageRows(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            foreach (var items in dbContext.FetchPagedRows("SELECT * FROM USERS ORDER BY 1", offset: 0, pageSize, null))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
+
+        [Test, Order(10)]
+        [TestCase(100)]
+        [TestCase(200)]
+        [TestCase(500)]
+        [TestCase(1000)]
+        public async Task FetchPageListAsync(int pageSize)
+        {
+            var dbContext = DbHub.Use("db1");
+            await foreach (var items in dbContext.FetchPagedListAsync<User>("SELECT * FROM USERS ORDER BY 1", offset: 0, pageSize, null, CancellationToken.None))
+            {
+                Assert.That(items.Count, Is.GreaterThan(0));
+            }
+        }
 
         [Test]
         public void UpdateIfSingleColumn()

@@ -60,7 +60,7 @@ namespace TData.Core.Provider.Formatter
 
         public string PagingQuery(in string query)
         {
-            return $"{query} LIMIT @{DatabaseHelperProvider.OFFSET_PARAMETER} OFFSET @{DatabaseHelperProvider.PAGESIZE_PARAMETER}";
+            return $"{query} LIMIT @{DatabaseHelperProvider.PAGESIZE_PARAMETER} OFFSET @{DatabaseHelperProvider.OFFSET_PARAMETER}";
         }
     }
 }
