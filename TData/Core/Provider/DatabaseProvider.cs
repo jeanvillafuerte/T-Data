@@ -14,7 +14,7 @@ namespace TData.Core.Provider
         #region build connection
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static DbConnection CreateConnection(in SqlProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
+        internal static DbConnection CreateConnection(in DbProvider provider, in string stringConnection) => ConnectionCache[provider](stringConnection);
         
         public delegate DbCommand ConfigureCommandDelegate(in object command, in string connectionString, in string commandText, in DbCommand existingCommand);
         public delegate DbCommand ConfigureCommandDelegate2(in object[] command, in string connectionString, in string commandText, in DbCommand existingCommand);
@@ -56,7 +56,7 @@ namespace TData.Core.Provider
             var valueType = valueObject.GetType();
             PropertyInfo valueProperty = valueType.GetProperty("Value");
             var paramValue = valueProperty.GetValue(valueObject);
-            return TypeConversionRegistry.ConvertOutParameterValue(SqlProvider.Oracle, paramValue, targetType, true);
+            return TypeConversionRegistry.ConvertOutParameterValue(DbProvider.Oracle, paramValue, targetType, true);
         }
 
         internal static string TransformPostgresScript(in string routineName, in DbParameterInfo[] parameters, in bool isExecuteNonQuery)

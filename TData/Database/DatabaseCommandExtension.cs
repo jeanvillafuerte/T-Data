@@ -11,16 +11,19 @@ using TData.Configuration;
 using TData.Core.FluentApi;
 using System.Reflection.Emit;
 using TData.Helpers;
+using System.Text;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace TData
 {
     internal partial class DatabaseCommand
     {
-        public delegate T ParserDelegate<T>(in DbDataReader reader);
+        public delegate T ParserDelegate<T>(in DbDataReader reader, in Encoding encoding);
 
         #region delegate builder
 
-        private static string GetMethodInfo(Type type, in SqlProvider provider)
+        private static string GetMethodInfo(Type type, in DbProvider provider)
         {
             return type.Name switch
             {
@@ -44,31 +47,37 @@ namespace TData
                 "Byte[]" => "GetBytes",
 
                 //specific handlers
-                "BitArray" when provider == SqlProvider.PostgreSql => "GetBoolean",
-                "Object" when provider == SqlProvider.PostgreSql => "GetBoolean",
+                "BitArray" when provider == DbProvider.PostgreSql => "GetBoolean",
+                "Object" when provider == DbProvider.PostgreSql => "GetBoolean",
                 _ => throw new NotSupportedException($"Unsupported type {type.Name}")
             };
         }
 
         private static readonly Type ParserType = Type.GetType("TData.DatabaseCommand, TData")!;
         private static readonly MethodInfo ReadStreamMethod = ParserType.GetMethod(nameof(ReadStream), BindingFlags.NonPublic | BindingFlags.Static)!;
+        private static readonly MethodInfo ReadLongTextMethod = ParserType.GetMethod(nameof(ReadLongText), BindingFlags.NonPublic | BindingFlags.Static)!;
         internal static readonly Type ConvertType = typeof(Convert);
         private static readonly ConstructorInfo GuidConstructorByteArray = typeof(Guid).GetConstructor(new Type[] { typeof(byte[]) })!;
         
-        private static ParserDelegate<T> GetParserTypeDelegate<T>(in DbDataReader reader, in int preparationQueryKey, in SqlProvider provider, in int bufferSize = 0, in int batchSize = 0)
+        private static ParserDelegate<T> GetParserTypeDelegate<T>(in DbDataReader reader, in int signatureHashCode, in int preparationQueryKey, in DbSettings settings, in int batchSize = 0)
         {
             var typeResult = typeof(T);
 
-            var key = (preparationQueryKey * 23) + typeResult.GetHashCode();
+            int key = 0;
+            unchecked
+            {
+                key = (preparationQueryKey * 23) + typeResult.GetHashCode();
+                key = (key * 23) + signatureHashCode;
+            }
 
             if (CacheTypeParser<T>.TryGet(in key, out ParserDelegate<T> parser))
                 return parser;
 
-            var columnInfoCollection = GetColumnMap(in typeResult, in reader, in provider);
+            var columnInfoCollection = GetColumnMap(in typeResult, in reader, in settings.SqlProvider);
 
             var dynamicMethod = new DynamicMethod($"ParseDataRowTo{typeResult.FullName!.Replace('.', '_')}", 
                                 typeof(T), 
-                                new[] { typeof(DbDataReader).MakeByRefType() }, 
+                                new[] { typeof(DbDataReader).MakeByRefType(), typeof(Encoding).MakeByRefType() }, 
                                 typeResult.Module,
                                 true);
 
@@ -76,32 +85,32 @@ namespace TData
 
             Type dbDataReader = null;
 
-            switch (provider)
+            switch (settings.SqlProvider)
             {
-                case SqlProvider.SqlServer:
+                case DbProvider.SqlServer:
                     dbDataReader = DatabaseHelperProvider.SqlDataReader;
                     break;
-                case SqlProvider.MySql:
+                case DbProvider.MySql:
                     dbDataReader = DatabaseHelperProvider.MysqlDataReader;
                     break;
-                case SqlProvider.PostgreSql:
+                case DbProvider.PostgreSql:
                     dbDataReader = DatabaseHelperProvider.PostgresDataReader;
                     break;
-                case SqlProvider.Oracle:
+                case DbProvider.Oracle:
                     dbDataReader = DatabaseHelperProvider.OracleDataReader;
                     break;
-                case SqlProvider.Sqlite:
+                case DbProvider.Sqlite:
                     dbDataReader = DatabaseHelperProvider.SqliteDataReader;
                     break;
             }
 
             if (IsReadonlyRecordType(in typeResult))
             {
-                GenerateEmitterForReadonlyRecord<T>(in ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
+                GenerateEmitterForReadonlyRecord<T>(in ilGenerator, in typeResult, in settings, in columnInfoCollection, in dbDataReader);
             }
             else
             {
-                GenerateEmitterBySetters<T>(in ilGenerator, in typeResult, in provider, in bufferSize, in columnInfoCollection, in dbDataReader);
+                GenerateEmitterBySetters<T>(in ilGenerator, in typeResult, in settings, in columnInfoCollection, in dbDataReader);
             }
 
             var @delegate = (ParserDelegate<T>)dynamicMethod.CreateDelegate(typeof(ParserDelegate<T>));
@@ -111,9 +120,9 @@ namespace TData
 
         //support only class with public setters and parameterless constructor 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in DbSettings settings, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
 #else
-        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterBySetters<T>(in ILGenerator emitter, in Type typeResult, in DbSettings settings, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
 #endif
         {
             if (typeResult.GetConstructor(Type.EmptyTypes) == null)
@@ -161,9 +170,19 @@ namespace TData
 
                 emitter.Emit(OpCodes.Ldloc_0, typeInstance);
 
-                var getMethodName = GetMethodInfo(column.Source, in provider) ?? throw new NotSupportedException($"Unsupported type {column.Source.Name}");
+                var getMethodName = GetMethodInfo(column.Source, in settings.SqlProvider) ?? throw new NotSupportedException($"Unsupported type {column.Source.Name}");
                 Type underlyingType = Nullable.GetUnderlyingType(column.PropertyInfo.PropertyType);
 
+                if (column.PropertyInfo.PropertyType == typeof(string) && column.LongTextTreatment)
+                {
+                    emitter.Emit(OpCodes.Ldloc_1, readerInstance);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, in index);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, settings.TextBufferSize);
+                    emitter.Emit(OpCodes.Ldarg_1);
+                    emitter.Emit(OpCodes.Call, typeof(DbSettings).GetProperty(nameof(DbSettings.Encoding)).GetGetMethod());
+                    emitter.Emit(OpCodes.Call, ReadLongTextMethod);
+                }
+                else
                 //byte[] To Guid - Oracle
                 if (getMethodName.Equals("GetBytes", StringComparison.Ordinal) && (column.PropertyInfo.PropertyType == typeof(Guid) || underlyingType == typeof(Guid)))
                 {
@@ -207,7 +226,7 @@ namespace TData
                 {
                     emitter.Emit(OpCodes.Ldloc_1, readerInstance);
                     ReflectionEmitHelper.EmitInt32Value(in emitter, in index);
-                    ReflectionEmitHelper.EmitInt32Value(in emitter, bufferSize > 0 ? bufferSize : 8192);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, settings.BufferSize);
                     emitter.Emit(OpCodes.Call, ReadStreamMethod);
                 }
                 else
@@ -218,7 +237,7 @@ namespace TData
                 }
 
                 if (column.RequiredConversion)
-                    ReflectionEmitHelper.EmitValueConversion(in emitter, in column, in underlyingType, in provider);
+                    ReflectionEmitHelper.EmitValueConversion(in emitter, in column, in underlyingType, in settings.SqlProvider);
 
                 if (column.PropertyInfo.PropertyType.IsValueType)
                 {
@@ -242,16 +261,16 @@ namespace TData
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in DbSettings settings, in Span<PropertyTypeInfo> columnInfoCollection, in Type dbDataReader)
 #else
-        private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in SqlProvider provider, in int bufferSize, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
+        private static void GenerateEmitterForReadonlyRecord<T>(in ILGenerator emitter, in Type type, in DbSettings settings, in PropertyTypeInfo[] columnInfoCollection, in Type dbDataReader)
 #endif
         {
-            LocalBuilder instanceReader = emitter.DeclareLocal(dbDataReader); // Declare specific reader instance
+            LocalBuilder readerInstance = emitter.DeclareLocal(dbDataReader); // Declare specific reader instance
             emitter.Emit(OpCodes.Ldarg_0);
             emitter.Emit(OpCodes.Ldind_Ref);
             emitter.Emit(OpCodes.Castclass, dbDataReader);
-            emitter.Emit(OpCodes.Stloc_0, instanceReader);
+            emitter.Emit(OpCodes.Stloc_0, readerInstance);
 
             var fields = type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public).ToArray();
             var constructor = type.GetConstructor(fields.Select(x => x.FieldType).ToArray()) ?? throw new InvalidOperationException($"Cannot find readonly record constructor for {type.Name}");
@@ -288,7 +307,7 @@ namespace TData
 
                 if (column.AllowNull)
                 {
-                    emitter.Emit(OpCodes.Ldloc_0, instanceReader);
+                    emitter.Emit(OpCodes.Ldloc_0, readerInstance);
                     ReflectionEmitHelper.EmitInt32Value(in emitter, in columnIndex);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod("IsDBNull"));
 
@@ -307,8 +326,18 @@ namespace TData
                     emitter.MarkLabel(notNullLabel);
                 }
 
-                var getMethodName = GetMethodInfo(column.Source, in provider);
+                var getMethodName = GetMethodInfo(column.Source, in settings.SqlProvider);
 
+                if (column.PropertyInfo.PropertyType == typeof(string) && column.LongTextTreatment)
+                {
+                    emitter.Emit(OpCodes.Ldloc_1, readerInstance);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, in index);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, settings.TextBufferSize);
+                    emitter.Emit(OpCodes.Ldarg_1);
+                    emitter.Emit(OpCodes.Call, typeof(DbSettings).GetProperty(nameof(DbSettings.Encoding)).GetGetMethod());
+                    emitter.Emit(OpCodes.Call, ReadLongTextMethod);
+                }
+                else
                 //byte[] To Guid - Oracle
                 if (getMethodName.Equals("GetBytes", StringComparison.Ordinal) && (column.PropertyInfo.PropertyType == typeof(Guid) || underlyingType == typeof(Guid)))
                 {
@@ -321,7 +350,7 @@ namespace TData
                     emitter.Emit(OpCodes.Stloc, bufferLocal);
 
                     // Assume the data is already in the correct position in the reader, and fill the byte array
-                    emitter.Emit(OpCodes.Ldloc_0, instanceReader);
+                    emitter.Emit(OpCodes.Ldloc_0, readerInstance);
                     ReflectionEmitHelper.EmitInt32Value(in emitter, in columnIndex);
                     emitter.Emit(OpCodes.Ldc_I4_0);
                     emitter.Emit(OpCodes.Ldloc, bufferLocal);
@@ -350,20 +379,20 @@ namespace TData
                 }
                 else if (getMethodName.Equals("GetBytes", StringComparison.Ordinal))
                 {
-                    emitter.Emit(OpCodes.Ldloc_0, instanceReader);
+                    emitter.Emit(OpCodes.Ldloc_0, readerInstance);
                     ReflectionEmitHelper.EmitInt32Value(in emitter, in columnIndex);
-                    ReflectionEmitHelper.EmitInt32Value(in emitter, bufferSize > 0 ? bufferSize : 8192);
+                    ReflectionEmitHelper.EmitInt32Value(in emitter, settings.BufferSize);
                     emitter.Emit(OpCodes.Call, ReadStreamMethod);
                 }
                 else
                 {
-                    emitter.Emit(OpCodes.Ldloc_0, instanceReader);
+                    emitter.Emit(OpCodes.Ldloc_0, readerInstance);
                     ReflectionEmitHelper.EmitInt32Value(in emitter, in columnIndex);
                     emitter.Emit(OpCodes.Callvirt, dbDataReader.GetMethod(getMethodName, new[] { typeof(int) }));
                 }
 
                 if (column.RequiredConversion)
-                    ReflectionEmitHelper.EmitValueConversion(in emitter, in column, in underlyingType, in provider);
+                    ReflectionEmitHelper.EmitValueConversion(in emitter, in column, in underlyingType, in settings.SqlProvider);
 
                 emitter.Emit(opCodeStoreLocal, localVariable);
 
@@ -387,9 +416,9 @@ namespace TData
     
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader, in SqlProvider provider)
+        private static Span<PropertyTypeInfo> GetColumnMap(in Type type, in DbDataReader reader, in DbProvider provider)
 #else
-        private static PropertyTypeInfo[] GetColumnMap(in Type type, in DbDataReader reader, in SqlProvider provider)
+        private static PropertyTypeInfo[] GetColumnMap(in Type type, in DbDataReader reader, in DbProvider provider)
 #endif
         {
             var table = reader.GetSchemaTable();
@@ -406,26 +435,28 @@ namespace TData
             foreach (DataRow row in table.Rows)
             {
                 var columnName = row["ColumnName"].ToString();
-                var property = configuratedTable.Columns.Where(x => x.Name.Equals(columnName, StringComparison.InvariantCultureIgnoreCase) ||
-                                                                    x.DbName?.Equals(columnName, StringComparison.InvariantCultureIgnoreCase) == true).Select(x => x.Property).FirstOrDefault();
+                var column = configuratedTable.Columns.Where(x => x.Name.Equals(columnName, StringComparison.InvariantCultureIgnoreCase) ||
+                                                                    x.DbName?.Equals(columnName, StringComparison.InvariantCultureIgnoreCase) == true).Select(x => new { x.Property, x.IsNotNull, x.ForceCast, x.LongTextTreatment }).FirstOrDefault();
 
-                if (property == null)
+                if (column == null)
                     continue;
 
                 var dataType = (Type)row["DataType"];
-                var isLob = provider == SqlProvider.Oracle && bool.TryParse(row["IsValueLob"].ToString(), out var isValueLob) && isValueLob;
-                var dataTypeName = provider == SqlProvider.MySql || provider == SqlProvider.Oracle ? null : row["DataTypeName"].ToString();
+                var isLob = provider == DbProvider.Oracle && bool.TryParse(row["IsValueLob"].ToString(), out var isValueLob) && isValueLob;
+                var dataTypeName = provider == DbProvider.MySql || provider == DbProvider.Oracle ? null : row["DataTypeName"].ToString();
 
 
                 columnSchema.AddLast(new PropertyTypeInfo
                 {
+                    LongTextTreatment = column.LongTextTreatment,
                     DataTypeName = dataTypeName,
                     Source = dataType,
-                    PropertyInfo = property,
+                    PropertyInfo = column.Property,
                     Name = columnName,
-                    RequiredConversion = !dataType.Equals(property.PropertyType),
+                    RequiredConversion = !dataType.Equals(column.Property.PropertyType),
                     IsLargeObject = isLob || (bool.TryParse(row["IsLong"].ToString(), out var isLong) && isLong) || dataTypeName == "BLOB",
-                    AllowNull = !bool.TryParse(row["AllowDBNull"].ToString(), out var allowNull) || allowNull
+                    AllowNull = column.IsNotNull.HasValue ? column.IsNotNull.Value : !bool.TryParse(row["AllowDBNull"].ToString(), out var allowNull) || allowNull,
+                    ForceCast = column.ForceCast
                 });
             }
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
@@ -451,7 +482,8 @@ namespace TData
             public bool IsLargeObject { get; set; }
             public bool AllowNull { get; set; }
             public string DataTypeName { get; set; }
-
+            public bool ForceCast { get; set; }
+            public bool LongTextTreatment { get; set; }
             public override int GetHashCode()
             {
                 return Source.GetHashCode() * 23 + PropertyInfo.PropertyType.GetHashCode();
@@ -481,7 +513,123 @@ namespace TData
             
         }
 
-        #endregion specific readers
+        internal static void LoadStreamFromReader(in DbDataReader reader, in int index, in int bufferSize, in Stream targetStream)
+        {
+            if (reader.Read())
+            {
+
+                byte[] buffer = new byte[bufferSize];
+                long dataIndex = 0;
+                long bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
+
+                while (bytesRead == bufferSize)
+                {
+                    targetStream.Write(buffer, 0, (int)bytesRead);
+                    dataIndex += bytesRead;
+                    bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
+                }
+
+                targetStream.Write(buffer, 0, (int)bytesRead);
+            }
+
+        }
+
+        private static async Task LoadStreamFromReaderAsync(DbDataReader reader, int index, int bufferSize, Stream targetStream, CancellationToken cancellationToken)
+        {
+            if(await reader.ReadAsync(cancellationToken))
+            {
+                byte[] buffer = new byte[bufferSize];
+                long dataIndex = 0;
+                long bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
+
+
+                while (bytesRead == bufferSize)
+                {
+                    await targetStream.WriteAsync(buffer, 0, (int)bytesRead, cancellationToken);
+                    dataIndex += bytesRead;
+                    bytesRead = reader.GetBytes(index, dataIndex, buffer, 0, bufferSize);
+                }
+
+                await targetStream.WriteAsync(buffer, 0, (int)bytesRead, cancellationToken);
+            }
+        }
+
+        private static void LoadTextStreamFromReader(in DbDataReader reader, in int index, in int bufferSize, in StreamWriter targetStream)
+        {
+            if (reader.Read())
+            {
+                long dataOffset = 0;
+                char[] buffer = new char[bufferSize];
+
+                do
+                {
+                    long charsRead = reader.GetChars(index, dataOffset, buffer, 0, bufferSize);
+
+                    if (charsRead > 0)
+                    {
+                        targetStream.Write(buffer, 0, (int)charsRead);
+                        dataOffset += charsRead;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                while (reader.Read());
+            }
+        }
+
+        private static async Task LoadTextStreamFromReaderAsync(DbDataReader reader, int index, int bufferSize, StreamWriter targetStream, CancellationToken cancellationToken)
+        {
+            if(await reader.ReadAsync(cancellationToken))
+            {
+                long dataOffset = 0;
+                char[] buffer = new char[bufferSize];
+
+                do
+                {
+                    long charsRead = reader.GetChars(index, dataOffset, buffer, 0, bufferSize);
+
+                    if (charsRead > 0)
+                    {
+                        await targetStream.WriteAsync(buffer, 0, (int)charsRead);
+                        dataOffset += charsRead;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                while (await reader.ReadAsync(cancellationToken));
+            }
+        }
+
+        //pending tests
+        private static string ReadLongText(DbDataReader reader, int index, int bufferSize, Encoding enconding)
+        {
+            long dataOffset = 0;
+            char[] buffer = new char[bufferSize];
+
+            using var memoryStream = new MemoryStream();
+            using var writer = new StreamWriter(memoryStream, enconding);
+            {
+                while (true)
+                {
+                    long charsRead = reader.GetChars(index, dataOffset, buffer, 0, bufferSize);
+
+                    if (charsRead == 0)
+                        break;
+
+                    writer.Write(buffer, 0, (int)charsRead);
+                    dataOffset += charsRead;
+                }
+
+                writer.Flush();
+
+                return enconding.GetString(memoryStream.ToArray());
+            }
+        }
+#endregion specific readers
 
     }
 }

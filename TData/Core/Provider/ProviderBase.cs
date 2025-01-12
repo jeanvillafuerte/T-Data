@@ -13,7 +13,16 @@ namespace TData.Core.Provider
     internal static partial class DatabaseHelperProvider
     {
         internal static readonly ConcurrentDictionary<int, CommandMetaData> CommandMetadata = new ConcurrentDictionary<int, CommandMetaData>(Environment.ProcessorCount * 2, 50);
-        internal static readonly ConcurrentDictionary<SqlProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<SqlProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
+        internal static readonly ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>> ConnectionCache = new ConcurrentDictionary<TData.DbProvider, Func<string, DbConnection>>(Environment.ProcessorCount * 2, 10);
+
+        internal static bool HasDbParameterAttribute(in PropertyInfo property)
+        {
+            foreach (var attribute in property.GetCustomAttributes(true))
+                if (attribute is DbParameterAttribute attr)
+                    return true;
+
+            return false;
+        }
 
         static DbParameterAttribute GetDbParameterAttribute(in PropertyInfo property)
         {
@@ -33,7 +42,7 @@ namespace TData.Core.Provider
             };
         }
 
-        internal static void LoadConnectionDelegate(SqlProvider provider)
+        internal static void LoadConnectionDelegate(DbProvider provider)
         {
             if (!ConnectionCache.TryGetValue(provider, out var connection))
             {
@@ -41,23 +50,23 @@ namespace TData.Core.Provider
                 Type connectionType = null;
                 switch (provider)
                 {
-                    case SqlProvider.SqlServer:
+                    case DbProvider.SqlServer:
                         constructorInfo = SqlServerConnectionConstructor;
                         connectionType = SqlServerConnectionType;
                         break;
-                    case SqlProvider.MySql:
+                    case DbProvider.MySql:
                         constructorInfo = MysqlConnectionConstructor;
                         connectionType = MysqlConnectionType;
                         break;
-                    case SqlProvider.PostgreSql:
+                    case DbProvider.PostgreSql:
                         constructorInfo = PostgresConnectionConstructor;
                         connectionType = PostgresConnectionType;
                         break;
-                    case SqlProvider.Oracle:
+                    case DbProvider.Oracle:
                         constructorInfo = OracleConnectionConstructor;
                         connectionType = OracleConnectionType;
                         break;
-                    case SqlProvider.Sqlite:
+                    case DbProvider.Sqlite:
                         constructorInfo = SqliteConnectionConstructor;
                         connectionType = SqliteConnectionType;
                         break;

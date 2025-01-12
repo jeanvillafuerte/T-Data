@@ -8,7 +8,7 @@ namespace TData.Core.Provider.Formatter
 {
     internal readonly struct MySqlFormatter : ISqlFormatter
     {
-        readonly SqlProvider ISqlFormatter.Provider => SqlProvider.MySql;
+        readonly DbProvider ISqlFormatter.Provider => DbProvider.MySql;
         readonly string ISqlFormatter.BindVariable => "@";
         readonly string ISqlFormatter.MinDate => "STR_TO_DATE('01/01/1900', '%m/%d/%Y')";
         readonly string ISqlFormatter.MaxDate => "STR_TO_DATE('12/31/9999', '%m/%d/%Y')";

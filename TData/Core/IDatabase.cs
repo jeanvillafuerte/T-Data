@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using TData.Core;
+using TData.Core.QueryGenerator;
 using TData.Core.WriteDatabase;
 
 namespace TData
@@ -35,6 +37,18 @@ namespace TData
         /// </param>
         /// <returns>The scalar value.</returns>
         T ExecuteScalar<T>(in string script, in object parameters = null);
+
+        void LoadStream(in string script, in object parameters, in Stream targetStream);
+
+        Task LoadStreamAsync(string script, object parameters, Stream targetStream);
+
+        Task LoadStreamAsync(string script, object parameters, Stream targetStream, CancellationToken cancellationToken);
+
+        void LoadTextStream(in string script, in object parameters, in StreamWriter targetStream);
+
+        Task LoadTextStreamAsync(string script, object parameters, StreamWriter targetStream);
+
+        Task LoadTextStreamAsync(string script, object parameters, StreamWriter targetStream, CancellationToken cancellationToken);
 
         /// <summary>
         /// Fetches a single record.

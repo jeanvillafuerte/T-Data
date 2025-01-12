@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading.Tasks;
 using TData.Cache.Helpers;
 using TData.Cache.MemoryCache;
 using TData.Core.QueryGenerator;
@@ -11,8 +13,14 @@ namespace TData.Cache
 {
     public interface ICachedDatabase : IDbResultCachedSet
     {
+        void Clear();
         void Clear(in string key);
         void Refresh(in string key, in bool throwErrorIfNotFound = false);
+        bool CanLoadStream(in string key);
+        void LoadStream(in string key, in StreamWriter stream);
+        Task LoadStreamAsync(string key, StreamWriter stream);
+        bool TryGetStringValue(in string key, out string data);
+        bool TryGetBytesValue(in string key, out byte[] data);
     }
 
     internal sealed class CachedDatabase : ICachedDatabase
@@ -20,12 +28,14 @@ namespace TData.Cache
         private readonly IDbDataCache _cache;
         private readonly Lazy<IDatabase> _database;
         private readonly ISqlFormatter _sqlValues;
+        private readonly TimeSpan _ttl;
 
-        internal CachedDatabase(IDbDataCache cache, Lazy<IDatabase> database, ISqlFormatter sqlValues)
+        internal CachedDatabase(IDbDataCache cache, Lazy<IDatabase> database, ISqlFormatter sqlValues, in TimeSpan ttl)
         {
             _cache = cache;
             _database = database;
             _sqlValues = sqlValues;
+            _ttl = ttl;
         }
 
         private int CalculateHash(in string script, in object parameters, in string key)
@@ -59,13 +69,12 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var data = _database.Value.FetchOne<T>(in script, in parameters);
-                result = new QueryResult<T>(MethodHandled.FetchOneQueryString, in script, in parameters, in data);
+                result = new QueryResult<T>(MethodHandled.FetchOneQueryString, in script, in parameters, in data, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedKey, result);
             }
 
             return result.Data;
         }
-
 
         public T FetchOne<T>(in Expression<Func<T, bool>> where = null, in Expression<Func<T, object>> selector = null, in string key = null, in bool refresh = false)
         {
@@ -81,7 +90,7 @@ namespace TData.Cache
         private QueryResult<T> FetchOne<T>(in int calculatedKey, in Expression<Func<T, bool>> where, in Expression<Func<T, object>> selector)
         {
             var data = _database.Value.FetchOne<T>(where, selector);
-            var result = new QueryResult<T>(MethodHandled.FetchOneExpression, null, null, in data, where, selector);
+            var result = new QueryResult<T>(MethodHandled.FetchOneExpression, null, null, in data, DateTime.UtcNow.Add(_ttl), where, selector);
             _cache.AddOrUpdate(calculatedKey, result);
             return result;
         }
@@ -104,7 +113,7 @@ namespace TData.Cache
         private QueryResult<List<T>> FetchList<T>(in int calculatedKey, in Expression<Func<T, bool>> where, in Expression<Func<T, object>> selector)
         {
             var data = _database.Value.FetchList<T>(where, selector);
-            var result = new QueryResult<List<T>>(MethodHandled.FetchListExpression, null, null, in data, where, selector);
+            var result = new QueryResult<List<T>>(MethodHandled.FetchListExpression, null, DateTime.UtcNow.Add(_ttl), in data, null, where, selector);
             _cache.AddOrUpdate(in calculatedKey, result);
             return result;
         }
@@ -117,7 +126,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var data = _database.Value.FetchList<T>(in script, in parameters);
-                result = new QueryResult<List<T>>(MethodHandled.FetchListQueryString, in script, in parameters, in data);
+                result = new QueryResult<List<T>>(MethodHandled.FetchListQueryString, in script, in parameters, in data, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -136,7 +145,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>>>(MethodHandled.FetchTupleQueryString_2, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>>>(MethodHandled.FetchTupleQueryString_2, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -151,7 +160,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2, T3>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>>>(MethodHandled.FetchTupleQueryString_3, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>>>(MethodHandled.FetchTupleQueryString_3, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -166,7 +175,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2, T3, T4>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>(MethodHandled.FetchTupleQueryString_4, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>>(MethodHandled.FetchTupleQueryString_4, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -181,7 +190,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2, T3, T4, T5>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>(MethodHandled.FetchTupleQueryString_5, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>>(MethodHandled.FetchTupleQueryString_5, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -196,7 +205,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2, T3, T4, T5, T6>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>(MethodHandled.FetchTupleQueryString_6, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>>(MethodHandled.FetchTupleQueryString_6, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -211,7 +220,7 @@ namespace TData.Cache
             if (!fromCache || refresh)
             {
                 var tuple = _database.Value.FetchTuple<T1, T2, T3, T4, T5, T6, T7>(in script, in parameters);
-                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>(MethodHandled.FetchTupleQueryString_7, in script, in parameters, in tuple);
+                result = new QueryResult<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>>(MethodHandled.FetchTupleQueryString_7, in script, in parameters, in tuple, DateTime.UtcNow.Add(_ttl));
                 _cache.AddOrUpdate(in calculatedHash, result);
             }
 
@@ -220,7 +229,12 @@ namespace TData.Cache
 
         #endregion
 
-        #region management
+        #region Management
+
+        public void Clear()
+        {
+            _cache.Clear();
+        }
 
         public void Clear(in string key)
         {
@@ -232,7 +246,7 @@ namespace TData.Cache
         public void Refresh(in string key, in bool throwErrorIfNotFound = false)
         {
             var calculatedHash = HashHelper.GenerateHash(key);
-            if (DbDataCache.TryGetValue(calculatedHash, out IQueryResult item))
+            if (_cache.TryGetValueForRefresh(calculatedHash, out IQueryResult item))
             {
                 if (item == null && throwErrorIfNotFound)
                     throw new ArgumentNullException();
@@ -316,8 +330,64 @@ namespace TData.Cache
 
             return methods?.FirstOrDefault(m => m.ReturnType.GenericTypeArguments.Length == parameterCount);
         }
-#endregion
 
+        public bool TryGetStringValue(in string key, out string data)
+        {
+            if (_cache.IsMemoryCache)
+            {
+                throw new Exception("This method is not supported for memory cache.");
+            }
+
+            var calculatedHash = HashHelper.GenerateHash(key);
+
+            return _cache.TryGetString(in calculatedHash, out data);
+        }
+
+        public bool TryGetBytesValue(in string key, out byte[] data)
+        {
+            if (_cache.IsMemoryCache)
+            {
+                throw new Exception("This method is not supported for memory cache.");
+            }
+
+            var calculatedHash = HashHelper.GenerateHash(key);
+            return _cache.TryGetBytes(in calculatedHash, out data);
+        }
+
+        public bool CanLoadStream(in string key)
+        {
+            if (_cache.IsMemoryCache)
+            {
+                throw new Exception("This method is not supported for memory cache.");
+            }
+
+            var calculatedHash = HashHelper.GenerateHash(key);
+            return _cache.CanLoadStream(in calculatedHash);
+        }
+
+        public void LoadStream(in string key, in StreamWriter stream)
+        {
+            if (_cache.IsMemoryCache)
+            {
+                throw new Exception("This method is not supported for memory cache.");
+            }
+
+            var calculatedHash = HashHelper.GenerateHash(key);
+            _cache.LoadStream(in calculatedHash, in stream);
+        }
+
+        public async Task LoadStreamAsync(string key, StreamWriter stream)
+        {
+            if (_cache.IsMemoryCache)
+            {
+                throw new Exception("This method is not supported for memory cache.");
+            }
+
+            var calculatedHash = HashHelper.GenerateHash(key);
+            await _cache.LoadStreamAsync(calculatedHash, stream);
+        }
+
+        #endregion
 
     }
 }

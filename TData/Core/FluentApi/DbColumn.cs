@@ -25,8 +25,11 @@ namespace TData.Core.FluentApi
         internal int Size { get; set; }
         internal int Scale { get; set; }
         internal int Precision { get; set; }
-        internal bool Required { get; set; }
-        internal bool RequireConversion { get; set; }
         internal bool Configurated { get; set; }
+        internal bool ForceCast { get; set; }
+        internal bool LongTextTreatment { get; set; }
+
+        //skip branching reader.IsDbNull(i) in the reader regardless of the column schema
+        internal bool? IsNotNull { get; set; }
     }
 }

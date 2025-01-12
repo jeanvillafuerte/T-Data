@@ -8,7 +8,7 @@ namespace TData.Helpers
 {
     internal static class ExpressionHasher
     {
-        public static int GetPredicateHashCode<T>(in Expression<Func<T, bool>> expr, in SqlProvider provider, in bool includeValues = true)
+        public static int GetPredicateHashCode<T>(in Expression<Func<T, bool>> expr, in DbProvider provider, in bool includeValues = true)
         {
             int hash = 17;
             hash = (hash * 23) + provider.GetHashCode();
@@ -16,7 +16,7 @@ namespace TData.Helpers
             return GetHashCode(expr.Body, hash, includeValues, provider);
         }
 
-        private static int GetHashCode(Expression expr, int hash, bool includeValues, SqlProvider provider, MemberInfo member = null)
+        private static int GetHashCode(Expression expr, int hash, bool includeValues, DbProvider provider, MemberInfo member = null)
         {
             return expr switch
             {
@@ -62,7 +62,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        private static int BinaryExpressionHash(BinaryExpression binExpr, int hash, bool includeValues, SqlProvider provider)
+        private static int BinaryExpressionHash(BinaryExpression binExpr, int hash, bool includeValues, DbProvider provider)
         {
             var tempHash = GetHashCode(binExpr.Left, hash, includeValues, provider);
             hash = (hash * 23) + tempHash;
@@ -70,7 +70,7 @@ namespace TData.Helpers
             return (hash * 23) + tempHash;
         }
 
-        public static int MemberExpression(MemberExpression memberExpression, int hash, bool includeValues, SqlProvider provider)
+        public static int MemberExpression(MemberExpression memberExpression, int hash, bool includeValues, DbProvider provider)
         {
             hash = (hash * 23) + memberExpression.Member.Name.GetHashCode();
 
@@ -92,7 +92,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        public static int MethodCallExpression(MethodCallExpression methodExpr, int hash, bool includeValues, SqlProvider provider)
+        public static int MethodCallExpression(MethodCallExpression methodExpr, int hash, bool includeValues, DbProvider provider)
         {
             hash = (hash * 23) + methodExpr.Method.Name.GetHashCode();
             foreach (var arg in methodExpr.Arguments)
@@ -105,7 +105,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        public static int LambdaExpression(LambdaExpression lambdaExpr, int hash, bool includeValues, SqlProvider provider)
+        public static int LambdaExpression(LambdaExpression lambdaExpr, int hash, bool includeValues, DbProvider provider)
         {
             hash = hash * 23 + GetHashCode(lambdaExpr.Body, hash, includeValues, provider);
             foreach (var p in lambdaExpr.Parameters)

@@ -82,7 +82,7 @@ namespace TData.Core.QueryGenerator
                 Table = dbTable;
             }
 
-            TableAlias = formatter.Provider == SqlProvider.Sqlite ? TableNameWithoutAlias : GetTableAlias();
+            TableAlias = formatter.Provider == DbProvider.Sqlite ? TableNameWithoutAlias : GetTableAlias();
             DbParametersToBind = new LinkedList<DbParameterInfo>();
         }
 
@@ -222,7 +222,7 @@ namespace TData.Core.QueryGenerator
                                                        typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression, aliasIdentifiers),
                 NewExpression newExpression => HandleNewExpression(newExpression),
                 NewArrayExpression newArrayExpression => HandleNewArrayExpression(newArrayExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(Formatter.Provider == SqlProvider.PostgreSql ? "'1'" : "1")}",
+                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(Formatter.Provider == DbProvider.PostgreSql ? "'1'" : "1")}",
                 MethodCallExpression methodCall when IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains, aliasIdentifiers),
                 MethodCallExpression methodCall when IsEnumerableContains(methodCall) => HandleEnumerableContains(methodCall, aliasIdentifiers),
                 MethodCallExpression methodCall when IsEquals(methodCall) => HandleStringContains(methodCall, StringOperator.Equals, aliasIdentifiers),
@@ -288,7 +288,7 @@ namespace TData.Core.QueryGenerator
 
             StringBuilder stringBuilder = null;
 
-            if (Formatter.Provider == SqlProvider.SqlServer)
+            if (Formatter.Provider == DbProvider.SqlServer)
             {
                 stringBuilder = new StringBuilder($"UPDATE {TableAlias} SET ")
                                                    .AppendJoin(',', columns)
@@ -296,7 +296,7 @@ namespace TData.Core.QueryGenerator
             }
             else
             {
-                var tableAlias = Formatter.Provider == SqlProvider.Sqlite ? "" : TableAlias;
+                var tableAlias = Formatter.Provider == DbProvider.Sqlite ? "" : TableAlias;
                 stringBuilder = new StringBuilder($"UPDATE {TableNameWithoutAlias} {tableAlias} SET ")
                                            .AppendJoin(',', columns);
             }
@@ -386,7 +386,7 @@ namespace TData.Core.QueryGenerator
             var parameterName = $"p{counter}";
             paramName = Formatter.BindVariable + parameterName;
 
-            var convertedValue = TypeConversionRegistry.ConvertInParameterValue(Formatter.Provider, value, propertyType, true);
+            var convertedValue = TypeConversionRegistry.ConvertInParameterValue(Formatter.Provider, value, in propertyType, true);
 
             DbParametersToBind.AddLast(new DbParameterInfo(
                 parameterName,
@@ -397,7 +397,7 @@ namespace TData.Core.QueryGenerator
                 ParameterDirection.Input,
                 null,
                 convertedValue.GetType(),
-                DatabaseHelperProvider.GetEnumValue(Formatter.Provider, propertyType),
+                DatabaseHelperProvider.GetEnumValue(Formatter.Provider, in propertyType),
                 convertedValue,
                 null));
         }
@@ -733,7 +733,7 @@ namespace TData.Core.QueryGenerator
 
         private string ApplyTransformation(string name, string typeName)
         {
-            if (Formatter.Provider == SqlProvider.Sqlite)
+            if (Formatter.Provider == DbProvider.Sqlite)
             {
                 return typeName switch
                 {
@@ -758,7 +758,7 @@ namespace TData.Core.QueryGenerator
         }
         #endregion Handlers
 
-        internal static int CalculateExpressionKey(in Expression<Func<T, bool>> expression, in Expression<Func<T, object>> selector, in (Expression<Func<T, object>> field, object value)[] updates, in Type type, in SqlOperation operation, in SqlProvider provider, in string key = null)
+        internal static int CalculateExpressionKey(in Expression<Func<T, bool>> expression, in Expression<Func<T, object>> selector, in (Expression<Func<T, object>> field, object value)[] updates, in Type type, in SqlOperation operation, in DbProvider provider, in string key = null)
         {
             if (!string.IsNullOrEmpty(key))
             {

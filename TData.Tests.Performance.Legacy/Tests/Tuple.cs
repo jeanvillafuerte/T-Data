@@ -16,8 +16,8 @@ namespace TData.Tests.Performance.Legacy.Tests
         public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
             string query = $"SELECT UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperationAsync(() => DbHub.Use(db).FetchTupleAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), "FetchTupleAsync<>");
-            PerformOperationAsync(() => DbHub.Use(db).TryFetchTupleAsync<Person, Person>($"{query}; {query}", null, CancellationToken.None), "TryFetchTupleAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).FetchTupleAsync<Person, Person>($"{query}; {query}", null), "FetchTupleAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchTupleAsync<Person, Person>($"{query}; {query}", null), "TryFetchTupleAsync<>");
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

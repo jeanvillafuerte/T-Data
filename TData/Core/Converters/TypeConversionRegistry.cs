@@ -8,35 +8,35 @@ namespace TData.Core.Converters
 {
     internal static class TypeConversionRegistry
     {
-        internal readonly static ConcurrentDictionary<SqlProvider, List<IInParameterValueConverter>> InParameterValueConverters = new ConcurrentDictionary<SqlProvider, List<IInParameterValueConverter>>();
-        internal readonly static ConcurrentDictionary<SqlProvider, List<IOutParameterValueConverter>> OutParameterValueConverters = new ConcurrentDictionary<SqlProvider, List<IOutParameterValueConverter>>();
+        internal readonly static ConcurrentDictionary<DbProvider, List<IInParameterValueConverter>> InParameterValueConverters = new ConcurrentDictionary<DbProvider, List<IInParameterValueConverter>>();
+        internal readonly static ConcurrentDictionary<DbProvider, List<IOutParameterValueConverter>> OutParameterValueConverters = new ConcurrentDictionary<DbProvider, List<IOutParameterValueConverter>>();
 
         static TypeConversionRegistry()
         {
-            InParameterValueConverters[SqlProvider.Oracle] = new List<IInParameterValueConverter> { new Oracle.GuidToByteArrayConverter() };
-            InParameterValueConverters[SqlProvider.Sqlite] = new List<IInParameterValueConverter> { new SQLite.GuidConverter(), new SQLite.TimeSpanConverter() };
-            InParameterValueConverters[SqlProvider.SqlServer] = Enumerable.Empty<IInParameterValueConverter>().ToList();
-            InParameterValueConverters[SqlProvider.MySql] = Enumerable.Empty<IInParameterValueConverter>().ToList();
-            InParameterValueConverters[SqlProvider.PostgreSql] = Enumerable.Empty<IInParameterValueConverter>().ToList();
+            InParameterValueConverters[DbProvider.Oracle] = new List<IInParameterValueConverter> { new Oracle.GuidToByteArrayConverter() };
+            InParameterValueConverters[DbProvider.Sqlite] = new List<IInParameterValueConverter> { new SQLite.GuidConverter(), new SQLite.TimeSpanConverter() };
+            InParameterValueConverters[DbProvider.SqlServer] = Enumerable.Empty<IInParameterValueConverter>().ToList();
+            InParameterValueConverters[DbProvider.MySql] = Enumerable.Empty<IInParameterValueConverter>().ToList();
+            InParameterValueConverters[DbProvider.PostgreSql] = Enumerable.Empty<IInParameterValueConverter>().ToList();
 
-            OutParameterValueConverters[SqlProvider.Oracle] = new List<IOutParameterValueConverter> { new Oracle.GuidToByteArrayConverter() };
-            OutParameterValueConverters[SqlProvider.Sqlite] = new List<IOutParameterValueConverter> { new SQLite.GuidConverter(), new SQLite.TimeSpanConverter() };
-            OutParameterValueConverters[SqlProvider.SqlServer] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
-            OutParameterValueConverters[SqlProvider.MySql] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
-            OutParameterValueConverters[SqlProvider.PostgreSql] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
+            OutParameterValueConverters[DbProvider.Oracle] = new List<IOutParameterValueConverter> { new Oracle.GuidToByteArrayConverter() };
+            OutParameterValueConverters[DbProvider.Sqlite] = new List<IOutParameterValueConverter> { new SQLite.GuidConverter(), new SQLite.TimeSpanConverter() };
+            OutParameterValueConverters[DbProvider.SqlServer] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
+            OutParameterValueConverters[DbProvider.MySql] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
+            OutParameterValueConverters[DbProvider.PostgreSql] = Enumerable.Empty<IOutParameterValueConverter>().ToList();
         }
 
-        public static void RegisterInParameterConverter(SqlProvider provider, IInParameterValueConverter converter)
+        public static void RegisterInParameterConverter(DbProvider provider, IInParameterValueConverter converter)
         {
             InParameterValueConverters[provider].Add(converter);
         }
 
-        public static void RegisterOutParameterConverter(SqlProvider provider, IOutParameterValueConverter converter)
+        public static void RegisterOutParameterConverter(DbProvider provider, IOutParameterValueConverter converter)
         {
             OutParameterValueConverters[provider].Add(converter);
         }
 
-        public static object ConvertInParameterValue(in SqlProvider provider, object value, Type sourceType, in bool reduceNumericToIntegerWhenPossible = true)
+        public static object ConvertInParameterValue(in DbProvider provider, object value, in Type sourceType, in bool reduceNumericToIntegerWhenPossible = true)
         {
             var converters = InParameterValueConverters[provider].Where(x => x.CanConvert(value)).ToList();
 
@@ -58,7 +58,7 @@ namespace TData.Core.Converters
             return Convert.ChangeType(value, sourceType, CultureInfo.InvariantCulture);
         }
 
-        public static object ConvertOutParameterValue(in SqlProvider provider, object value, Type targetType, in bool reduceNumericToIntegerWhenPossible = true)
+        public static object ConvertOutParameterValue(in DbProvider provider, object value, Type targetType, in bool reduceNumericToIntegerWhenPossible = true)
         {
             var converters = OutParameterValueConverters[provider].Where(x => x.CanConvert(value, targetType)).ToList();
 
@@ -103,7 +103,7 @@ namespace TData.Core.Converters
             return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
 
-        public static bool TryGetInParameterConverter(in SqlProvider provider, Type propertyType, out IInParameterValueConverter converter)
+        public static bool TryGetInParameterConverter(in DbProvider provider, Type propertyType, out IInParameterValueConverter converter)
         {
             var converters = InParameterValueConverters[provider].Where(x => x.SourceType == propertyType).ToList();
 

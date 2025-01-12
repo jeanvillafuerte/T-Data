@@ -221,7 +221,7 @@ namespace TData.Core.Provider
 
         #endregion Sqlite
 
-        internal static Action<object, DbCommand, DbDataReader> LoadOutParameterDelegate(in bool isExecuteNonQuery, in Type type, in DbParameterInfo[] parameters, in SqlProvider provider)
+        internal static Action<object, DbCommand, DbDataReader> LoadOutParameterDelegate(in bool isExecuteNonQuery, in Type type, in DbParameterInfo[] parameters, in DbProvider provider)
         {
             Type[] argTypes = { typeof(object), typeof(DbCommand), typeof(DbDataReader) };
             var method = new DynamicMethod(
@@ -245,7 +245,7 @@ namespace TData.Core.Provider
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldarg_1);
 
-                if (provider == SqlProvider.Oracle)
+                if (provider == DbProvider.Oracle)
                 {
                     il.Emit(OpCodes.Castclass, OracleDbCommandType);
                     il.Emit(OpCodes.Call, GetOracleParametersProperty);
@@ -304,31 +304,31 @@ namespace TData.Core.Provider
 
             switch (options.Provider)
             {
-                case SqlProvider.SqlServer:
+                case DbProvider.SqlServer:
                     commandConstructor = SqlServerCommandConstructor;
                     connectionConstructor = SqlServerConnectionConstructor;
                     dbconnectionType = SqlServerConnectionType;
                     dbCommandType = SqlServerCommandType;
                     break;
-                case SqlProvider.MySql:
+                case DbProvider.MySql:
                     commandConstructor = MysqlCommandConstructor;
                     connectionConstructor = MysqlConnectionConstructor;
                     dbconnectionType = MysqlConnectionType;
                     dbCommandType = MysqlDbCommandType;
                     break;
-                case SqlProvider.PostgreSql:
+                case DbProvider.PostgreSql:
                     commandConstructor = PostgresCommandConstructor;
                     connectionConstructor = PostgresConnectionConstructor;
                     dbconnectionType = PostgresConnectionType;
                     dbCommandType = PostgresCommandType;
                     break;
-                case SqlProvider.Oracle:
+                case DbProvider.Oracle:
                     commandConstructor = OracleCommandConstructor;
                     connectionConstructor = OracleConnectionConstructor;
                     dbconnectionType = OracleConnectionType;
                     dbCommandType = OracleDbCommandType;
                     break;
-                case SqlProvider.Sqlite:
+                case DbProvider.Sqlite:
                     commandConstructor = SqliteCommandConstructor;
                     connectionConstructor = SqliteConnectionConstructor;
                     dbconnectionType = SqliteConnectionType;
@@ -433,9 +433,9 @@ namespace TData.Core.Provider
                         if (!attributes.IsOracleCursor)
                             hasOutputParameters = attributes.IsOutput || hasOutputParameters;
 
-                        if (enumValue == 0 && options.Provider != SqlProvider.Sqlite)
+                        if (enumValue == 0 && options.Provider != DbProvider.Sqlite)
                         {
-                            if (options.Provider == SqlProvider.Oracle && attributes.IsOracleCursor)
+                            if (options.Provider == DbProvider.Oracle && attributes.IsOracleCursor)
                             {
                                 enumValue = 121; //OracleDbType.RefCursor
                                 goto addParam;
@@ -446,7 +446,7 @@ namespace TData.Core.Provider
 
                         if (TypeConversionRegistry.TryGetInParameterConverter(options.Provider, effectiveType, out typeConverter))
                         {
-                            if (options.Provider != SqlProvider.Sqlite && !(options.Provider == SqlProvider.Oracle && effectiveType == typeof(Guid)))
+                            if (options.Provider != DbProvider.Sqlite && !(options.Provider == DbProvider.Oracle && effectiveType == typeof(Guid)))
                                 enumValue = GetEnumValue(in options.Provider, typeConverter.TargetType);
                         }
 
@@ -465,7 +465,7 @@ namespace TData.Core.Provider
                             converter: typeConverter));
                     }
 
-                    if (options.KeyAsReturnValue && options.Provider == SqlProvider.Oracle && table != null)
+                    if (options.KeyAsReturnValue && options.Provider == DbProvider.Oracle && table != null)
                     {
                         parameters.AddLast(new DbParameterInfo(
                             name: table.Key.Name,
@@ -476,7 +476,7 @@ namespace TData.Core.Provider
                             direction: ParameterDirection.Output,
                             propertyInfo: table.Key.Property,
                             propertyType: table.Key.Property.PropertyType,
-                            dbType: options.Provider == SqlProvider.Sqlite ? 0 : GetEnumValue(in options.Provider, table.Key.Property.PropertyType),
+                            dbType: options.Provider == DbProvider.Sqlite ? 0 : GetEnumValue(in options.Provider, table.Key.Property.PropertyType),
                             value: null,
                             converter: null));
 
@@ -603,9 +603,9 @@ namespace TData.Core.Provider
             }
         }
 
-        internal static int GetEnumValue(in SqlProvider provider, in Type type)
+        internal static int GetEnumValue(in DbProvider provider, in Type type)
         {
-            if (provider == SqlProvider.Sqlite)
+            if (provider == DbProvider.Sqlite)
                 return 0;
 
             Type underlyingType = Nullable.GetUnderlyingType(type);
@@ -636,31 +636,31 @@ namespace TData.Core.Provider
 
             switch (options.Provider)
             {
-                case SqlProvider.SqlServer:
+                case DbProvider.SqlServer:
                     commandConstructor = SqlServerCommandConstructor;
                     connectionConstructor = SqlServerConnectionConstructor;
                     dbconnectionType = SqlServerConnectionType;
                     dbCommandType = SqlServerCommandType;
                     break;
-                case SqlProvider.MySql:
+                case DbProvider.MySql:
                     commandConstructor = MysqlCommandConstructor;
                     connectionConstructor = MysqlConnectionConstructor;
                     dbconnectionType = MysqlConnectionType;
                     dbCommandType = MysqlDbCommandType;
                     break;
-                case SqlProvider.PostgreSql:
+                case DbProvider.PostgreSql:
                     commandConstructor = PostgresCommandConstructor;
                     connectionConstructor = PostgresConnectionConstructor;
                     dbconnectionType = PostgresConnectionType;
                     dbCommandType = PostgresCommandType;
                     break;
-                case SqlProvider.Oracle:
+                case DbProvider.Oracle:
                     commandConstructor = OracleCommandConstructor;
                     connectionConstructor = OracleConnectionConstructor;
                     dbconnectionType = OracleConnectionType;
                     dbCommandType = OracleDbCommandType;
                     break;
-                case SqlProvider.Sqlite:
+                case DbProvider.Sqlite:
                     commandConstructor = SqliteCommandConstructor;
                     connectionConstructor = SqliteConnectionConstructor;
                     dbconnectionType = SqliteConnectionType;
@@ -704,7 +704,7 @@ namespace TData.Core.Provider
             }
 
             //useful values for oracle command
-            if (options.Provider == SqlProvider.Oracle)
+            if (options.Provider == DbProvider.Oracle)
             {
                 if (options.AdditionalOracleRefCursors == 0)
                 {
@@ -742,31 +742,31 @@ namespace TData.Core.Provider
 
             switch (options.Provider)
             {
-                case SqlProvider.SqlServer:
+                case DbProvider.SqlServer:
                     dbParameterType = SqlParameterType;
                     parametersProperty = GetSqlParametersProperty;
                     parameterConstructor = SqlParameterConstructor;
                     addParameterMethod = AddSqlParameterMethod;
                     break;
-                case SqlProvider.MySql:
+                case DbProvider.MySql:
                     dbParameterType = MysqlParameterType;
                     parametersProperty = GetMysqlParametersProperty;
                     parameterConstructor = MysqlParameterConstructor;
                     addParameterMethod = AddMysqlParameterMethod;
                     break;
-                case SqlProvider.PostgreSql:
+                case DbProvider.PostgreSql:
                     dbParameterType = PostgresParameterType;
                     parametersProperty = GetPostgresParametersProperty;
                     parameterConstructor = PostgresParameterConstructor;
                     addParameterMethod = AddPostgresParameterMethod;
                     break;
-                case SqlProvider.Oracle:
+                case DbProvider.Oracle:
                     dbParameterType = OracleParameterType;
                     parametersProperty = GetOracleParametersProperty;
                     parameterConstructor = OracleParameterConstructor;
                     addParameterMethod = AddOracleParameterMethod;
                     break;
-                case SqlProvider.Sqlite:
+                case DbProvider.Sqlite:
                     dbParameterType = SqliteParameterType;
                     parametersProperty = GetSqliteParametersProperty;
                     parameterConstructor = SqliteParameterConstructor;
@@ -844,11 +844,11 @@ namespace TData.Core.Provider
 
                 var effectiveLocalIndex = convertedValueLocalIndex > 0 ? convertedValueLocalIndex : valueLocalIndex;
                 var effectiveLocal = convertedValue ?? localValue;
-                if (options.Provider == SqlProvider.Sqlite)
+                if (options.Provider == DbProvider.Sqlite)
                 {
                     BuildSqliteParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
-                else if (options.Provider == SqlProvider.PostgreSql)
+                else if (options.Provider == DbProvider.PostgreSql)
                 {
                     BuildPostgresParameter(in il, in parameter, in effectiveLocal, in effectiveLocalIndex);
                 }
@@ -864,7 +864,7 @@ namespace TData.Core.Provider
                     il.Emit(OpCodes.Ldnull);
                     il.Emit(OpCodes.Ldc_I4, DataRowVersionDefault);
 
-                    if (parameter.Direction == ParameterDirection.Output ||parameter.Direction == ParameterDirection.ReturnValue)
+                    if (parameter.Direction == ParameterDirection.Output || parameter.Direction == ParameterDirection.ReturnValue)
                     {
                         il.Emit(OpCodes.Ldnull);
                     }
@@ -1075,25 +1075,25 @@ namespace TData.Core.Provider
             throw new NotImplementedException();
         }
 
-        private static Type GetDbType(in SqlProvider provider) => provider switch
+        private static Type GetDbType(in DbProvider provider) => provider switch
         {
-            SqlProvider.SqlServer => SqlDbType,
-            SqlProvider.Oracle => OracleDbType,
-            SqlProvider.MySql => MysqlDbType,
-            SqlProvider.Sqlite => null,
-            SqlProvider.PostgreSql => PostgresDbType,
+            DbProvider.SqlServer => SqlDbType,
+            DbProvider.Oracle => OracleDbType,
+            DbProvider.MySql => MysqlDbType,
+            DbProvider.Sqlite => null,
+            DbProvider.PostgreSql => PostgresDbType,
             _ => throw new NotImplementedException()
         };
 
-        internal static IReadOnlyDictionary<Type, string> DbTypes(in SqlProvider provider)
+        internal static IReadOnlyDictionary<Type, string> DbTypes(in DbProvider provider)
         {
             return provider switch
             {
-                SqlProvider.SqlServer => SqlTypes,
-                SqlProvider.Oracle => OracleDbTypes,
-                SqlProvider.MySql => MySQLDbTypes,
-                SqlProvider.Sqlite => null,
-                SqlProvider.PostgreSql => PostgresDbTypes,
+                DbProvider.SqlServer => SqlTypes,
+                DbProvider.Oracle => OracleDbTypes,
+                DbProvider.MySql => MySQLDbTypes,
+                DbProvider.Sqlite => null,
+                DbProvider.PostgreSql => PostgresDbTypes,
                 _ => throw new NotImplementedException()
             };
         }
@@ -1108,14 +1108,14 @@ namespace TData.Core.Provider
         public readonly bool KeyAsReturnValue;
         public readonly bool SkipAutoGeneratedColumn;
         public readonly bool GenerateParameterWithKeys;
-        public readonly SqlProvider Provider;
+        public readonly DbProvider Provider;
         public readonly int FetchSize;
         public readonly int AdditionalOracleRefCursors;
         public readonly bool ShouldIncludeSequentialBehavior;
         public readonly int Timeout;
         public readonly CommandType CommandType;
 
-        public LoaderConfiguration(in bool keyAsReturnValue, in bool skipAutoGeneratedColumn, in bool generateParameterWithKeys, in int additionalOracleRefCursors, in SqlProvider provider, in int fetchSize, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements, in bool canPrepareStatement, in bool shouldIncludeSequentialBehavior)
+        public LoaderConfiguration(in bool keyAsReturnValue, in bool skipAutoGeneratedColumn, in bool generateParameterWithKeys, in int additionalOracleRefCursors, in DbProvider provider, in int fetchSize, in int timeout, in CommandType commandType, in bool isTransactionOperation, in bool prepareStatements, in bool canPrepareStatement, in bool shouldIncludeSequentialBehavior)
         {
             KeyAsReturnValue = keyAsReturnValue;
             SkipAutoGeneratedColumn = skipAutoGeneratedColumn;

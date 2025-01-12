@@ -4,6 +4,8 @@ using BenchmarkDotNet.Attributes;
 using TData;
 using TData.Configuration;
 using TData.Tests.Performance.Entities;
+using TData.Cache;
+
 #if NETCOREAPP
 using Microsoft.EntityFrameworkCore;
 #endif
@@ -33,6 +35,8 @@ namespace TData.Tests.Performance.Benchmark
             CleanData = bool.Parse(configuration["cleanData"]);
 
             DbConfig.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
+            DbCacheConfig.Register(new DbSettings("dbCached", SqlProvider.SqlServer, cnx), DbCacheProvider.Sqlite);
+
             SetDataBase(int.Parse(len), out var tableName);
 
             var tableBuilder = new TableBuilder();
