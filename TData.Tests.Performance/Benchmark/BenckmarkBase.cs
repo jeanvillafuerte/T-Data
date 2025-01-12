@@ -34,8 +34,8 @@ namespace TData.Tests.Performance.Benchmark
             StringConnection = cnx;
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            DbConfig.Register(new DbSettings("db", SqlProvider.SqlServer, cnx));
-            DbCacheConfig.Register(new DbSettings("dbCached", SqlProvider.SqlServer, cnx), DbCacheProvider.Sqlite);
+            DbConfig.Register(new DbSettings("db", DbProvider.SqlServer, cnx));
+            DbCacheConfig.Register(new DbSettings("dbCached", DbProvider.SqlServer, cnx) { BufferSize = 4096 }, new CacheSettings(DbCacheProvider.InMemory) {  TTL = TimeSpan.FromSeconds(100) });
 
             SetDataBase(int.Parse(len), out var tableName);
 
@@ -44,7 +44,7 @@ namespace TData.Tests.Performance.Benchmark
 #if NETCOREAPP
             tableBuilder.AddTable<PersonReadonlyRecord>(x => x.Id).AddFieldsAsColumns<PersonReadonlyRecord>().DbName(tableName);
 #endif
-            DbHub.AddDbBuilder(tableBuilder);
+            DbHub.AddTableBuilder(tableBuilder);
         }
 
         void SetDataBase(int length, out string tableName)
