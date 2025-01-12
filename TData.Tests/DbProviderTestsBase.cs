@@ -487,7 +487,7 @@ namespace TData.Tests
 
             if (DbProvider == DbProvider.Oracle)
             {
-                 tuple = await dbContext.TryFetchTupleAsync<User, UserType>("BEGIN OPEN :p_cursor1 FOR SELECT * FROM USERS; OPEN :p_cursor2 FOR SELECT * FROM USER_TYPE; END;", new TupleParam());
+                 tuple = await dbContext.TryFetchTupleAsync<User, UserType>("BEGIN OPEN :p_cursor1 FOR SELECT * FROM APP_USER; OPEN :p_cursor2 FOR SELECT * FROM USER_TYPE; END;", new TupleParam());
             }
             else
             {
@@ -773,5 +773,13 @@ namespace TData.Tests
             File.Delete(filePath);
         }
         #endregion
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (TestContext.CurrentContext.Result.Outcome.Status == NUnit.Framework.Interfaces.TestStatus.Failed)
+                TestContext.WriteLine($"Test failed for provider: {DbProvider}");
+        }
+
     }
 }
