@@ -39,6 +39,6 @@ namespace TData
         /// Adds a table builder to the database configuration.
         /// </summary>
         /// <param name="builder">The table builder to add.</param>
-        public static void AddDbBuilder(TableBuilder builder) => DbConfig.AddTableBuilder(in builder);
+        public static void AddTableBuilder(TableBuilder builder) => DbConfig.AddTableBuilder(in builder);
     }
 }

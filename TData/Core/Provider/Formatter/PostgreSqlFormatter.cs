@@ -7,7 +7,7 @@ namespace TData.Core.Provider.Formatter
 {
     internal readonly struct PostgreSqlFormatter : ISqlFormatter
     {
-        readonly SqlProvider ISqlFormatter.Provider => SqlProvider.PostgreSql;
+        readonly DbProvider ISqlFormatter.Provider => DbProvider.PostgreSql;
         readonly string ISqlFormatter.BindVariable => "@";
         readonly string ISqlFormatter.MinDate => "CAST('1900-01-01' AS date)";
         readonly string ISqlFormatter.MaxDate => "CAST('9999-12-31' AS date)";

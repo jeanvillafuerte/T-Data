@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using TData.Core.Provider;
 
 namespace TData.Core.FluentApi
 {
@@ -44,6 +45,9 @@ namespace TData.Core.FluentApi
 
             if (properties.Length == 0)
                 throw new PropertiesNotFoundException($"No properties were found in the type '{type.FullName}'. Ensure that the type contains public properties.");
+
+            if (properties.Any(x => DatabaseHelperProvider.HasDbParameterAttribute(x)))
+                throw new ArgumentException("The properties cannot have the DbParameter attribute, use another Class or Record to hold parameter values");
 
             foreach (var property in properties.Where(x => string.IsNullOrEmpty(key) || x.Name != key).ToArray())
             {

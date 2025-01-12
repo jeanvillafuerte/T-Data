@@ -5,7 +5,7 @@ namespace TData.Core.QueryGenerator
 {
     public interface ISqlFormatter
     {
-        SqlProvider Provider { get; }
+        DbProvider Provider { get; }
         string BindVariable { get; }
         string MinDate { get; }
         string MaxDate { get; }

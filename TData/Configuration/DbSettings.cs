@@ -1,3 +1,4 @@
+using System.Text;
 using TData.Core.Provider.Formatter;
 using TData.Core.QueryGenerator;
 
@@ -8,10 +9,22 @@ namespace TData.Configuration
     /// </summary>
     public sealed class DbSettings
     {
+        public bool DefaultDb { get; set; }
+
         /// <summary>
-        /// Buffer size for data BLOB or similar data types.
+        /// Buffer size for data BLOB or similar data types, default value: 8KB
         /// </summary>
-        public int BufferSize { get; set; }
+        public int BufferSize { get; set; } = 8192;
+
+        /// <summary>
+        /// Buffer size to handle long text data, default value: 1MB
+        /// </summary>
+        public int TextBufferSize { get; set; } = 1048576;
+
+        /// <summary>
+        /// Text treatment for long text data, default value: UTF8
+        /// </summary>
+        public Encoding Encoding { get; set; } = Encoding.UTF8;
 
         /// <summary>
         /// Gets the signature for the database settings.
@@ -21,12 +34,12 @@ namespace TData.Configuration
         /// <summary>
         /// Gets the connection string for the database.
         /// </summary>
-        public readonly string StringConnection;
+        public string StringConnection { internal get; set; }
 
         /// <summary>
         /// Gets the SQL provider for the database.
         /// </summary>
-        public readonly SqlProvider SqlProvider;
+        public readonly DbProvider SqlProvider;
 
         /// <summary>
         /// Show detailed error message in error message and log, adding stored procedure name and parameters.
@@ -64,11 +77,11 @@ namespace TData.Configuration
             {
                 return SqlProvider switch
                 {
-                    SqlProvider.SqlServer => new SqlServerFormatter(),
-                    SqlProvider.MySql => new MySqlFormatter(),
-                    SqlProvider.PostgreSql => new PostgreSqlFormatter(),
-                    SqlProvider.Oracle => new OracleFormatter(),
-                    SqlProvider.Sqlite => new SqliteFormatter(),
+                    DbProvider.SqlServer => new SqlServerFormatter(),
+                    DbProvider.MySql => new MySqlFormatter(),
+                    DbProvider.PostgreSql => new PostgreSqlFormatter(),
+                    DbProvider.Oracle => new OracleFormatter(),
+                    DbProvider.Sqlite => new SqliteFormatter(),
                     _ => throw new System.NotSupportedException(),
                 };
             }
@@ -80,7 +93,7 @@ namespace TData.Configuration
         /// <param name="signature">The signature for the database settings.</param>
         /// <param name="provider">The SQL provider for the database.</param>
         /// <param name="stringConnection">The connection string for the database.</param>
-        public DbSettings(string signature, SqlProvider provider, string stringConnection)
+        public DbSettings(string signature, DbProvider provider, string stringConnection)
         {
             Signature = signature;
             SqlProvider = provider;

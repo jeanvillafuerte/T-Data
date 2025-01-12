@@ -21,4 +21,15 @@ namespace TData.Tests
     class UserNullableClass { public int Id { get; set; } public int UserTypeId { get; set; } public string Name { get; set; } public bool? State { get; set; } public decimal? Salary { get; set; } public DateTime? Birthday { get; set; } public Guid? UserCode { get; set; } public byte[]? Icon { get; set; } }
     record SimpleTimeSpanRecord(TimeSpan Value);
     record SimpleGuidRecord(Guid Value);
+
+    class Book
+    {
+        public int Id { get; set; }
+        public string Content { get; set; }
+
+        public Book(string content)
+        {
+            Content = content;
+        }
+    }
 }

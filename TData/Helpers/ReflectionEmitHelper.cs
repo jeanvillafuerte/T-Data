@@ -140,12 +140,16 @@ namespace TData.Helpers
             emitter.Emit(conversionOpCode);
         }
 
-        internal static void EmitValueConversion(in ILGenerator emitter, in PropertyTypeInfo column, in Type underlyingType, in SqlProvider provider)
+        internal static void EmitValueConversion(in ILGenerator emitter, in PropertyTypeInfo column, in Type underlyingType, in DbProvider provider)
         {
             Type propertyType = column.PropertyInfo.PropertyType;
             Type sourceType = column.Source;
 
-            if (IsPrimitiveTypeConversion(propertyType, sourceType))
+            if (column.ForceCast)
+            {
+                emitter.Emit(OpCodes.Castclass, propertyType);
+            }
+            else if (IsPrimitiveTypeConversion(propertyType, sourceType))
             {
                 EmitConvert(emitter, propertyType);
             }
@@ -170,11 +174,11 @@ namespace TData.Helpers
             {
                 emitter.Emit(OpCodes.Call, typeof(CommonConversion).GetMethod(nameof(CommonConversion.SafeConversionStringToTimeSpan), BindingFlags.NonPublic | BindingFlags.Static));
             }
-            else if (provider.Equals(SqlProvider.PostgreSql) && column.DataTypeName == "bit" && underlyingType == typeof(bool))
+            else if (provider.Equals(DbProvider.PostgreSql) && column.DataTypeName == "bit" && underlyingType == typeof(bool))
             {
                 emitter.Emit(OpCodes.Newobj, typeof(Nullable<>).MakeGenericType(typeof(bool)).GetConstructor(new[] { typeof(bool) }));
             }
-            else if (provider.Equals(SqlProvider.PostgreSql) && column.DataTypeName == "bit" && propertyType == typeof(bool))
+            else if (provider.Equals(DbProvider.PostgreSql) && column.DataTypeName == "bit" && propertyType == typeof(bool))
             {
                 // No conversion needed
             }

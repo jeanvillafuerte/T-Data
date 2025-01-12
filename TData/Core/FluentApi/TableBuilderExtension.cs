@@ -86,15 +86,27 @@ namespace TData.Core.FluentApi
             return dbColumn;
         }
 
-        public static DbColumn Required(this DbColumn dbColumn)
+        public static DbColumn ForceCast(this DbColumn dbColumn)
         {
-            dbColumn.Required = true;
+            dbColumn.ForceCast = true;
             return dbColumn;
         }
 
+        public static DbColumn LongTextTreatment(this DbColumn dbColumn)
+        {
+            dbColumn.LongTextTreatment = true;
+            return dbColumn;
+
+        }
         public static DbColumn Size(this DbColumn dbColumn, int size)
         {
             dbColumn.Size = size;
+            return dbColumn;
+        }
+
+        public static DbColumn IsNotNull(this DbColumn dbColumn)
+        {
+            dbColumn.IsNotNull = true;
             return dbColumn;
         }
 

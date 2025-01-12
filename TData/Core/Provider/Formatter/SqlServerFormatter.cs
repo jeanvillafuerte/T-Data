@@ -7,7 +7,7 @@ namespace TData.Core.Provider.Formatter
 {
     internal readonly struct SqlServerFormatter : ISqlFormatter
     {
-        readonly SqlProvider ISqlFormatter.Provider => SqlProvider.SqlServer;
+        readonly DbProvider ISqlFormatter.Provider => DbProvider.SqlServer;
         readonly string ISqlFormatter.BindVariable => "@";
         readonly string ISqlFormatter.MinDate => "CONVERT(DATETIME, N'1900-01-01', 102)";
         readonly string ISqlFormatter.MaxDate => "CONVERT(DATETIME, N'9999-12-31', 102)";

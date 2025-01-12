@@ -20,8 +20,8 @@ namespace TData.Tests.Performance.Legacy.Tests
         public void ExecuteAsync(string db, string tableName, int expectedItems = 0)
         {
             var query = $"SELECT TOP 1 UserName, FirstName, LastName, BirthDate, Age, Occupation, Country, Salary, UniqueId, [State], LastUpdate FROM {tableName}";
-            PerformOperationAsync(() => DbHub.Use(db).FetchOneAsync<Person>(query, null, CancellationToken.None), "FetchOneAsync<>");
-            PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>(query, null, CancellationToken.None), "TryFetchOneAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).FetchOneAsync<Person>(query, null), "FetchOneAsync<>");
+            PerformOperationAsync(() => DbHub.Use(db).TryFetchOneAsync<Person>(query, null), "TryFetchOneAsync<>");
         }
 
         public void ExecuteCachedDatabase(string db, string tableName, int expectedItems = 0)

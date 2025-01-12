@@ -3,7 +3,7 @@
 namespace TData
 {
     [Flags]
-    public enum SqlProvider : byte
+    public enum DbProvider : byte
     {
         SqlServer = 0,
         MySql = 1 << 0,

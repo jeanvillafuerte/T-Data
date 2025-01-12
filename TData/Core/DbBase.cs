@@ -10,6 +10,7 @@ using TData.Core.Provider;
 using TData.Core.QueryGenerator;
 using TData.Configuration;
 using TData.DbResult;
+using System.IO;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Cache")]
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
@@ -540,10 +541,55 @@ namespace TData
 
         public T ExecuteScalar<T>(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            string convertedString = script;
+
+            if (Options.SqlProvider == DbProvider.Oracle && script.IndexOf("DUAL", StringComparison.OrdinalIgnoreCase) == -1)
+            {
+                convertedString = script + " FROM DUAL";
+            }
+
+            using var command = new DatabaseCommand(in Options, in convertedString, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             var rawValue = command.ExecuteScalar();
             return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
+        }
+
+        public void LoadStream(in string script, in object parameters, in Stream targetStream)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            command.LoadStream(in targetStream);
+        }
+
+        public async Task LoadStreamAsync(string script, object parameters, Stream targetStream)
+        {
+            await LoadStreamAsync(script, parameters, targetStream, CancellationToken.None);
+        }
+
+        public async Task LoadStreamAsync(string script, object parameters, Stream targetStream, CancellationToken cancellationToken)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            await command.LoadStreamAsync(targetStream, cancellationToken);
+        }
+
+        public void LoadTextStream(in string script, in object parameters, in StreamWriter targetStream)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            command.LoadTextStream(in targetStream);
+        }
+
+        public async Task LoadTextStreamAsync(string script, object parameters, StreamWriter targetStream)
+        {
+            await LoadTextStreamAsync(script, parameters, targetStream, CancellationToken.None);
+        }
+
+        public async Task LoadTextStreamAsync(string script, object parameters, StreamWriter targetStream, CancellationToken cancellationToken)
+        {
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            command.Prepare();
+            await command.LoadTextStreamAsync(targetStream, cancellationToken);
         }
 
         public async Task<T> ExecuteScalarAsync<T>(string script, object parameters = null)
@@ -878,7 +924,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>> FetchTuple<T1, T2>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -905,7 +951,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>>> FetchTupleAsync<T1, T2>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -989,7 +1035,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>, List<T3>> FetchTuple<T1, T2, T3>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1044,7 +1090,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>>> FetchTupleAsync<T1, T2, T3>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1106,7 +1152,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>, List<T3>, List<T4>> FetchTuple<T1, T2, T3, T4>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1164,7 +1210,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>>> FetchTupleAsync<T1, T2, T3, T4>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1227,7 +1273,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>> FetchTuple<T1, T2, T3, T4, T5>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1286,7 +1332,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>>> FetchTupleAsync<T1, T2, T3, T4, T5>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1351,7 +1397,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> FetchTuple<T1, T2, T3, T4, T5, T6>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1411,7 +1457,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1478,7 +1524,7 @@ namespace TData
 
         public Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> FetchTuple<T1, T2, T3, T4, T5, T6, T7>(in string script, in object parameters = null)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1515,7 +1561,7 @@ namespace TData
 
         public async Task<Tuple<List<T1>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> FetchTupleAsync<T1, T2, T3, T4, T5, T6, T7>(string script, object parameters, CancellationToken cancellationToken)
         {
-            if (Options.SqlProvider == SqlProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
+            if (Options.SqlProvider == DbProvider.PostgreSql && QueryValidators.IsStoredProcedure(script))
             {
                 var _script = script;
                 var _parameters = parameters;
@@ -1658,7 +1704,7 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
 
-            if (Options.SqlProvider == SqlProvider.MySql && Options.PrepareStatements)
+            if (Options.SqlProvider == DbProvider.MySql && Options.PrepareStatements)
             {
                 var scriptForMysql = generator.GenerateInsert(generateKeyValue: false);
                 return ExecuteTransaction((db) =>
@@ -1670,14 +1716,14 @@ namespace TData
 
             var script = generator.GenerateInsert(generateKeyValue: true);
 
-            if (Options.SqlProvider == SqlProvider.Sqlite)
+            if (Options.SqlProvider == DbProvider.Sqlite)
                 return ExecuteTransaction((db) => db.ExecuteScalar<TE>(script, entity));
 
             using var command = new DatabaseCommand(in Options, in script, entity, in AddReturnIDConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
 
             object rawValue = null;
-            if (Options.SqlProvider == SqlProvider.Oracle)
+            if (Options.SqlProvider == DbProvider.Oracle)
             {
                 command.ExecuteNonQuery();
                 foreach(var param in command.OutParameters)

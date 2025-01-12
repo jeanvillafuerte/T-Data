@@ -7,7 +7,7 @@ namespace TData.Core.Provider.Formatter
 {
     internal readonly struct OracleFormatter : ISqlFormatter
     {
-        readonly SqlProvider ISqlFormatter.Provider => SqlProvider.Oracle;
+        readonly DbProvider ISqlFormatter.Provider => DbProvider.Oracle;
 
         readonly string ISqlFormatter.BindVariable => ":";
         readonly string ISqlFormatter.MinDate => "TO_DATE('01/01/1900', 'MM/DD/RRRR')";

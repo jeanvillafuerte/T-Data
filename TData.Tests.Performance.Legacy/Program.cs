@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
-using TData;
 using TData.Cache;
 using TData.Configuration;
 using TData.Tests.Performance.Entities;
@@ -69,8 +68,8 @@ namespace TData.Tests.Performance.Legacy
             TableName = $"Person_{DateTime.Now:yyyyMMddhhmmss}";
             CleanData = bool.Parse(configuration["cleanData"]);
 
-            DbConfig.Register(new DbSettings(db1, SqlProvider.SqlServer, cnx1));
-            DbConfig.Register(new DbSettings(db2, SqlProvider.SqlServer, cnx2));
+            DbConfig.Register(new DbSettings(db1, DbProvider.SqlServer, cnx1));
+            DbCacheConfig.Register(new DbSettings(db2, DbProvider.SqlServer, cnx2), new CacheSettings(DbCacheProvider.InMemory, false, null, null));
 
             rowsGenerated = int.Parse(len);
             DataBaseManager.LoadDatabases(rowsGenerated, TableName);            
@@ -81,7 +80,7 @@ namespace TData.Tests.Performance.Legacy
             var tableBuilder = new TableBuilder();
             DbTable dbTable = tableBuilder.AddTable<Person>(x => x.Id);
             dbTable.AddFieldsAsColumns<Person>().DbName(TableName);
-            DbHub.AddDbBuilder(tableBuilder);
+            DbHub.AddTableBuilder(tableBuilder);
         }
 
         static void RunTestsDatabase(string db, string databaseName, int rows)

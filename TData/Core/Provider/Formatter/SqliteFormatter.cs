@@ -8,7 +8,7 @@ namespace TData.Core.Provider.Formatter
 {
     internal readonly struct SqliteFormatter : ISqlFormatter
     {
-        readonly SqlProvider ISqlFormatter.Provider => SqlProvider.Sqlite;
+        readonly DbProvider ISqlFormatter.Provider => DbProvider.Sqlite;
         readonly string ISqlFormatter.BindVariable => "$";
         readonly string ISqlFormatter.MinDate => "date('1900-01-01')";
         readonly string ISqlFormatter.MaxDate => "date('9999-12-31')";

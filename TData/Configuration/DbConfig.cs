@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using TData.Core.FluentApi;
 using TData.Core.Provider;
 
@@ -22,17 +23,25 @@ namespace TData.Configuration
         /// <summary>
         /// Registers a new database configuration.
         /// </summary>
-        /// <param name="config">The database settings to register.</param>
+        /// <param name="settings">The database settings to register.</param>
         /// <exception cref="DuplicateSignatureException">Thrown when a configuration with the same signature already exists.</exception>
-        public static void Register(in DbSettings config)
+        public static void Register(in DbSettings settings)
         {
-            var key = HashHelper.GenerateHash(config.Signature);
-            _defaultSignatureHash = key;
-            if (!dictionary.TryAdd(key, config))
+            var key = HashHelper.GenerateHash(settings.Signature);
+
+            if (settings.DefaultDb)
+            {
+                if (_defaultSignatureHash == 0)
+                    _defaultSignatureHash = key;
+                else
+                    throw new Exception("There is already a default configuration");
+            }
+
+            ValidateConfiguration(in settings);
+            if (!dictionary.TryAdd(key, settings))
                 throw new DuplicateSignatureException();
 
-            ValidateConfiguration(in config);
-            DatabaseHelperProvider.LoadConnectionDelegate(config.SqlProvider);
+            DatabaseHelperProvider.LoadConnectionDelegate(settings.SqlProvider);
         }
 
         static void ValidateConfiguration(in DbSettings config)
@@ -47,10 +56,9 @@ namespace TData.Configuration
 
         internal static DbSettings Get()
         {
-            if (dictionary.Count == 1)
+            if (dictionary.TryGetValue(_defaultSignatureHash, out var db))
             {
-                dictionary.TryGetValue(_defaultSignatureHash, out var value);
-                return value;
+                return db;
             }
             else
                 throw new Exception("There is more than one configuration, use the method Get(string signature)");
@@ -66,7 +74,17 @@ namespace TData.Configuration
 
         internal static void AddTableBuilder(in TableBuilder tableBuilder)
         {
-            Tables = new ConcurrentDictionary<string, DbTable>(tableBuilder.Tables);
+            if (Tables.Any())
+            {
+                foreach (var table in tableBuilder.Tables)
+                {
+                    Tables.TryAdd(table.Key, table.Value);
+                }
+            }
+            else
+            {
+                Tables = new ConcurrentDictionary<string, DbTable>(tableBuilder.Tables);
+            }
         }
     }
 }
