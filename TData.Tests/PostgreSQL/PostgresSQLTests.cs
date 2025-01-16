@@ -91,8 +91,7 @@
                             BEGIN
                                 SELECT COUNT(*), SUM(COALESCE(Salary, 0)) INTO total, totalSalary FROM APP_USER;
                             END;
-                            $$ LANGUAGE plpgsql;
-                        ");
+                            $$ LANGUAGE plpgsql;");
                 db.Execute("DROP FUNCTION IF EXISTS GET_DATA();");
                 db.Execute(@"CREATE FUNCTION GET_DATA()
                             RETURNS SETOF REFCURSOR 
@@ -210,6 +209,14 @@
             var dbContext = DbHub.Use(DbSignature);
             dbContext.Execute("BULK_INSERT_USER_DATA", new { total = 5000 });
             Assert.Pass();
+        }
+
+        [Test]
+        public void CastingWithParameters()
+        {
+            var dbContext = DbHub.Use(DbSignature);
+            var result = dbContext.ExecuteScalar<int>("SELECT '100'::INTEGER + @value", new { value = 100 });
+            Assert.That(result, Is.EqualTo(200));
         }
     }
 }

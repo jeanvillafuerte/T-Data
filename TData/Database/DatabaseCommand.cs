@@ -20,7 +20,6 @@ namespace TData
 #endif
     {
         private readonly CommandType _commandType;
-        private readonly int _signatureHashCode;
         private readonly string _script;
         private readonly DbSettings _settings;
         private readonly object _filter;
@@ -30,7 +29,6 @@ namespace TData
         private readonly ConfigureCommandDelegate2 _commandSetupDelegate2;
         private readonly Action<object, DbCommand, DbDataReader> _actionOutParameterLoader;
         private readonly CommandBehavior _commandBehavior;
-        private readonly DbCommandConfiguration _configuration;
         
         //object to share in transaction context
         private DbDataReader _reader;
@@ -73,6 +71,7 @@ namespace TData
             in DbSettings settings,
             in string script,
             in object filter,
+            in int operationHash,
             in DbCommandConfiguration configuration,
             in bool buffered,
             in DbTransaction transaction = null,
@@ -80,39 +79,16 @@ namespace TData
             in bool addPagingParams = false)
         {
             _settings = settings;
-            _signatureHashCode = settings.Signature.GetHashCode();
-            _configuration = configuration;
+            _preparationQueryKey = operationHash;
             _script = script;
             _filter = filter;
             _command = command;
 
-            Type filterType = null;
-            bool hasFilter = false;
-            bool isTransaction = false;
-            var operationKey = 17;
-
             if (transaction != null)
             {
-                isTransaction = true;
                 _transaction = transaction;
                 _connection = _command.Connection;
                 _command.Parameters.Clear();
-                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
-            }
-
-            unchecked
-            {
-                if (filter != null)
-                {
-                    hasFilter = true;
-                    filterType = filter.GetType();
-                    operationKey = (operationKey * 23) + filterType.GetHashCode();
-                }
-
-                operationKey = (operationKey * 23) + _script.GetHashCode();
-                operationKey = (operationKey * 23) + (int)_settings.SqlProvider;
-                operationKey = (operationKey * 23) + configuration.GetHashCode();
-                _preparationQueryKey = operationKey;
             }
 
             if (DatabaseHelperProvider.CommandMetadata.TryGetValue(_preparationQueryKey, out var commandMetadata))
@@ -126,70 +102,94 @@ namespace TData
             else
             {
                 _commandBehavior = configuration.CommandBehavior;
+                SetupCommand(
+                    in filter, 
+                    transaction != null, 
+                    in configuration, 
+                    in buffered,
+                    in addPagingParams,
+                    out _commandType,
+                    out _commandSetupDelegate,
+                    out _actionOutParameterLoader,
+                    ref _script);
+            }
+        }
 
-                var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
-                bool isExecuteNonQuery = configuration.IsExecuteNonQuery();
+        private void SetupCommand(in object filter, in bool isTransaction, in DbCommandConfiguration configuration, in bool buffered, in bool addPagingParams,
+            out CommandType commandType, out ConfigureCommandDelegate commandSetupDelegate, out Action<object, DbCommand, DbDataReader> actionOutParameterLoader, ref string script)
+        {
+            bool hasFilter = false;
+            Type filterType = null;
 
-                bool expectBindValueParameters;
-                bool canPrepareStatement = false;
-                string transformedScript = null;
-                LoaderConfiguration commandConfiguration;
+            if (filter != null)
+            {
+                hasFilter = true;
+                filterType = filter.GetType();
+            }
 
-                if (isStoreProcedure && _settings.SqlProvider == DbProvider.PostgreSql)
+            var isStoreProcedure = QueryValidators.IsStoredProcedure(script);
+            bool isExecuteNonQuery = configuration.IsExecuteNonQuery();
+
+            bool expectBindValueParameters;
+            bool canPrepareStatement = false;
+            string transformedScript = null;
+            LoaderConfiguration commandConfiguration;
+
+            if (isStoreProcedure && _settings.SqlProvider == DbProvider.PostgreSql)
+            {
+                commandType = CommandType.Text;
+                isStoreProcedure = false;
+
+                commandConfiguration = GetCommandConfiguration(in _settings, in commandType, in configuration, in isTransaction, in isStoreProcedure, true);
+
+                DbParameterInfo[] localParameters = null;
+                (commandSetupDelegate, actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
+
+                bool existsOutParameter = false;
+                if (localParameters != null)
                 {
-                    _commandType = CommandType.Text;
-                    isStoreProcedure = false;
-
-                    commandConfiguration = GetCommandConfiguration(in _settings, in _commandType, in configuration, in isTransaction, in isStoreProcedure, true);
-
-                    DbParameterInfo[] localParameters = null;
-                    (_commandSetupDelegate, _actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
-
-                    bool existsOutParameter = false;
-                    if (localParameters != null)
+                    foreach (var item in localParameters)
                     {
-                        foreach (var item in localParameters)
+                        if (item.IsOutput)
                         {
-                            if (item.IsOutput)
-                            {
-                                existsOutParameter = true;
-                                break;
-                            }
+                            existsOutParameter = true;
+                            break;
                         }
                     }
+                }
 
-                    if (!isExecuteNonQuery && existsOutParameter)
-                        throw new PostgreSQLInvalidRequestCallException();
+                if (!isExecuteNonQuery && existsOutParameter)
+                    throw new PostgreSQLInvalidRequestCallException();
 
-                    transformedScript = _script = TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
+                transformedScript = script = TransformPostgresScript(in script, in localParameters, in isExecuteNonQuery);
+            }
+            else
+            {
+                if (isStoreProcedure)
+                {
+                    expectBindValueParameters = false;
+                    commandType = CommandType.StoredProcedure;
                 }
                 else
                 {
-                    if (isStoreProcedure)
-                    {
-                        expectBindValueParameters = false;
-                        _commandType = CommandType.StoredProcedure;
-                    }
-                    else
-                    {
-                        ValidateScript(in script, in _settings.SqlProvider, in isExecuteNonQuery, in hasFilter, out var isDML, out expectBindValueParameters, in addPagingParams);
-                        canPrepareStatement = isDML && expectBindValueParameters;
-                        _commandType = CommandType.Text;
-                    }
-
-                    commandConfiguration = GetCommandConfiguration(in _settings, in _commandType, in configuration, in isTransaction, in isStoreProcedure, in canPrepareStatement);
-                    DbParameterInfo[] localParameters = null;
-                    (_commandSetupDelegate, _actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
+                    ValidateScript(in script, in _settings.SqlProvider, in isExecuteNonQuery, in hasFilter, out var isDML, out expectBindValueParameters, in addPagingParams);
+                    canPrepareStatement = isDML && expectBindValueParameters;
+                    commandType = CommandType.Text;
                 }
 
-                if (buffered)
-                    DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in _commandSetupDelegate, null, in _actionOutParameterLoader, in configuration.CommandBehavior, in _commandType, in transformedScript, in commandConfiguration.ShouldIncludeSequentialBehavior));
+                commandConfiguration = GetCommandConfiguration(in _settings, in commandType, in configuration, in isTransaction, in isStoreProcedure, in canPrepareStatement);
+                DbParameterInfo[] localParameters = null;
+                (commandSetupDelegate, actionOutParameterLoader) = GetCommandMetaData(in commandConfiguration, in isExecuteNonQuery, in filterType, in addPagingParams, ref localParameters);
             }
+
+            if (buffered)
+                DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(in commandSetupDelegate, null, in actionOutParameterLoader, in configuration.CommandBehavior, in commandType, in transformedScript, in commandConfiguration.ShouldIncludeSequentialBehavior));
         }
 
         public DatabaseCommand(
             in DbSettings settings,
             in string script,
+            in int operationHash,
             in DbCommandConfiguration configuration,
             in bool buffered,
             in object[] parameters = null,
@@ -197,33 +197,19 @@ namespace TData
             in DbCommand command = null)
         {
             _settings = settings;
-            _signatureHashCode = settings.Signature.GetHashCode();
-            _configuration = configuration;
+            _preparationQueryKey = operationHash;
             _script = script;
             _command = command;
             _commandType = CommandType.Text;
             _commandBehavior = configuration.CommandBehavior;
 
-            bool isTransaction = false;
-            var operationKey = 17;
-
             if (transaction != null)
             {
-                isTransaction = true;
                 _transaction = transaction;
                 _connection = _command.Connection;
                 _command.Parameters.Clear();
-                operationKey = (operationKey * 23) + _transaction.GetType().GetHashCode();
             }
-
-            unchecked
-            {
-                operationKey = (operationKey * 23) + _script.GetHashCode();
-                operationKey = (operationKey * 23) + _settings.SqlProvider.GetHashCode();
-                operationKey = (operationKey * 23) + configuration.GetHashCode();
-            }
-
-            _preparationQueryKey = operationKey;
+          
             DbParameterInfo[] convertedParameters = Array.Empty<DbParameterInfo>();
             if (parameters is DbParameterInfo[] && parameters.Length > 0)
             {
@@ -246,8 +232,9 @@ namespace TData
             }
             else
             {
+                var isTransaction = transaction != null;
                 var commandConfiguration = GetCommandConfiguration(in _settings, in _commandType, in configuration, isTransaction, false, true);
-                _commandSetupDelegate2 = DatabaseProvider.GetCommandMetaData2(in commandConfiguration, convertedParameters);
+                _commandSetupDelegate2 = GetCommandMetaData2(in commandConfiguration, convertedParameters);
 
                 if (buffered)
                     DatabaseHelperProvider.CommandMetadata.TryAdd(_preparationQueryKey, new CommandMetaData(null, in _commandSetupDelegate2, null, in configuration.CommandBehavior, in _commandType, null, in commandConfiguration.ShouldIncludeSequentialBehavior));
@@ -439,7 +426,7 @@ namespace TData
             if (cancellationToken.IsCancellationRequested)
                 throw new TaskCanceledException();
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+            var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
             var list = new List<T>(expectedRows);
 
@@ -456,7 +443,7 @@ namespace TData
 
             if (await _reader.NextResultAsync(cancellationToken))
             {
-                var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+                var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
                 var list = new List<T>(expectedRows);
                 while (await _reader.ReadAsync(cancellationToken))
@@ -471,7 +458,7 @@ namespace TData
         public List<T> ReadListItems<T>(int expectedRows = 0)
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
-            var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+            var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
             var list = new List<T>(expectedRows);
 
@@ -485,7 +472,7 @@ namespace TData
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in batchSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in batchSize);
 
             if (_settings.SqlProvider == DbProvider.Oracle && batchSize > 0)
                 DatabaseInternalConfiguration.SetFetchSizeOracleReader(_reader, batchSize);
@@ -515,7 +502,7 @@ namespace TData
         {
             _reader = await _command!.ExecuteReaderAsync(_commandBehavior, cancellationToken);
 
-            var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in batchSize);
+            var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in batchSize);
 
             if (_settings.SqlProvider == DbProvider.Oracle && batchSize > 0)
                 DatabaseInternalConfiguration.SetFetchSizeOracleReader(_reader, batchSize);
@@ -545,7 +532,7 @@ namespace TData
         {
             if (_reader.NextResult())
             {
-                var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+                var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
                 var list = new List<T>(expectedRows);
 
@@ -598,7 +585,7 @@ namespace TData
         public T ProcessReaderToSingle<T>()
         {
             using var reader = _command!.ExecuteReader(_commandBehavior);
-            var parser = GetParserTypeDelegate<T>(in reader, in _signatureHashCode, in _preparationQueryKey, in _settings, 1);
+            var parser = GetParserTypeDelegate<T>(in reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, 1);
 
             T item = default;
 
@@ -617,7 +604,7 @@ namespace TData
         public List<T> ProcessReaderToList<T>(int expectedRows = 0)
         {
             _reader = _command!.ExecuteReader(_commandBehavior);
-            var parser = GetParserTypeDelegate<T>(in _reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+            var parser = GetParserTypeDelegate<T>(in _reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
             var list = new List<T>(expectedRows);
 
@@ -633,7 +620,7 @@ namespace TData
         public async Task<T> ProcessReaderToSingleAsync<T>(CancellationToken cancellationToken)
         {
             using var reader = await _command!.ExecuteReaderAsync(_commandBehavior, cancellationToken);
-            var parser = GetParserTypeDelegate<T>(in reader, in _signatureHashCode, in _preparationQueryKey, in _settings, 1);
+            var parser = GetParserTypeDelegate<T>(in reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, 1);
 
             T item = default;
 
@@ -656,7 +643,7 @@ namespace TData
             if (cancellationToken.IsCancellationRequested)
                 throw new TaskCanceledException();
 
-            var parser = GetParserTypeDelegate<T>(in reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in expectedRows);
+            var parser = GetParserTypeDelegate<T>(in reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in expectedRows);
 
             var list = new List<T>(expectedRows);
 
@@ -684,7 +671,7 @@ namespace TData
                 if (_settings.SqlProvider == DbProvider.Oracle)
                     DatabaseInternalConfiguration.SetFetchSizeOracleReader(in reader, in pageSize);
 
-                parser = GetParserTypeDelegate<T>(in reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in pageSize);
+                parser = GetParserTypeDelegate<T>(in reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in pageSize);
 
                 while (reader.Read())
                     list.Add(parser(in reader, _settings.Encoding));
@@ -795,7 +782,7 @@ namespace TData
                 if (_settings.SqlProvider == DbProvider.Oracle)
                     DatabaseInternalConfiguration.SetFetchSizeOracleReader(in reader, pageSize);
 
-                parser = GetParserTypeDelegate<T>(in reader, in _signatureHashCode, in _preparationQueryKey, in _settings, in pageSize);
+                parser = GetParserTypeDelegate<T>(in reader, _settings.Signature.GetHashCode(), in _preparationQueryKey, in _settings, in pageSize);
 
                 while (await reader.ReadAsync(cancellationToken))
                     list.Add(parser(in reader, _settings.Encoding));

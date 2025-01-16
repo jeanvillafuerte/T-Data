@@ -13,7 +13,7 @@ namespace TData.Cache.MemoryCache
         Expression Selector { get; }
         bool IsTuple { get; }
         IQueryResult PrepareForCache(TimeSpan ttl);
-        object GetSerializedData(in SerializerDelegate serializer);
+        object GetSerializedData(in SerializeDelegate serializer);
         IQueryResult PrepareForRefresh(string query);
         void ExpireValue();
     }
@@ -57,7 +57,7 @@ namespace TData.Cache.MemoryCache
            return new QueryResult<T>(MethodHandled, null, Params, default, DateTime.UtcNow.Add(ttl), Where, Selector);
         }
 
-        public object GetSerializedData(in SerializerDelegate serializer)
+        public object GetSerializedData(in SerializeDelegate serializer)
         {
             return serializer(Data);
         }

@@ -198,17 +198,17 @@ namespace TData.Core.QueryGenerator
 
         #endregion
 
-        private string WhereClause(Expression expression, MemberInfo member = null, string[][] aliasIdentifiers = null)
+        private string WhereClause(in Expression expression, in MemberInfo member = null, in string[][] aliasIdentifiers = null)
         {
             return expression switch
             {
-                ConstantExpression constantExpression => HandleConstantExpression(constantExpression, member),
-                UnaryExpression unaryExpression => HandleUnaryExpression(unaryExpression, aliasIdentifiers),
-                BinaryExpression binaryExpression => HandleBinaryExpression(binaryExpression, aliasIdentifiers),
+                ConstantExpression constantExpression => HandleConstantExpression(in constantExpression, in member),
+                UnaryExpression unaryExpression => HandleUnaryExpression(in unaryExpression, in aliasIdentifiers),
+                BinaryExpression binaryExpression => HandleBinaryExpression(in binaryExpression, in aliasIdentifiers),
                 MemberExpression memberExpression when memberExpression.Member.Name == "Now" && memberExpression.Type == typeof(DateTime) => SqlDateNow(),
                 MemberExpression memberExpression when memberExpression.Member.Name == "MinValue" && memberExpression.Type == typeof(DateTime) => SqlMin(),
                 MemberExpression memberExpression when memberExpression.Member.Name == "MaxValue" && memberExpression.Type == typeof(DateTime) => SqlMax(),
-                MemberExpression memberExpression when (memberExpression.Type == typeof(string) || Nullable.GetUnderlyingType(memberExpression.Type) != null) => GetColumnName(memberExpression, aliasIdentifiers),
+                MemberExpression memberExpression when (memberExpression.Type == typeof(string) || Nullable.GetUnderlyingType(memberExpression.Type) != null) => GetColumnName(in memberExpression, in aliasIdentifiers),
                 MemberExpression memberExpression when memberExpression.Type == typeof(int) ||
                                                        memberExpression.Type == typeof(short) ||
                                                        memberExpression.Type == typeof(long) ||
@@ -219,18 +219,18 @@ namespace TData.Core.QueryGenerator
                                                        Nullable.GetUnderlyingType(memberExpression.Member.DeclaringType) != null ||
                                                        (memberExpression.Member is FieldInfo fieldInfo && Nullable.GetUnderlyingType(fieldInfo.FieldType) != null) ||
                                                        (memberExpression.Type.IsGenericType &&
-                                                       typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression, aliasIdentifiers),
-                NewExpression newExpression => HandleNewExpression(newExpression),
-                NewArrayExpression newArrayExpression => HandleNewArrayExpression(newArrayExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(memberExpression, aliasIdentifiers)} = {(Formatter.Provider == DbProvider.PostgreSql ? "'1'" : "1")}",
-                MethodCallExpression methodCall when IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains, aliasIdentifiers),
-                MethodCallExpression methodCall when IsEnumerableContains(methodCall) => HandleEnumerableContains(methodCall, aliasIdentifiers),
-                MethodCallExpression methodCall when IsEquals(methodCall) => HandleStringContains(methodCall, StringOperator.Equals, aliasIdentifiers),
-                MethodCallExpression methodCall when IsStartsWith(methodCall) => HandleStringContains(methodCall, StringOperator.StartsWith, aliasIdentifiers),
-                MethodCallExpression methodCall when IsEndsWith(methodCall) => HandleStringContains(methodCall, StringOperator.EndsWith, aliasIdentifiers),
-                MethodCallExpression methodCall when IsBetween(methodCall) => HandleBetween(methodCall, aliasIdentifiers),
-                MethodCallExpression methodCall when IsExists(methodCall) => HandleExists(methodCall),
-                LambdaExpression lambdaExpression => WhereClause(lambdaExpression.Body, null, aliasIdentifiers),
+                                                       typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(in memberExpression, in aliasIdentifiers),
+                NewExpression newExpression => HandleNewExpression(in newExpression),
+                NewArrayExpression newArrayExpression => HandleNewArrayExpression(in newArrayExpression),
+                MemberExpression memberExpression when memberExpression.Type == typeof(bool) => $"{GetColumnName(in memberExpression, in aliasIdentifiers)} = {(Formatter.Provider == DbProvider.PostgreSql ? "'1'" : "1")}",
+                MethodCallExpression methodCall when IsStringContains(methodCall) => HandleStringContains(in methodCall, StringOperator.Contains, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsEnumerableContains(methodCall) => HandleEnumerableContains(in methodCall, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsEquals(methodCall) => HandleStringContains(in methodCall, StringOperator.Equals, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsStartsWith(methodCall) => HandleStringContains(in methodCall, StringOperator.StartsWith, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsEndsWith(methodCall) => HandleStringContains(in methodCall, StringOperator.EndsWith, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsBetween(methodCall) => HandleBetween(in methodCall, in aliasIdentifiers),
+                MethodCallExpression methodCall when IsExists(methodCall) => HandleExists(in methodCall),
+                LambdaExpression lambdaExpression => WhereClause(lambdaExpression.Body, null, in aliasIdentifiers),
                 MethodCallExpression _ => throw new NotSupportedException(),
                 ListInitExpression _ => throw new NotSupportedException(),
                 DynamicExpression _ => throw new NotSupportedException(),
@@ -406,7 +406,7 @@ namespace TData.Core.QueryGenerator
 
         #region Handlers
 
-        private string HandleExists(MethodCallExpression methodCall)
+        private string HandleExists(in MethodCallExpression methodCall)
         {
             var lambdaExpression = (LambdaExpression)methodCall.Arguments[0];
             var internalTableAlias = GetTableAlias();
@@ -440,13 +440,13 @@ namespace TData.Core.QueryGenerator
 
             if (lambdaExpression.Body != null)
             {
-                where = $"WHERE {WhereClause(lambdaExpression.Body, null, aliasIdentifier)}";
+                where = $"WHERE {WhereClause(lambdaExpression.Body, null, in aliasIdentifier)}";
             }
 
             return $"EXISTS (SELECT 1 FROM {tableName} {internalTableAlias} {where})";
         }
 
-        private string HandleNewArrayExpression(NewArrayExpression newArrayExpression)
+        private string HandleNewArrayExpression(in NewArrayExpression newArrayExpression)
         {
             var builder = new StringBuilder();
 
@@ -460,21 +460,21 @@ namespace TData.Core.QueryGenerator
             return builder.ToString();
         }
 
-        private string HandleBetween(MethodCallExpression methodCall, string[][] aliasIdentifier = null)
+        private string HandleBetween(in MethodCallExpression methodCall, in string[][] aliasIdentifier = null)
         {
             var expression = ((LambdaExpression)methodCall.Arguments[0]).Body as UnaryExpression;
 
             var minValue = WhereClause(methodCall.Arguments[1]);
             var maxValue = WhereClause(methodCall.Arguments[2]);
 
-            return $"{WhereClause(expression.Operand, null, aliasIdentifier)} BETWEEN {minValue} AND {maxValue}";
+            return $"{WhereClause(expression.Operand, null, in aliasIdentifier)} BETWEEN {minValue} AND {maxValue}";
         }
 
         private string SqlDateNow() => Formatter.CurrentDate;
         private string SqlMin() => Formatter.MinDate;
         private string SqlMax() => Formatter.MaxDate;
 
-        private string HandleMemberExpression(MemberExpression memberExpression, string[][] aliasIdentifier = null)
+        private string HandleMemberExpression(in MemberExpression memberExpression, in string[][] aliasIdentifier = null)
         {
             if (memberExpression.Expression is ConstantExpression ce && memberExpression.Member is FieldInfo fe)
             {
@@ -505,10 +505,10 @@ namespace TData.Core.QueryGenerator
             }
             else if (memberExpression.Expression is MemberExpression)
             {
-                return WhereClause(memberExpression.Expression, memberExpression.Member, aliasIdentifier);
+                return WhereClause(memberExpression.Expression, memberExpression.Member, in aliasIdentifier);
             }
 
-            return GetColumnName(memberExpression, aliasIdentifier);
+            return GetColumnName(in memberExpression, in aliasIdentifier);
         }
 
         private static IEnumerable<TE> GetValues<TE>(ConstantExpression expression)
@@ -530,7 +530,7 @@ namespace TData.Core.QueryGenerator
                 throw new NotSupportedException("The amount of values in the array is too big for IN expression");
         }
 
-        private string HandleNewExpression(NewExpression newExpression)
+        private string HandleNewExpression(in NewExpression newExpression)
         {
             if (newExpression.Type == typeof(DateTime))
             {
@@ -545,7 +545,7 @@ namespace TData.Core.QueryGenerator
             return "";
         }
 
-        private string HandleConstantExpression(ConstantExpression constantExpression, MemberInfo member)
+        private string HandleConstantExpression(in ConstantExpression constantExpression, in MemberInfo member)
         {
             if (constantExpression.Value == null)
                 return "IS NULL";
@@ -564,32 +564,32 @@ namespace TData.Core.QueryGenerator
             return paramName;
         }
 
-        private string HandleUnaryExpression(UnaryExpression expression, string[][] aliasIdentifiers = null)
+        private string HandleUnaryExpression(in UnaryExpression expression, in string[][] aliasIdentifiers = null)
         {
             switch (expression.NodeType)
             {
                 case ExpressionType.Not:
-                    var operand = WhereClause(expression.Operand, null, aliasIdentifiers);
+                    var operand = WhereClause(expression.Operand, null, in aliasIdentifiers);
                     return $"NOT ({operand})";
                 case ExpressionType.Convert:
-                    return WhereClause(expression.Operand, null, aliasIdentifiers);
+                    return WhereClause(expression.Operand, null, in aliasIdentifiers);
                 default:
                     throw new NotSupportedException("Unsupported unary operator");
             }
         }
 
-        private string HandleBinaryExpression(BinaryExpression expression, string[][] aliasIdentifiers = null)
+        private string HandleBinaryExpression(in BinaryExpression expression, in string[][] aliasIdentifiers = null)
         {
             string left;
             string right;
             if (expression.Left is MemberExpression && expression.Right is MemberExpression)
             {
-                left = WhereClause(expression.Left, null, aliasIdentifiers);
-                right = WhereClause(expression.Right, null, aliasIdentifiers);
+                left = WhereClause(expression.Left, null, in aliasIdentifiers);
+                right = WhereClause(expression.Right, null, in aliasIdentifiers);
             }
             else
             {
-                left = WhereClause(expression.Left, null, aliasIdentifiers);
+                left = WhereClause(expression.Left, null, in aliasIdentifiers);
 
                 if (expression.Right is ConstantExpression constantExpression && constantExpression.Value == null)
                 {
@@ -599,7 +599,7 @@ namespace TData.Core.QueryGenerator
                         return $"{left} IS NOT NULL";
                 }
 
-                right = WhereClause(expression.Right, null, aliasIdentifiers);
+                right = WhereClause(expression.Right, null, in aliasIdentifiers);
 
                 if (expression.Left is ConstantExpression constantExpression2 && constantExpression2.Value == null)
                 {
@@ -613,12 +613,12 @@ namespace TData.Core.QueryGenerator
             return Formatter.FormatOperator(left, right, expression.NodeType);
         }
 
-        private string HandleStringContains(MethodCallExpression expression, StringOperator @operator, string[][] aliasIdentifiers = null)
+        private string HandleStringContains(in MethodCallExpression expression, in StringOperator @operator, in string[][] aliasIdentifiers = null)
         {
             if (expression.Object is MemberExpression memberExpression
                 && expression.Arguments[0] is ConstantExpression constantExpression && @operator != StringOperator.Equals)
             {
-                var column = GetColumnName(memberExpression, aliasIdentifiers);
+                var column = GetColumnName(in memberExpression, in aliasIdentifiers);
                 var value = constantExpression.Value.ToString();
                 var initialOperator = @operator == StringOperator.StartsWith ? "" : "%";
                 var finalOperator = @operator == StringOperator.EndsWith ? "" : "%";
@@ -630,7 +630,7 @@ namespace TData.Core.QueryGenerator
                 && expression.Arguments[0] is ConstantExpression constantExpression2
                 && @operator == StringOperator.Equals)
             {
-                var column = GetColumnName(memberExpression2, aliasIdentifiers);
+                var column = GetColumnName(in memberExpression2, in aliasIdentifiers);
                 var value = WhereClause(constantExpression2, memberExpression2.Member, aliasIdentifiers);
                 return $"{column} = {value}";
             }
@@ -638,7 +638,7 @@ namespace TData.Core.QueryGenerator
                 expression.Arguments[0] is MemberExpression memberExpression4 &&
                 memberExpression4.Member is FieldInfo fieldInfo)
             {
-                var column = GetColumnName(memberExpression3, aliasIdentifiers);
+                var column = GetColumnName(in memberExpression3, in aliasIdentifiers);
                 var constant = memberExpression4.Expression as ConstantExpression;
                 var value = fieldInfo.GetValue(constant.Value);
                 var initialOperator = @operator == StringOperator.StartsWith ? "" : "%";
@@ -651,29 +651,29 @@ namespace TData.Core.QueryGenerator
             throw new NotSupportedException("Unsupported method call");
         }
 
-        private string HandleEnumerableContains(MethodCallExpression expression, string[][] aliasIdentifiers = null)
+        private string HandleEnumerableContains(in MethodCallExpression expression, in string[][] aliasIdentifiers = null)
         {
             if (expression.Arguments.Count == 2)
             {
-                var values = WhereClause(expression.Arguments[0], null, aliasIdentifiers);
-                var column = WhereClause(expression.Arguments[1], null, aliasIdentifiers);
+                var values = WhereClause(expression.Arguments[0], null, in aliasIdentifiers);
+                var column = WhereClause(expression.Arguments[1], null, in aliasIdentifiers);
                 return $"{column} IN ({values})";
             }
             else if (expression.Arguments.Count == 1)
             {
-                var values = WhereClause(expression.Object, null, aliasIdentifiers);
-                var column = WhereClause(expression.Arguments[0], null, aliasIdentifiers);
+                var values = WhereClause(expression.Object, null, in aliasIdentifiers);
+                var column = WhereClause(expression.Arguments[0], null, in aliasIdentifiers);
                 return $"{column} IN ({values})";
             }
 
             return "";
         }
 
-        internal static bool IsBetween(MethodCallExpression expression) =>
+        internal static bool IsBetween(in MethodCallExpression expression) =>
                      expression.Method.DeclaringType.Name == "SqlExpression"
                            && expression.Method.Name == "Between";
 
-        internal static bool IsExists(MethodCallExpression expression) =>
+        internal static bool IsExists(in MethodCallExpression expression) =>
                      expression.Method.DeclaringType.Name == "SqlExpression"
                            && expression.Method.Name == "Exists";
 
@@ -709,14 +709,22 @@ namespace TData.Core.QueryGenerator
 #endif
         }
 
-        private string GetColumnName(MemberExpression member, string[][] aliasIdentifiers = null)
+        private string GetColumnName(in MemberExpression member, in string[][] aliasIdentifiers = null)
         {
             if (member.Expression is ConstantExpression)
-                return WhereClause(member.Expression, member.Member, aliasIdentifiers);
+                return WhereClause(member.Expression, member.Member, in aliasIdentifiers);
 
             if (member.Expression != null)
             {
-                var dbColumn = Table.Columns.First(x => x.Name == member.Member.Name);
+                DbColumn dbColumn = null;
+                foreach (var column in Table.Columns)
+                {
+                    if (column.Name == member.Member.Name)
+                    {
+                        dbColumn = column;
+                        break;
+                    }
+                }
 
                 if (member.Member.ReflectedType == typeof(T))
                     return ApplyTransformation($"{(aliasIdentifiers == null ? "" : $"{TableAlias}.")}{dbColumn.DbName ?? dbColumn.Name}", member.Type.Name);
@@ -765,10 +773,9 @@ namespace TData.Core.QueryGenerator
                 return HashHelper.GenerateHash(key);
             }
 
-            int calculatedKey = 17;
-
             unchecked
             {
+                int calculatedKey = 17;
                 calculatedKey = (calculatedKey * 23) + operation.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + provider.GetHashCode();
                 calculatedKey = (calculatedKey * 23) + type.GetHashCode();
@@ -796,9 +803,9 @@ namespace TData.Core.QueryGenerator
                         }
                     }
                 }
-            }
 
-            return calculatedKey;
+                return calculatedKey;
+            }
         }
     }
 

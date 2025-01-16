@@ -21,10 +21,6 @@ namespace TData.Core.FluentApi
 
         //cast to specific type in database 
         internal string DbType { get; set; }
-
-        internal int Size { get; set; }
-        internal int Scale { get; set; }
-        internal int Precision { get; set; }
         internal bool Configurated { get; set; }
         internal bool ForceCast { get; set; }
         internal bool LongTextTreatment { get; set; }

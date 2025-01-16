@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Linq;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TData.Tests")]
 namespace TData
 {
     internal static class QueryValidators
@@ -10,9 +12,9 @@ namespace TData
         internal static bool IsStoredProcedure(in string input)
 #endif
         {
-            var asd = new[] { ' ', '\t', '\n', '\r' };
+            var invalidCharacters = new[] { ' ', '\t', '\n', '\r' };
             var trimmed = input.Trim();
-            return trimmed.IndexOfAny(asd) == -1;
+            return trimmed.IndexOfAny(invalidCharacters) == -1;
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
@@ -21,13 +23,14 @@ namespace TData
         internal static bool IsAnonymousBlock(string input)
 #endif
         {
-            return input.IndexOf("DECLARE", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("BEGIN", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("EXEC", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("$$", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("SET", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("IF", StringComparison.OrdinalIgnoreCase) == 0 ||
-                   input.IndexOf("DO", StringComparison.OrdinalIgnoreCase) == 0;
+            var trimmed = input.Trim();
+            return trimmed.IndexOf("DECLARE", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("BEGIN", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("EXEC", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("$$", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("SET", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("IF", StringComparison.OrdinalIgnoreCase) == 0 ||
+                   trimmed.IndexOf("DO", StringComparison.OrdinalIgnoreCase) == 0;
         }
 
 #if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
@@ -70,16 +73,39 @@ namespace TData
 #endif
         {
             var bindSymbols = new[] { '@', ':', '$' };
-            return input.IndexOfAny(bindSymbols) > 0;
-        }
 
-#if NET6_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-        internal static bool IsInsert(ReadOnlySpan<char> input)
-#else
-        internal static bool IsSelect(string input)
-#endif
-        {
-            return input.IndexOf("INSERT", StringComparison.OrdinalIgnoreCase) == 0;
+            for (int i = 0; i < input.Length; i++)
+            {
+                char c = input[i];
+
+                // Skip SQL Server system variables prefixed with @@
+                if (c == '@' && i + 1 < input.Length && input[i + 1] == '@')
+                {
+                    i++; // Skip next character '@'
+                    continue;
+                }
+
+                // Skip PostgreSQL type casting (::)
+                if (c == ':' && i + 1 < input.Length && input[i + 1] == ':')
+                {
+                    i++; // Skip next character ':'
+                    continue;
+                }
+
+                // Skip PostgreSQL dollar-quoting scope ($$)
+                if (c == '$' && i + 1 < input.Length && input[i + 1] == '$')
+                {
+                    i++; // Skip next character '$'
+                    continue;
+                }
+
+                if (bindSymbols.Contains(c))
+                {
+                    return true; // Bind symbol found
+                }
+            }
+
+            return false;
         }
     }
 }

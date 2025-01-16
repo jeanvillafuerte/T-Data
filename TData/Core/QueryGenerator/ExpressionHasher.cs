@@ -13,27 +13,32 @@ namespace TData.Helpers
             int hash = 17;
             hash = (hash * 23) + provider.GetHashCode();
             hash = (hash * 23) + expr.Body.NodeType.GetHashCode();
-            return GetHashCode(expr.Body, hash, includeValues, provider);
+            return GetHashCode(expr.Body, in hash, in includeValues, in provider);
         }
 
-        private static int GetHashCode(Expression expr, int hash, bool includeValues, DbProvider provider, MemberInfo member = null)
+        private static int GetHashCode(in Expression expr, in int hash, in bool includeValues, in DbProvider provider, in MemberInfo member = null)
         {
             return expr switch
             {
-                ConstantExpression constExpr => ConstantExpression(constExpr, member, hash, includeValues),
-                UnaryExpression unaryExpr => (hash * 23) + GetHashCode(unaryExpr.Operand, hash, includeValues, provider, member),
-                BinaryExpression binExpr => BinaryExpressionHash(binExpr, hash, includeValues, provider),
-                MemberExpression memberExpr => MemberExpression(memberExpr, hash, includeValues, provider),
-                MethodCallExpression methodExpr => MethodCallExpression(methodExpr, hash, includeValues, provider),
-                LambdaExpression lambdaExpr => LambdaExpression(lambdaExpr, hash, includeValues, provider),
-                NewArrayExpression newArrayExpression => newArrayExpression.Expressions.Aggregate(hash, (current, expression) => GetHashCode(expression, current, includeValues, provider)),
+                ConstantExpression constExpr => ConstantExpression(in constExpr, in member, hash, in includeValues),
+                UnaryExpression unaryExpr => (hash * 23) + GetHashCode(unaryExpr.Operand, in hash, in includeValues, in provider, in member),
+                BinaryExpression binExpr => BinaryExpressionHash(in binExpr, hash, in includeValues, in provider),
+                MemberExpression memberExpr => MemberExpression(in memberExpr, hash, in includeValues, in provider),
+                MethodCallExpression methodExpr => MethodCallExpression(in methodExpr, hash, in includeValues, in provider),
+                LambdaExpression lambdaExpr => LambdaExpression(in lambdaExpr, hash, in includeValues, in provider),
+                NewArrayExpression newArrayExpression => HandleNewArrayExpression(in newArrayExpression, in hash, includeValues, provider),
                 ParameterExpression parameterExpression => hash * 397 + parameterExpression.Name.GetHashCode(),
-                NewExpression newExpression => HandleNewExpression(newExpression, hash, includeValues),
+                NewExpression newExpression => HandleNewExpression(in newExpression, in hash, in includeValues),
                 _ => throw new NotImplementedException(),
             };
         }
 
-        private static int HandleNewExpression(NewExpression newExpression, int hash, bool includeValues)
+        private static int HandleNewArrayExpression(in NewArrayExpression mainExpression, in int hash, bool includeValues, DbProvider provider)
+        {
+            return mainExpression.Expressions.Aggregate(hash, (current, expression) => GetHashCode(in expression, in current, includeValues, provider));
+        }
+
+        private static int HandleNewExpression(in NewExpression newExpression, in int hash, in bool includeValues)
         {
             if (newExpression.Type == typeof(DateTime))
             {
@@ -50,7 +55,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        private static int ConstantExpression(ConstantExpression constExpr,MemberInfo member, int hash, bool includeValues)
+        private static int ConstantExpression(in ConstantExpression constExpr, in MemberInfo member, int hash, in bool includeValues)
         {
             if (includeValues)
                 return (hash * 23) + constExpr.Type.GetHashCode();
@@ -62,7 +67,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        private static int BinaryExpressionHash(BinaryExpression binExpr, int hash, bool includeValues, DbProvider provider)
+        private static int BinaryExpressionHash(in BinaryExpression binExpr, int hash, in bool includeValues, in DbProvider provider)
         {
             var tempHash = GetHashCode(binExpr.Left, hash, includeValues, provider);
             hash = (hash * 23) + tempHash;
@@ -70,7 +75,7 @@ namespace TData.Helpers
             return (hash * 23) + tempHash;
         }
 
-        public static int MemberExpression(MemberExpression memberExpression, int hash, bool includeValues, DbProvider provider)
+        public static int MemberExpression(in MemberExpression memberExpression, int hash, in bool includeValues, in DbProvider provider)
         {
             hash = (hash * 23) + memberExpression.Member.Name.GetHashCode();
 
@@ -92,7 +97,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        public static int MethodCallExpression(MethodCallExpression methodExpr, int hash, bool includeValues, DbProvider provider)
+        public static int MethodCallExpression(in MethodCallExpression methodExpr, int hash, in bool includeValues, in DbProvider provider)
         {
             hash = (hash * 23) + methodExpr.Method.Name.GetHashCode();
             foreach (var arg in methodExpr.Arguments)
@@ -105,7 +110,7 @@ namespace TData.Helpers
             return hash;
         }
 
-        public static int LambdaExpression(LambdaExpression lambdaExpr, int hash, bool includeValues, DbProvider provider)
+        public static int LambdaExpression(in LambdaExpression lambdaExpr, int hash, in bool includeValues, in DbProvider provider)
         {
             hash = hash * 23 + GetHashCode(lambdaExpr.Body, hash, includeValues, provider);
             foreach (var p in lambdaExpr.Parameters)

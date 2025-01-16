@@ -136,5 +136,13 @@
             dbContext.Execute("BULK_INSERT_USER_DATA", new { total = 5000 });
             Assert.Pass();
         }
+
+        [Test]
+        public void SystemVariables()
+        {
+            var dbContext = DbHub.Use(DbSignature);
+            var version = dbContext.ExecuteScalar<string>("SELECT @@VERSION");
+            Assert.That(version, Is.Not.Null);
+        }
     }
 }

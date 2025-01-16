@@ -21,8 +21,8 @@ namespace TData.Cache.MemoryCache.Sqlite
         private string CacheInstanceName => $"tdata_cache_{_dbIdentifier}";
         public TimeSpan TTL => _inMemoryCache.TTL;
 
-        readonly SerializerDelegate _serializer;
-        readonly DeserializeDelegate _deserializer;
+        readonly SerializeDelegate _serializer;
+        readonly DeSerializeDelegate _deserializer;
         readonly DbDataCache _inMemoryCache;
         readonly string _dbIdentifier;
         readonly bool _isTextFormat;
@@ -32,8 +32,8 @@ namespace TData.Cache.MemoryCache.Sqlite
             CachedDbHub.CacheDbDictionary.TryGetValue($"{signature}_{id}", out var inMemoryCache);
             _inMemoryCache = (DbDataCache)inMemoryCache;
             _dbIdentifier = signature;
-            _serializer = settings.Serializer;
-            _deserializer = settings.Deserializer;
+            _serializer = settings.SerializeDelegate;
+            _deserializer = settings.DeserializeDelegate;
             _isTextFormat = settings.IsTextFormat;
         }
 

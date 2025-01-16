@@ -50,7 +50,7 @@ namespace TData.Core.Provider.Formatter
                                         .Append(')')
                                         .Append(" RETURNING ")
                                         .Append(keyColumn.DbName ?? keyColumn.Name)
-                                        .Append($" INTO :{keyColumn.Name}; END;")
+                                        .Append($" INTO :{keyColumn.Name}_OUTPUT; END;")
                                         .ToString();
             }
 

@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using BenchmarkDotNet.Attributes;
-using TData;
 using TData.Configuration;
 using TData.Tests.Performance.Entities;
 using TData.Cache;
+
 
 #if NETCOREAPP
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +22,50 @@ namespace TData.Tests.Performance.Benchmark
         protected string TableName;
         protected bool CleanData;
         protected string StringConnection;
+
+        #region JSON handlers
+        class CacheItemConverter : JsonConverter
+        {
+            public override bool CanConvert(Type objectType)
+            {
+                return true;
+            }
+
+            public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
+            {
+                if (reader.TokenType == JsonToken.StartArray)
+                {
+                    return JArray.Load(reader).ToObject(objectType);
+                }
+                else if (reader.TokenType == JsonToken.StartObject)
+                {
+                    return JObject.Load(reader).ToObject(objectType);
+                }
+                else
+                {
+                    throw new JsonSerializationException($"Unexpected token {reader.TokenType} when parsing {objectType}.");
+                }
+            }
+
+            public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        JsonSerializerSettings JSONSettings = new JsonSerializerSettings()
+        {
+            DateFormatString = "yyyy-MM-ddTHH:mm:ss",
+            DateTimeZoneHandling = DateTimeZoneHandling.RoundtripKind,
+        };
+
+        object JSONDeserialize(in object rawData, in Type type, in bool treatAsList) =>
+                            JsonConvert.DeserializeObject((string)rawData, type, settings: new JsonSerializerSettings { Converters = new List<JsonConverter> { new CacheItemConverter() } });
+
+        object JSONSerialize(in object data) =>
+                        JsonConvert.SerializeObject(data, settings: JSONSettings);
+
+        #endregion
 
         public void Start()
         {
@@ -35,7 +82,8 @@ namespace TData.Tests.Performance.Benchmark
             CleanData = bool.Parse(configuration["cleanData"]);
 
             DbConfig.Register(new DbSettings("db", DbProvider.SqlServer, cnx));
-            DbCacheConfig.Register(new DbSettings("dbCached", DbProvider.SqlServer, cnx) { BufferSize = 4096 }, new CacheSettings(DbCacheProvider.InMemory) {  TTL = TimeSpan.FromSeconds(100) });
+            DbCacheConfig.Register(new DbSettings("dbCached_inmemory", DbProvider.SqlServer, cnx) { BufferSize = 4096 }, new CacheSettings(DbCacheProvider.InMemory) {  TTL = TimeSpan.FromSeconds(100) });
+            DbCacheConfig.Register(new DbSettings("dbCached_sqlite", DbProvider.SqlServer, cnx) { BufferSize = 4096 }, new CacheSettings(DbCacheProvider.Sqlite, isTextFormat: true, JSONSerialize, JSONDeserialize) { TTL = TimeSpan.FromSeconds(100) });
 
             SetDataBase(int.Parse(len), out var tableName);
 
