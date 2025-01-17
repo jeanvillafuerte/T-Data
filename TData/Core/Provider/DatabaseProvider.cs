@@ -50,7 +50,7 @@ namespace TData.Core.Provider
 #endif
         }
 
-        internal static object GetValueFromOracleParameter(IDbDataParameter parameter, Type targetType)
+        internal static object GetValueFromOracleParameter(in IDbDataParameter parameter, Type targetType)
         {
             var valueObject = OracleValueParameterProperty.GetValue(parameter);
             var valueType = valueObject.GetType();

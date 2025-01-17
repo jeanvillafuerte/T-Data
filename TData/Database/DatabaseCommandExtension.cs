@@ -473,7 +473,7 @@ namespace TData
             return allFieldsInitOnly && equatableType.IsAssignableFrom(type) && (type.GetMethods().Any(x => x.Name == "<Clone>$") || type.IsValueType);
         }
 
-        internal class PropertyTypeInfo
+        internal sealed class PropertyTypeInfo
         {
             public Type Source { get; set; }
             public PropertyInfo PropertyInfo { get; set; }

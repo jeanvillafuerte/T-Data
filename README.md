@@ -1,6 +1,13 @@
-# ![](./TDataIco.png "T-Data") _**T-Data**_
+**T-Data** - Simplified robust database operations by eliminating connection, command, and transaction management
+========================================
 
-## Simplified setup for robust database operations by relief having to manage connection, commands or transactions
+Packages
+--------
+
+| Package | NuGet Stable |
+| ------- | ------------ |
+| [TData](https://www.nuget.org/packages/T-Data/) | [![TData](https://img.shields.io/nuget/v/T-Data.svg)](https://www.nuget.org/packages/T-Data/) |
+| [TData.Cache](https://www.nuget.org/packages/T-DataCache/) | [![TData.Cache](https://img.shields.io/nuget/v/T-DataCache.svg)](https://www.nuget.org/packages/T-DataCache/) |
 
 ### 🌟 Join Us in Shaping the Future of T-Data! 🌟
 Join us in refining a library designed to streamline database interactions effortlessly. Your insights, tests, and small enhancements can make a big difference. Feel free to fix bugs and suggest features.

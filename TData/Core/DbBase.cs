@@ -1782,7 +1782,7 @@ namespace TData
                 var scriptForMysql = generator.GenerateInsert(generateKeyValue: false);
                 return ExecuteTransaction((db) =>
                 {
-                    db.Execute(scriptForMysql, entity);
+                    db.Execute(in scriptForMysql, entity);
                     return db.ExecuteScalar<TE>("SELECT LAST_INSERT_ID()");
                 });
             }
@@ -1790,7 +1790,7 @@ namespace TData
             var script = generator.GenerateInsert(generateKeyValue: true);
 
             if (Options.SqlProvider == DbProvider.Sqlite)
-                return ExecuteTransaction((db) => db.ExecuteScalar<TE>(script, entity));
+                return ExecuteTransaction((db) => db.ExecuteScalar<TE>(in script, entity));
 
             var operationHash = CalculateOperationHash(in script, entity, in Options.SqlProvider, in AddReturnIDConfig, in _transaction);
             using var command = new DatabaseCommand(in Options, in script, entity, in operationHash, in AddReturnIDConfig, in _buffered, in _transaction, in _command);
@@ -1802,7 +1802,7 @@ namespace TData
                 command.ExecuteNonQuery();
                 foreach(var param in command.OutParameters)
                 {
-                    rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
+                    rawValue = DatabaseProvider.GetValueFromOracleParameter(in param, typeof(TE));
                     break;
                 }
             }

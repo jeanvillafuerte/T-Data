@@ -98,7 +98,7 @@ namespace TData.Core.QueryGenerator
 
         internal string GeneratePagingQuery(in string query)
         {
-            return Formatter.PagingQuery(query);
+            return Formatter.PagingQuery(in query);
         }
 
         internal string GenerateSelect(in Expression<Func<T, bool>> predicate, in Expression<Func<T, object>> selector, in SqlOperation operation, out object[] filter)
