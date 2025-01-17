@@ -1802,7 +1802,7 @@ namespace TData
                 command.ExecuteNonQuery();
                 foreach(var param in command.OutParameters)
                 {
-                    rawValue = DatabaseProvider.GetValueFromOracleParameter(in param, typeof(TE));
+                    rawValue = DatabaseProvider.GetValueFromOracleParameter(param, typeof(TE));
                     break;
                 }
             }

@@ -18,11 +18,11 @@
     <Platforms>AnyCPU;x64</Platforms>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <RepositoryUrl>https://github.com/jeanvillafuerte/T-Data</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageIcon>TDataIco.png</PackageIcon>
-    <PackageReleaseNotes>Features released 1.2.1:
+    <PackageReleaseNotes>Features released 1.2.2:
 
 - Easily register multiple database contexts with a unique signature for instant static context creation and seamless reuse.
 - Seamless compatibility with both .NET Core and .NET Framework.
