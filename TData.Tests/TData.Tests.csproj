@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\TDataIco.png" Link="Content\TDataIco.png">
+    <Content Include="..\.github\workflows\TDataIco.png" Link="Content\TDataIco.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Content\rocket.png">
