@@ -8,9 +8,9 @@ namespace TData.Cache
     public static class CachedDbHub
     {
         internal static readonly ConcurrentDictionary<string, IDbDataCache> CacheDbDictionary = new ConcurrentDictionary<string, IDbDataCache>();
-        public static ICachedDatabase Use(string signature, bool buffered = true)
+        public static ICachedDatabase Use(in string signature, bool buffered = true)
         {
-            var config = DbConfig.Get(signature);
+            var config = DbConfig.Get(in signature);
             if (CacheDbDictionary.TryGetValue(signature, out var cacheDb))
             {
                 return new CachedDatabase(cacheDb, new Lazy<IDatabase>(() => new DbBase(in config, in buffered)), config.SQLValues, cacheDb.TTL);

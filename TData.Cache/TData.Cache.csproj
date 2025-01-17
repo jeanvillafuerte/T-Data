@@ -18,12 +18,13 @@
     <RepositoryUrl>https://github.com/jeanvillafuerte/T-Data</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>database, micro-orm, t-data, mssql, oracle, mysql, sqlite, postgres</PackageTags>
-    <PackageReleaseNotes>Features released 2.1.0:
+    <PackageReleaseNotes>Features released 1.1.2:
 
 - Cache data management to boost performance with dynamic cache refresh capabilities.
 - Refresh data from anywhere by single string key
-- Query string and query expression support</PackageReleaseNotes>
-    <Version>1.1.0</Version>
+- Query string and query expression support
+- Support for InMemory and Sqlite configuration with TTL</PackageReleaseNotes>
+    <Version>1.1.2</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>False</PackageRequireLicenseAcceptance>
     <PackageId>T-DataCache</PackageId>
@@ -34,7 +35,7 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-    <None Include="..\TDataIco.png">
+    <None Include="..\.github\workflows\TDataIco.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>

@@ -2,7 +2,7 @@
 using TData.Core.FluentApi;
 using TData.Cache;
 
-namespace TData.Tests
+namespace TData.Tests.Cache
 {
     public class InMemoryCacheTests
     {

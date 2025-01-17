@@ -26,12 +26,47 @@ namespace TData
         private System.Data.Common.DbCommand _command;
         private bool _transactionCompleted;
         private readonly bool _buffered;
+        static readonly Dictionary<DbProvider, int> ConnectionTypeHashCode;
+
+        static DbBase()
+        {
+            ConnectionTypeHashCode = new Dictionary<DbProvider, int>
+                {
+                    { DbProvider.SqlServer, DatabaseHelperProvider.SqlServerConnectionType?.GetHashCode() ?? 0 },
+                    { DbProvider.Oracle, DatabaseHelperProvider.OracleConnectionType?.GetHashCode() ?? 0 },
+                    { DbProvider.MySql, DatabaseHelperProvider.MysqlConnectionType?.GetHashCode() ?? 0 },
+                    { DbProvider.PostgreSql, DatabaseHelperProvider.PostgresConnectionType?.GetHashCode() ?? 0 },
+                    { DbProvider.Sqlite, DatabaseHelperProvider.SqliteConnectionType?.GetHashCode() ?? 0 }
+                };
+        }
 
         internal DbBase(in DbSettings options, in bool buffered)
         {
             Options = options;
             Formatter = Options.SQLValues;
             _buffered = buffered;
+        }
+
+        private static int CalculateOperationHash(in string script, in object parameters, in DbProvider provider, in DbCommandConfiguration configuration, in System.Data.Common.DbTransaction transaction)
+        {
+            unchecked
+            {
+                var operationKey = 17;
+                if (parameters != null)
+                {
+                    operationKey = (operationKey * 23) + parameters.GetType().GetHashCode();  
+                }
+
+                if (transaction != null)
+                {
+                    operationKey = (operationKey * 23) + ConnectionTypeHashCode[provider];
+                }
+
+                operationKey = (operationKey * 23) + script.GetHashCode();
+                operationKey = (operationKey * 23) + (int)provider;
+                operationKey = (operationKey * 23) + configuration.GetHashCode();
+                return operationKey;
+            }
         }
 
         #region Block
@@ -449,7 +484,8 @@ namespace TData
 
         public int Execute(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return command.ExecuteNonQuery();
         }
@@ -481,10 +517,11 @@ namespace TData
 
             try
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 if (cancellationToken.IsCancellationRequested)
@@ -506,10 +543,11 @@ namespace TData
 
         public async Task<int> ExecuteAsync(string script, object parameters, CancellationToken cancellationToken)
         {
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             await
 #endif
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
 
             if (cancellationToken.IsCancellationRequested)
@@ -548,7 +586,8 @@ namespace TData
                 convertedString = script + " FROM DUAL";
             }
 
-            using var command = new DatabaseCommand(in Options, in convertedString, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in convertedString, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             var rawValue = command.ExecuteScalar();
             return (T)TypeConversionRegistry.ConvertOutParameterValue(Options.SqlProvider, rawValue, typeof(T), true);
@@ -556,7 +595,8 @@ namespace TData
 
         public void LoadStream(in string script, in object parameters, in Stream targetStream)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             command.LoadStream(in targetStream);
         }
@@ -568,14 +608,16 @@ namespace TData
 
         public async Task LoadStreamAsync(string script, object parameters, Stream targetStream, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             await command.LoadStreamAsync(targetStream, cancellationToken);
         }
 
         public void LoadTextStream(in string script, in object parameters, in StreamWriter targetStream)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             command.LoadTextStream(in targetStream);
         }
@@ -587,7 +629,8 @@ namespace TData
 
         public async Task LoadTextStreamAsync(string script, object parameters, StreamWriter targetStream, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             await command.LoadTextStreamAsync(targetStream, cancellationToken);
         }
@@ -599,7 +642,8 @@ namespace TData
 
         public async Task<T> ExecuteScalarAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryExecuteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
 
             if (cancellationToken.IsCancellationRequested)
@@ -647,7 +691,8 @@ namespace TData
 
         public T FetchOne<T>(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QuerySingleConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return command.ProcessReaderToSingle<T>();
         }
@@ -656,7 +701,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectSingle, out var values);
-            using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QuerySingleConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             return command.ProcessReaderToSingle<T>();
         }
@@ -670,10 +716,11 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateSelect(where, selector, SqlOperation.SelectSingle, out var values);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QuerySingleConfig, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             await
 #endif
-            using var command = new DatabaseCommand(in Options, in script, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QuerySingleConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             return await command.ProcessReaderToSingleAsync<T>(cancellationToken);
         }
@@ -696,10 +743,12 @@ namespace TData
 
         public async Task<T> FetchOneAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QuerySingleConfig, in _transaction);
+
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             await
 #endif
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QuerySingleConfig, in _buffered, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QuerySingleConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return await command.ProcessReaderToSingleAsync<T>(cancellationToken);
         }
@@ -747,14 +796,16 @@ namespace TData
 
         internal List<T> FetchList<T>(in string script, in object[] parameters)
         {
-            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in parameters, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QueryListConfig, in _buffered, in parameters, in _transaction, in _command);
             command.Prepare2();
             return command.ProcessReaderToList<T>();
         }
 
         public List<T> FetchList<T>(in string script, in object parameters = null)
         {
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return command.ProcessReaderToList<T>();
         }
@@ -763,7 +814,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             string script = generator.GenerateSelect(in where, in selector, SqlOperation.SelectList, out var values);
-            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             return command.ProcessReaderToList<T>();
         }
@@ -786,10 +838,11 @@ namespace TData
 
         public async Task<List<T>> FetchListAsync<T>(string script, object parameters, CancellationToken cancellationToken)
         {
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
             await
 #endif
-            using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return await command.ProcessReaderToListAsync<T>(cancellationToken);
         }
@@ -808,7 +861,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateSelect(where, selector, SqlOperation.SelectList, out var values);
-            using var command = new DatabaseCommand(in Options, in script, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QueryListConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             return await command.ProcessReaderToListAsync<T>(cancellationToken);
         }
@@ -844,21 +898,24 @@ namespace TData
 
         public (Action, IEnumerable<List<T>>) FetchData<T>(string script, object parameters = null, int batchSize = 1000)
         {
-            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return (command.Dispose, command.FetchData<T>(batchSize));
         }
 
         public (Action, IAsyncEnumerable<List<T>>) FetchDataAsync<T>(string script, object parameters, int batchSize = 1000)
         {
-            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return (command.Dispose, command.FetchDataAsync<T>(batchSize, CancellationToken.None));
         }
 
         public (Action, IAsyncEnumerable<List<T>>) FetchDataAsync<T>(string script, object parameters, int batchSize, CancellationToken cancellationToken)
         {
-            var command = new DatabaseCommand(in Options, in script, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             return (command.Dispose, command.FetchDataAsync<T>(batchSize, cancellationToken));
         }
@@ -866,7 +923,8 @@ namespace TData
         public IEnumerable<List<T>> FetchPagedList<T>(string script, int offset, int pageSize, object parameters = null)
         {
             var newPaginatedScript = new SQLGenerator<T>(in Formatter).GeneratePagingQuery(script);
-            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
             command.Prepare();
 
             return command.ReadBatchList<T>(offset, pageSize);
@@ -875,7 +933,8 @@ namespace TData
         public IEnumerable<List<TDataRow>> FetchPagedRows(in string script, in int offset, in int pageSize, in object parameters = null)
         {
             var newPaginatedScript = new SQLGenerator<TDataRow>(in Formatter).GeneratePagingQuery(in script);
-            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
             command.Prepare();
 
             return command.ReadBatchListDataRow(offset, pageSize);
@@ -884,7 +943,8 @@ namespace TData
         public IAsyncEnumerable<List<T>> FetchPagedListAsync<T>(string script, int offset, int pageSize, object parameters, CancellationToken cancellationToken)
         {
             var newPaginatedScript = new SQLGenerator<T>(in Formatter).GeneratePagingQuery(script);
-            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
+            var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryListConfig, in _transaction);
+            var command = new DatabaseCommand(in Options, in newPaginatedScript, in parameters, in operationHash, in QueryListConfig, in _buffered, in _transaction, in _command, addPagingParams: true);
             command.Prepare();
 
             return command.ReadBatchListAsync<T>(offset, pageSize, cancellationToken);
@@ -938,7 +998,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple2Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple2Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple2Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
                 var t1 = command.ReadListItems<T1>();
                 var t2 = command.ReadListNextItems<T2>();
@@ -965,10 +1026,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple2Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple2Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple2Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1050,7 +1112,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple3Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple3Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple3Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = command.ReadListItems<T1>();
@@ -1105,10 +1168,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple3Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple3Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple3Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1168,7 +1232,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple4Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple4Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple4Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = command.ReadListItems<T1>();
@@ -1226,10 +1291,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple4Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple4Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple4Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1290,7 +1356,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple5Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple5Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = command.ReadListItems<T1>();
@@ -1349,10 +1416,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple5Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple5Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1415,7 +1483,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple6Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple6Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = command.ReadListItems<T1>();
@@ -1475,10 +1544,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple6Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple6Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1543,7 +1613,8 @@ namespace TData
             }
             else
             {
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple6Config, in _buffered, in _transaction, in _command);
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple7Config, in _transaction);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple7Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = command.ReadListItems<T1>();
@@ -1580,10 +1651,11 @@ namespace TData
             }
             else
             {
+                var operationHash = CalculateOperationHash(in script, in parameters, in Options.SqlProvider, in QueryTuple7Config, in _transaction);
 #if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
                 await
 #endif
-                using var command = new DatabaseCommand(in Options, in script, in parameters, in QueryTuple5Config, in _buffered, in _transaction, in _command);
+                using var command = new DatabaseCommand(in Options, in script, in parameters, in operationHash, in QueryTuple7Config, in _buffered, in _transaction, in _command);
                 command.Prepare();
 
                 var t1 = await command.ReadListItemsAsync<T1>(cancellationToken);
@@ -1688,7 +1760,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateInsert(generateKeyValue: false);
-            using var command = new DatabaseCommand(in Options, in script, entity, in AddConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, entity, in Options.SqlProvider, in AddConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, entity, in operationHash, in AddConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
@@ -1709,7 +1782,7 @@ namespace TData
                 var scriptForMysql = generator.GenerateInsert(generateKeyValue: false);
                 return ExecuteTransaction((db) =>
                 {
-                    db.Execute(scriptForMysql, entity);
+                    db.Execute(in scriptForMysql, entity);
                     return db.ExecuteScalar<TE>("SELECT LAST_INSERT_ID()");
                 });
             }
@@ -1717,9 +1790,10 @@ namespace TData
             var script = generator.GenerateInsert(generateKeyValue: true);
 
             if (Options.SqlProvider == DbProvider.Sqlite)
-                return ExecuteTransaction((db) => db.ExecuteScalar<TE>(script, entity));
+                return ExecuteTransaction((db) => db.ExecuteScalar<TE>(in script, entity));
 
-            using var command = new DatabaseCommand(in Options, in script, entity, in AddReturnIDConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, entity, in Options.SqlProvider, in AddReturnIDConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, entity, in operationHash, in AddReturnIDConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
 
             object rawValue = null;
@@ -1751,7 +1825,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateUpdate();
-            using var command = new DatabaseCommand(in Options, in script, entity, in UpdateConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, entity, in Options.SqlProvider, in UpdateConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, entity, in operationHash, in UpdateConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
@@ -1767,7 +1842,8 @@ namespace TData
         {
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateDelete();
-            using var command = new DatabaseCommand(in Options, in script, entity, in DeleteConfig, in _buffered, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, entity, in Options.SqlProvider, in DeleteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, entity, in operationHash, in DeleteConfig, in _buffered, in _transaction, in _command);
             command.Prepare();
             command.ExecuteNonQuery();
         }
@@ -1844,7 +1920,8 @@ namespace TData
 
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateUpdate(in condition, out var values, updates);
-            using var command = new DatabaseCommand(in Options, in script, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in UpdateConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in UpdateConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             command.ExecuteNonQuery();
         }
@@ -1856,7 +1933,8 @@ namespace TData
 
             var generator = new SQLGenerator<T>(in Formatter, in _buffered);
             var script = generator.GenerateDelete(condition, SqlOperation.Delete, out var values);
-            using var command = new DatabaseCommand(in Options, in script, in QueryExecuteConfig, in _buffered, in values, in _transaction, in _command);
+            var operationHash = CalculateOperationHash(in script, null, in Options.SqlProvider, in QueryExecuteConfig, in _transaction);
+            using var command = new DatabaseCommand(in Options, in script, in operationHash, in QueryExecuteConfig, in _buffered, in values, in _transaction, in _command);
             command.Prepare2();
             command.ExecuteNonQuery();
         }

@@ -9,21 +9,20 @@ namespace TData.Core.QueryGenerator
     internal class ExpressionValueExtractor<T> 
     {
         private readonly IParameterHandler _parameterHandler;
-        private readonly static Type _typeString = typeof(string);
 
         public ExpressionValueExtractor(IParameterHandler parameterHandler)
         {
             _parameterHandler = parameterHandler;
         }
 
-        internal bool LoadParameterValues(Expression expression, MemberInfo member = null)
+        internal bool LoadParameterValues(in Expression expression, in MemberInfo member = null)
         {
             return expression switch
             {
-                ConstantExpression constantExpression => HandleConstantExpression(constantExpression, member),
-                UnaryExpression unaryExpression => HandleUnaryExpression(unaryExpression),
-                BinaryExpression binaryExpression => HandleBinaryExpression(binaryExpression),
-                MemberExpression memberExpression when memberExpression.Type == typeof(string) => GetColumnName(memberExpression),
+                ConstantExpression constantExpression => HandleConstantExpression(in constantExpression, in member),
+                UnaryExpression unaryExpression => HandleUnaryExpression(in unaryExpression),
+                BinaryExpression binaryExpression => HandleBinaryExpression(in binaryExpression),
+                MemberExpression memberExpression when memberExpression.Type == typeof(string) => GetColumnName(in memberExpression),
                 MemberExpression memberExpression when memberExpression.Type == typeof(int) ||
                                                        memberExpression.Type == typeof(short) ||
                                                        memberExpression.Type == typeof(long) ||
@@ -34,17 +33,17 @@ namespace TData.Core.QueryGenerator
                                                        Nullable.GetUnderlyingType(memberExpression.Member.DeclaringType) != null ||
                                                        (memberExpression.Member is FieldInfo fieldInfo && Nullable.GetUnderlyingType(fieldInfo.FieldType) != null) ||
                                                        (memberExpression.Type.IsGenericType &&
-                                                       typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(memberExpression),
-                NewExpression newExpression => HandleNewExpression(newExpression),
-                NewArrayExpression newArrayExpression => HandleNewArrayExpression(newArrayExpression),
+                                                       typeof(IEnumerable).IsAssignableFrom(memberExpression.Type)) => HandleMemberExpression(in memberExpression),
+                NewExpression newExpression => HandleNewExpression(in newExpression),
+                NewArrayExpression newArrayExpression => HandleNewArrayExpression(in newArrayExpression),
                 MemberExpression memberExpression when memberExpression.Type == typeof(bool) => true,
-                MethodCallExpression methodCall when SQLGenerator<T>.IsStringContains(methodCall) => HandleStringContains(methodCall, StringOperator.Contains),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsEnumerableContains(methodCall) => HandleEnumerableContains(methodCall),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsEquals(methodCall) => HandleStringContains(methodCall, StringOperator.Equals),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsStartsWith(methodCall) => HandleStringContains(methodCall, StringOperator.StartsWith),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsEndsWith(methodCall) => HandleStringContains(methodCall, StringOperator.EndsWith),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsBetween(methodCall) => HandleBetween(methodCall),
-                MethodCallExpression methodCall when SQLGenerator<T>.IsExists(methodCall) => HandleExists(methodCall),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsStringContains(methodCall) => HandleStringContains(in methodCall, StringOperator.Contains),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsEnumerableContains(methodCall) => HandleEnumerableContains(in methodCall),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsEquals(methodCall) => HandleStringContains(in methodCall, StringOperator.Equals),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsStartsWith(methodCall) => HandleStringContains(in methodCall, StringOperator.StartsWith),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsEndsWith(methodCall) => HandleStringContains(in methodCall, StringOperator.EndsWith),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsBetween(methodCall) => HandleBetween(in methodCall),
+                MethodCallExpression methodCall when SQLGenerator<T>.IsExists(methodCall) => HandleExists(in methodCall),
                 LambdaExpression lambdaExpression => LoadParameterValues(lambdaExpression.Body),
                 MethodCallExpression methodCall => throw new NotSupportedException(),
                 ListInitExpression listInitExpression => throw new NotSupportedException(),
@@ -63,7 +62,7 @@ namespace TData.Core.QueryGenerator
             };
         }
 
-        private bool HandleNewExpression(NewExpression newExpression)
+        private bool HandleNewExpression(in NewExpression newExpression)
         {
             if (newExpression.Type == typeof(DateTime))
             {
@@ -75,7 +74,7 @@ namespace TData.Core.QueryGenerator
             return true;
         }
 
-        private bool HandleMemberExpression(MemberExpression memberExpression)
+        private bool HandleMemberExpression(in MemberExpression memberExpression)
         {
             if (memberExpression.Expression is ConstantExpression ce && memberExpression.Member is FieldInfo fe)
             {
@@ -125,7 +124,7 @@ namespace TData.Core.QueryGenerator
                 _parameterHandler.AddInParam(type, value, null, out var _);
         }
 
-        private bool HandleConstantExpression(ConstantExpression constantExpression, MemberInfo member)
+        private bool HandleConstantExpression(in ConstantExpression constantExpression, in MemberInfo member)
         {
             if (constantExpression.Value == null)
                 return true;
@@ -145,7 +144,7 @@ namespace TData.Core.QueryGenerator
             }
         }
 
-        private bool HandleUnaryExpression(UnaryExpression expression)
+        private bool HandleUnaryExpression(in UnaryExpression expression)
         {
             switch (expression.NodeType)
             {
@@ -157,14 +156,14 @@ namespace TData.Core.QueryGenerator
             }
         }
 
-        private bool HandleBinaryExpression(BinaryExpression expression)
+        private bool HandleBinaryExpression(in BinaryExpression expression)
         {
             LoadParameterValues(expression.Left);
             LoadParameterValues(expression.Right);
             return true;
         }
 
-        private bool HandleNewArrayExpression(NewArrayExpression newArrayExpression)
+        private bool HandleNewArrayExpression(in NewArrayExpression newArrayExpression)
         {
             for (int i = 0; i < newArrayExpression.Expressions.Count; i++)
                 LoadParameterValues(newArrayExpression.Expressions[i]);
@@ -172,13 +171,13 @@ namespace TData.Core.QueryGenerator
             return true;
         }
 
-        private bool HandleStringContains(MethodCallExpression expression, StringOperator @operator)
+        private bool HandleStringContains(in MethodCallExpression expression, in StringOperator @operator)
         {
             if (expression.Object is MemberExpression
                 && expression.Arguments[0] is ConstantExpression constantExpression)
             {
                 var value = constantExpression.Value.ToString();
-                _parameterHandler.AddInParam(in _typeString, value, null, out var _);
+                _parameterHandler.AddInParam(typeof(string), value, null, out var _);
                 return true;
             }
             else if (expression.Object is MemberExpression
@@ -199,7 +198,7 @@ namespace TData.Core.QueryGenerator
             throw new NotSupportedException("Unsupported method call");
         }
 
-        private bool HandleEnumerableContains(MethodCallExpression expression)
+        private bool HandleEnumerableContains(in MethodCallExpression expression)
         {
             if (expression.Arguments.Count == 2 || expression.Arguments.Count == 1)
             {
@@ -209,7 +208,7 @@ namespace TData.Core.QueryGenerator
             return true;
         }
 
-        private bool HandleBetween(MethodCallExpression methodCall)
+        private bool HandleBetween(in MethodCallExpression methodCall)
         {
             var expression = ((LambdaExpression)methodCall.Arguments[0]).Body as UnaryExpression;
             var minValue = methodCall.Arguments[1] is MemberExpression memberExpression ? true : LoadParameterValues(methodCall.Arguments[1]);
@@ -217,7 +216,7 @@ namespace TData.Core.QueryGenerator
             return LoadParameterValues(expression.Operand);
         }
 
-        private bool HandleExists(MethodCallExpression methodCall)
+        private bool HandleExists(in MethodCallExpression methodCall)
         {
             var lambdaExpression = (LambdaExpression)methodCall.Arguments[0];
 
@@ -227,7 +226,7 @@ namespace TData.Core.QueryGenerator
             return true;
         }
 
-        private bool GetColumnName(MemberExpression member)
+        private bool GetColumnName(in MemberExpression member)
         {
             if (member.Expression is ConstantExpression)
                 return LoadParameterValues(member.Expression, member.Member);

@@ -17,18 +17,18 @@ namespace TData.Tests.Performance.Legacy.Tests
             PerformOperation(() =>
             {
                 var st = new SearchTerm(id: 1);
-                return DbHub.Use(db).TryExecute("get_byid", st);
+                return DbHub.Use(in db).TryExecute("get_byid", st);
             }, "TryExecute");
 
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return DbHub.Use(db).TryFetchList<Person>("get_byAge", st);
+                return DbHub.Use(in db).TryFetchList<Person>("get_byAge", st);
             }, null, "TryFetchList");
 
             PerformOperation(() =>
             {
-                return DbHub.Use(db).ExecuteTransaction((db) =>
+                return DbHub.Use(in db).ExecuteTransaction((db) =>
                 {
                     var data = db.FetchList<Person>($"SELECT * FROM {tableName}").ToArray();
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { data[0].Id });
@@ -41,7 +41,7 @@ namespace TData.Tests.Performance.Legacy.Tests
 
             PerformOperation(() =>
             {
-                return DbHub.Use(db).ExecuteTransaction((db) =>
+                return DbHub.Use(in db).ExecuteTransaction((db) =>
                 {
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_3' WHERE Id = @Id", new { Id = 1 });
                     db.Execute($"UPDATE {tableName} SET UserName = 'NEW_NAME_4' WHERE Id = @Id", new { Id = 2 });
@@ -59,7 +59,7 @@ namespace TData.Tests.Performance.Legacy.Tests
                 source.CancelAfter(1);
                 try
                 {
-                    DbHub.Use(db).ExecuteAsync("WAITFOR DELAY '00:00:03'", null, source.Token);
+                    DbHub.Use(in db).ExecuteAsync("WAITFOR DELAY '00:00:03'", null, source.Token);
                 }
                 catch (System.Exception) { }
 
@@ -70,13 +70,13 @@ namespace TData.Tests.Performance.Legacy.Tests
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(1);
-                return DbHub.Use(db).TryExecuteAsync("" +
+                return DbHub.Use(in db).TryExecuteAsync("" +
                     "WAITFOR DELAY '00:00:03'", null, source.Token);
             }, "ExecuteOpAsync Timeout", true);
 
             PerformOperationAsync(() =>
             {
-                return DbHub.Use(db).ExecuteTransactionAsync(async (db, CancellationToken) =>
+                return DbHub.Use(in db).ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME' WHERE Id = @Id", new { Id = 1 });
                     await db.ExecuteAsync($"UPDATE {tableName} SET UserName = 'NEW_NAME_2' WHERE Id = @Id", new { Id = 2 });
@@ -89,7 +89,7 @@ namespace TData.Tests.Performance.Legacy.Tests
             {
                 CancellationTokenSource source = new();
                 source.CancelAfter(15);
-                return DbHub.Use(db).ExecuteTransactionAsync(async (db, CancellationToken) =>
+                return DbHub.Use(in db).ExecuteTransactionAsync(async (db, CancellationToken) =>
                 {
                     return await db.ExecuteAsync($"WAITFOR DELAY '00:00:03'", null, CancellationToken);
 
@@ -103,7 +103,7 @@ namespace TData.Tests.Performance.Legacy.Tests
             PerformOperation(() =>
             {
                 var st = new ListResult(age: 35);
-                return CachedDbHub.Use(db).FetchList<Person>("get_byAge", st);
+                return CachedDbHub.Use(in db).FetchList<Person>("get_byAge", st);
             }, null, "FetchList");
         }
     }

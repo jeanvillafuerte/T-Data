@@ -41,10 +41,17 @@ namespace TData.Tests.Performance.Benchmark
             return DbHub.Use("db").FetchList<PersonReadonlyRecord>(x => x.Id > 0);
         }
 
-        [Benchmark(Description = "FetchList<> (cached)")]
+        [Benchmark(Description = "FetchList<> (cache in memory)")]
+        public List<PersonReadonlyRecord> FetchListSqliteCache()
+        {
+            return CachedDbHub.Use("dbCached_inmemory").FetchList<PersonReadonlyRecord>($"SELECT * FROM {TableName}");
+        }
+
+
+        [Benchmark(Description = "FetchList<> (cache sqlite)")]
         public List<Person> FetchListCached()
         {
-            return CachedDbHub.Use("db").FetchList<Person>($"SELECT * FROM {TableName} WHERE Id > @Id", new { Id = 0 });
+            return CachedDbHub.Use("dbCached_sqlite").FetchList<Person>($"SELECT * FROM {TableName}");
         }
 
         [Benchmark(Description = "FetchListRecord<> Expression")]

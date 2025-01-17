@@ -26,7 +26,7 @@ namespace TData
         /// <param name="buffered">Indicates whether the database operations should be buffered.</param>
         /// <returns>An instance of <see cref="IDatabase"/> representing the specified database.</returns>
         /// <exception cref="SignatureNotFoundException">Thrown when the specified database configuration is not found.</exception>
-        public static IDatabase Use(string signature, bool buffered = true)
+        public static IDatabase Use(in string signature, in bool buffered = true)
         {
             var config = DbConfig.Get(in signature);
             if (config == null)
